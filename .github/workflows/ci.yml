@@ -50,7 +50,7 @@ jobs:
         run: git diff --check
 
       - name: Build and pack
-        run: pnpm --dir packages/dsh-tui pack --pack-destination ..
+        run: pnpm run pack:artifact
 
       - name: Verify packed artifact
         shell: bash
@@ -58,3 +58,8 @@ jobs:
 
       - name: Verify public dsh host
         run: pnpm run verify:public-host
+
+      - name: Verify interactive TUI through a real PTY
+        if: runner.os == 'Linux'
+        shell: bash
+        run: bash scripts/verify-interactive-pty.sh

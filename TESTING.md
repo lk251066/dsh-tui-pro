@@ -9,21 +9,21 @@ The 2026-08-15 repair verification produced these results:
 | Check | Result |
 | --- | --- |
 | `pnpm run typecheck` | Passed |
-| `pnpm run test` | Passed: 34 files, 432 tests |
+| `pnpm run test` | Passed: 34 files, 433 tests |
 | `pnpm run lint` | Passed with 42 warnings and no errors |
 | `pnpm run build` | Passed |
 | `git diff --check` | Passed |
 | Forced clean package build | Passed; `lib/index.js` exists and deleted `assistant-layout` output is absent |
-| `pnpm pack` | Passed; package content reviewed |
+| `pnpm run pack:artifact` | Passed; package content and bundled editor reviewed |
 | Empty-`DSH_HOME` tarball installation | Passed through the automated public-host smoke |
 | `dsh plugin ... why` | Passed; one installed `@lk251066/dsh-tui@1.0.1` |
 | `dsh --profile tui-public-smoke --dump-config` | Passed; every declared bundle row is active and memory is absent |
 | GitHub CI workflow | Passed on Ubuntu and Windows, including the public rc.6 host smoke |
 | Public `@deepseek-ai/dsh@0.1.0-rc.6` launch | Passed module loading and reached only the intentional non-TTY error |
-| Interactive TTY smoke | Pending; the current automation host could not create a working Windows ConPTY session |
+| Interactive TTY smoke | Passed in WSL2 with GNU `script`; the Linux CI and release jobs run the same flow |
 | Clean npm registry installation | Pending because the package is not published |
 
-The checks must pass again on the reviewed commit. Local success does not replace the pending interactive and public-registry checks.
+The checks must pass again on the reviewed commit. Local success does not replace the pending public-registry check.
 
 ## Source checks
 
@@ -41,11 +41,10 @@ All commands must exit successfully. Review lint warnings and test output; do no
 
 ## Artifact checks
 
-Run from `packages/dsh-tui` after a clean build:
+Run from the repository root:
 
 ```bash
-pnpm pack --dry-run
-pnpm pack --pack-destination ..
+pnpm run pack:artifact
 ```
 
 Verify the new tarball contains:
@@ -56,8 +55,10 @@ Verify the new tarball contains:
 - `package/README.md`
 - `package/LICENSE`
 - `package/package.json` with `dsh.bundle.patch: ./cordis.patch.yml`
+- `package/node_modules/@earendil-works/pi-tui` with the patched `setPrompt()` editor API
+- bundled `get-east-asian-width` and `marked` runtime dependencies
 
-Reject an artifact that contains stale build output or omits any required file.
+Reject an artifact that contains stale build output, a parent-directory archive member, or omits any required file.
 
 ## Clean-profile integration
 
@@ -89,7 +90,7 @@ Exercise these behaviors through the installed profile:
 7. Repeated session switching preserves each transcript and input state.
 8. Normal exit disposes listeners and processes without an unhandled rejection.
 
-The user-visible multi-session change also requires the repository's keyless snapshot evidence and the demonstration artifact required by the pull request workflow.
+`scripts/verify-interactive-pty.sh` drives the packed plugin through GNU `script`. It covers the optional-memory diagnostic, new-session command, assistant session, session picker, keyboard switching, and double-Ctrl+C shutdown. The repository snapshot suite remains the keyless evidence for stable rendered output.
 
 ## Registry verification
 

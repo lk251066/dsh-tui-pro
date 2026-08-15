@@ -6723,6 +6723,52 @@ describe('terminal mounting', () => {
     await ctx.fiber.dispose()
   })
 
+  it('drops a late model-context result after construction rollback', async () => {
+    const ctx = new Context()
+    const context = Promise.withResolvers<{ contextWindow: number }>()
+    ctx.provide('tokenMeter', {
+      measure(): never { throw new Error('construction sentinel') },
+    } as never)
+    ctx.provide('llm', {
+      listProviders: () => [],
+      listModels: () => Promise.resolve([]),
+      resolveModelInfo: () => context.promise,
+    } as never)
+    await ctx.plugin(SessionStore)
+    await ctx.plugin(AgentRegistry)
+    await ctx.plugin(CommandService)
+    await ctx.plugin(UserInteractionService)
+    await ctx.plugin(TuiPromptService)
+    ctx.provide('tools', { get: () => undefined } as never)
+    const session = ctx.sessions.create(SessionId('failed-construction-session'))
+    ctx.agents.register({
+      id: session.id,
+      options: { provider: 'deepseek-official', model: 'deepseek-v4-pro' },
+      session,
+      status: 'idle',
+      ctx,
+      followup: () => {},
+      steer: () => ({ outcome: Promise.resolve({ status: 'rejected' as const }) }),
+      inject: () => {},
+      send: () => {},
+      updateInbox: () => 'not-found',
+      reserveTurnAdmission: () => undefined,
+      cancel() {},
+      whenIdle: () => Promise.resolve(),
+    })
+    const terminal = new FakeTerminal()
+
+    expect(() => mountTui(
+      ctx,
+      { sessionId: 'failed-construction-session', theme: { color: false } },
+      { terminal, exit: vi.fn() },
+    )).toThrow('construction sentinel')
+    context.resolve({ contextWindow: 100_000 })
+    await tick()
+    expect(terminal.started).toBe(0)
+    await ctx.fiber.dispose()
+  })
+
   it('throws when createTuiChat is called without the configured agent', async () => {
     const ctx = new Context()
     provideTokenMeter(ctx)

@@ -13,8 +13,10 @@ The `v1.0.0` tag is not an installable public release: no npm package was publis
 - Guard prompt status refresh until an active channel exists.
 - Package the bundle patch, compiled entry points, declarations, README, and license in one installable artifact.
 - Build from a clean `lib` directory during `prepack` so deleted modules cannot leak into a release.
+- Bundle the patched `pi-tui` editor and its runtime dependencies so public installs receive the editor API used by the TUI.
+- Stop late model-context callbacks when TUI construction fails or the owning Cordis fiber starts unloading.
 - Declare every default bundle plugin as a runtime dependency and omit the unpublished memory plugin from the default profile.
-- Verify 432 tests and the packed artifact through an empty dsh profile hosted by public `@deepseek-ai/dsh@0.1.0-rc.6`.
+- Verify the packed artifact through an empty dsh profile and a real PTY hosted by public `@deepseek-ai/dsh@0.1.0-rc.6`.
 
 ## [1.0.0] - 2026-08-15 (repository tag only)
 

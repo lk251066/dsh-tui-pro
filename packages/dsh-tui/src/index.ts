@@ -338,6 +338,10 @@ export interface TuiController {
   dispose(): Promise<void>
 }
 
+interface TuiConstructionState {
+  failed: boolean
+}
+
 /**
  * One live session's full per-session state: the chat channel, the per-session
  * docks, the approval answerer that claims only this slot's agent, and the
@@ -370,6 +374,22 @@ export function createTuiChat(
   ctx: Context,
   config: Config,
   runtime: TuiRuntime,
+): TuiController {
+  const construction: TuiConstructionState = { failed: false }
+  try {
+    return createTuiChatInternal(ctx, config, runtime, construction)
+  } catch (error: unknown) {
+    construction.failed = true
+    throw error
+  }
+}
+
+/** Build the TUI while the exported entry point owns construction rollback state. */
+function createTuiChatInternal(
+  ctx: Context,
+  config: Config,
+  runtime: TuiRuntime,
+  construction: TuiConstructionState,
 ): TuiController {
   const sessionId = SessionId(config.sessionId ?? 'main')
   const initialAgent = ctx.agents.get(sessionId)
@@ -462,7 +482,8 @@ export function createTuiChat(
   let queueDock!: QueueDockController
   const now = (): number => runtime.now?.() ?? Date.now()
   const agentStatus = (): AgentStatus => agent.status
-  const isDisposed = (): boolean => disposed
+  const isDisposed = (): boolean =>
+    disposed || construction.failed || ctx.fiber.state >= FIBER_FAILED
 
   // A configured subtitle renders as a banner line; when absent, the banner has
   // no subtitle. The banner itself sweeps in on start (see startBannerReveal).
@@ -641,7 +662,7 @@ export function createTuiChat(
   updateTerminalTitle()
 
   const requestRender = (): void => {
-    if (disposed) return
+    if (isDisposed()) return
     updatePromptValues()
     const inputPrompt = renderInputPrompt()
     editor.setPrompt({ first: inputPrompt, continuation: ' '.repeat(visibleWidth(inputPrompt)) })

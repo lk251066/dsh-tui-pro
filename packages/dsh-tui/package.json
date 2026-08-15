@@ -92,9 +92,16 @@
     "@earendil-works/pi-tui": "0.80.7",
     "cli-highlight": "^2.1.11",
     "diff": "^9.0.0",
+    "get-east-asian-width": "1.6.0",
+    "marked": "18.0.5",
     "saxes": "6.0.0",
     "schemastery": "^3.18.0"
   },
+  "bundledDependencies": [
+    "@earendil-works/pi-tui",
+    "get-east-asian-width",
+    "marked"
+  ],
   "devDependencies": {
     "@types/diff": "^6.0.0",
     "@xterm/headless": "^5.5.0",
@@ -132,7 +139,8 @@
   },
   "scripts": {
     "build": "node -e \"require('node:fs').rmSync('lib', { recursive: true, force: true })\" && tsc -b --force",
-    "prepack": "pnpm run build",
+    "prepack": "pnpm run build && node scripts/stage-bundled-dependencies.mjs",
+    "postpack": "node scripts/cleanup-bundled-dependencies.mjs",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },

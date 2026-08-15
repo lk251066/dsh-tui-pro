@@ -4,7 +4,7 @@ Interactive terminal UI plugin and profile bundle for [DeepSeek Harness](https:/
 
 ## Release status
 
-This package is not published to npm and the current working tree is not release-ready. Use it only for local development until the repository passes the checks in [REPAIR_PLAN.md](../../REPAIR_PLAN.md).
+This package is not published to npm. Its packed artifact passes installation and real-PTY interaction against the public dsh rc.6 host, but release still requires the reviewed commit, registry verification, tag, and GitHub Release in [REPAIR_PLAN.md](../../REPAIR_PLAN.md).
 
 ## Installation
 
@@ -48,6 +48,8 @@ The package also exports `@lk251066/dsh-tui/prompt` and `@lk251066/dsh-tui/invar
 - A terminal with ANSI escape-sequence support
 
 The bundle declares every non-host plugin it loads as a runtime dependency. Its Service Definition peers, runtime plugins, and development checks all use the public rc.6 package line.
+
+The npm artifact bundles the repository-patched `@earendil-works/pi-tui@0.80.7` implementation and its two runtime dependencies. The TUI prompt prefixes, frameless editor rows, and dynamic `setPrompt()` API depend on that implementation; consumers do not need pnpm patch configuration.
 
 ## Development
 

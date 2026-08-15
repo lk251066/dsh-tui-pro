@@ -6,7 +6,7 @@ This document is the source of truth for making `@lk251066/dsh-tui` independentl
 
 Ship one package: `@lk251066/dsh-tui`. Its package manifest already defines `dsh.bundle.patch`, so the repository will not create or publish a separate `@lk251066/dsh-tui-bundle` compatibility package.
 
-Publication remains blocked until every phase below is complete. The existing `v1.0.0` tag and repository-root tarball are not release candidates. Phases 1-3 are complete in the current working tree; Phase 4 has passed installation, configuration composition, and non-interactive module loading against public `@deepseek-ai/dsh@0.1.0-rc.6` but still needs interactive evidence; Phase 5 has not started.
+Publication remains blocked until every phase below is complete. The existing `v1.0.0` tag and repository-root tarball are not release candidates. Phases 1-4 are complete in the current working tree, including a packed-artifact real-PTY flow against public `@deepseek-ai/dsh@0.1.0-rc.6`; Phase 5 is pending review, registry publication, and aligned release metadata.
 
 ## Resolved defects
 
@@ -19,14 +19,14 @@ Publication remains blocked until every phase below is complete. The existing `v
 7. Every public bundle row is backed by a package dependency; the default patch no longer loads the unpublished `@deepseek-ai/dsh-memory` package.
 8. Development, peer, and bundle dependency versions use the same public dsh rc.6 package line; the source tree no longer compiles against private rc.5 tarballs.
 9. The public dependency graph is recorded in `pnpm-lock.yaml`, and CI installs it without dependency drift.
+10. The npm artifact bundles the patched `pi-tui` editor and its transitive runtime dependencies, so consumers receive the prompt and frameless-editor APIs exercised by the source tests.
+11. Construction failure and Cordis fiber unloading stop late model-context callbacks before they can render through disposed prompt handles.
 
 ## Remaining blockers
 
-1. The real interactive TTY workflow and required demonstration evidence are not recorded.
-2. The changed user-visible behavior still needs the repository's keyless snapshot evidence.
-3. The repair changes do not yet have an approved and merged GitHub pull request. Draft PR #1 now carries the source and release workflows.
-4. `@lk251066/dsh-tui` is not published to npm, so registry installation cannot yet be verified.
-5. No new GitHub tag or Release identifies the repaired commit.
+1. The repair changes do not yet have an approved and merged GitHub pull request. Draft PR #1 carries the source and release workflows.
+2. `@lk251066/dsh-tui` is not published to npm, so registry installation cannot yet be verified.
+3. No new GitHub tag or Release identifies the repaired commit.
 
 ## Phase 1: Restore a valid source tree
 
@@ -47,7 +47,7 @@ The command exits successfully without relying on files outside the repository.
 
 ## Phase 2: Repair TUI lifecycle and session behavior
 
-Status: complete in the current working tree. All 432 tests pass.
+Status: complete in the current working tree. The regression suite includes the construction-rollback race that previously escaped as an unhandled rejection.
 
 - Establish the shared layout controller before any initial slot can mount or any callback can reach it.
 - Make the active session channel an explicit input to prompt metric refresh; no render path may infer a channel that has not been published.
@@ -65,13 +65,14 @@ All tests pass with no unhandled rejection after Vitest exits. A focused regress
 
 ## Phase 3: Make the package self-contained
 
-Status: complete. The artifact audit rejects undeclared bundle plugins and the unpublished memory plugin in the default patch. The rebuilt tarball passes the automated public-host runtime verification.
+Status: complete. The artifact audit rejects undeclared bundle plugins, the unpublished memory plugin, parent-directory archive members, and an artifact missing the patched editor API. The rebuilt tarball passes the automated public-host runtime verification.
 
 - Audit every bare package name in `cordis.patch.yml` against `dependencies`, `peerDependencies`, and the dsh CLI dependency closure.
 - Declare each runtime package in the owning manifest unless the supported dsh installation explicitly provides it.
 - Align peer dependency ranges with an actual supported and installable dsh release; development `file:` tarballs cannot define the public compatibility range.
 - Verify every exported JavaScript file and declaration path after a clean build.
 - Generate a new tarball from `packages/dsh-tui`; do not reuse the existing root tarball.
+- Bundle the patched terminal editor and its direct runtime dependencies inside the plugin artifact; package consumers must not need this repository's pnpm patch settings.
 
 Acceptance:
 
@@ -86,7 +87,7 @@ The dry run contains the built entry points, matching declarations, `cordis.patc
 
 ## Phase 4: Prove the real dsh entry path
 
-Status: installation, `why`, profile manifest, configuration dump, and non-interactive module loading pass against public `@deepseek-ai/dsh@0.1.0-rc.6`. The launch reaches only the intentional TTY requirement. The interactive workflow, keyless snapshot, and demonstration artifact remain pending.
+Status: complete in the current working tree. Installation, `why`, profile composition, module loading, keyless snapshots, and the real-PTY workflow pass against public `@deepseek-ai/dsh@0.1.0-rc.6`.
 
 - Install the generated tarball with `dsh plugin --profile tui-smoke add <absolute-tarball-path>` while `DSH_HOME` points to an empty temporary directory.
 - Confirm the profile records `@lk251066/dsh-tui` as both a dependency and a bundle layer.
@@ -96,7 +97,7 @@ Status: installation, `why`, profile manifest, configuration dump, and non-inter
 
 Acceptance:
 
-The packed artifact, rather than a workspace link, completes the full flow without module resolution errors, initialization errors, unhandled rejections, or teardown leaks.
+The packed artifact, rather than a workspace link, completes the full flow without module resolution errors, initialization errors, unhandled rejections, or teardown leaks. The Linux CI and release workflows run the same PTY script.
 
 ## Phase 5: Publish one reproducible commit
 
@@ -128,7 +129,7 @@ All commands operate from public artifacts and the GitHub commit, npm package, a
 - [ ] Clean-profile registry installation transcript
 - [x] Config dump showing the rebuilt bundle layer is active
 - [x] GitHub CI passed on Ubuntu and Windows for the final dependency repair
-- [ ] Interactive TUI smoke evidence for the real startup and shutdown path
+- [x] Interactive TUI smoke evidence for startup, commands, session switching, and shutdown
 - [ ] GitHub branch, tag, Release, and npm version aligned to one commit
 
 No phase may be waived because a workspace-linked build succeeds.

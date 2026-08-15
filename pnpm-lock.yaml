@@ -11,9 +11,18 @@ importers:
 
   .:
     devDependencies:
+      '@earendil-works/pi-tui':
+        specifier: 0.80.7
+        version: 0.80.7(patch_hash=6c30c5386c0159131e1361023cddf31377f5728962524841964373312c1ed946)
       '@types/node':
         specifier: ^22.10.5
         version: 22.20.1
+      get-east-asian-width:
+        specifier: 1.6.0
+        version: 1.6.0
+      marked:
+        specifier: 18.0.5
+        version: 18.0.5
       oxlint:
         specifier: ^0.18.0
         version: 0.18.0
@@ -59,6 +68,12 @@ importers:
       diff:
         specifier: ^9.0.0
         version: 9.0.0
+      get-east-asian-width:
+        specifier: 1.6.0
+        version: 1.6.0
+      marked:
+        specifier: 18.0.5
+        version: 18.0.5
       saxes:
         specifier: 6.0.0
         version: 6.0.0

@@ -4,7 +4,7 @@ This guide covers local development and release verification for `@lk251066/dsh-
 
 ## Current status
 
-The current working tree passes the source and packed-artifact checks. It is not releasable until the interactive terminal evidence and public release steps in [REPAIR_PLAN.md](REPAIR_PLAN.md) are complete.
+The current working tree passes the source, packed-artifact, public-host, and real-PTY checks. It is not releasable until the review, npm, tag, and GitHub Release steps in [REPAIR_PLAN.md](REPAIR_PLAN.md) are complete.
 
 ## Prerequisites
 
@@ -60,16 +60,13 @@ All commands must exit successfully. Warnings require review but do not substitu
 
 ## Packed-artifact test
 
-Build and pack from the package directory so the artifact is generated from the current manifest:
+Build and pack from the repository root so the artifact is generated from the current package manifest:
 
 ```bash
-pnpm --filter @lk251066/dsh-tui run build
-cd packages/dsh-tui
-pnpm pack --dry-run
-pnpm pack --pack-destination ..
+pnpm run pack:artifact
 ```
 
-Inspect the generated archive before installation. It must contain `lib/index.js`, the exported declaration files, `cordis.patch.yml`, `README.md`, `LICENSE`, and a `package.json` with `dsh.bundle.patch` set to `./cordis.patch.yml`.
+Inspect the generated archive before installation. It must contain `lib/index.js`, the exported declaration files, `cordis.patch.yml`, `README.md`, `LICENSE`, the bundled patched `pi-tui` editor and its runtime dependencies, and a `package.json` with `dsh.bundle.patch` set to `./cordis.patch.yml`.
 
 Use a new dsh home and a new profile for the install test:
 
@@ -87,13 +84,13 @@ Publish only after every acceptance item in [REPAIR_PLAN.md](REPAIR_PLAN.md) is 
 
 1. Commit the source, tests, generated artifacts, and documentation that describe the same version.
 2. Push the reviewed commit and confirm the GitHub branch matches the local commit.
-3. Run the repository checks and packed-artifact test from that commit.
+3. Run the repository checks, packed-artifact test, public-host smoke, and Linux PTY smoke from that commit.
 4. Publish from `packages/dsh-tui` with `npm publish --access public`.
 5. Confirm `npm view @lk251066/dsh-tui version` and repeat the clean-profile installation using the registry package name.
 6. Create the GitHub tag and Release from the exact published commit. Attach the generated tarball and checksum when GitHub assets are used.
 7. Submit the plugin registry entry only after the public installation command succeeds.
 
-The repository provides `.github/workflows/ci.yml` for Linux and Windows pull-request checks. Both CI and release run `pnpm run verify:public-host` against public `@deepseek-ai/dsh@0.1.0-rc.6`. `.github/workflows/release.yml` is the executable public-release path: configure the repository `NPM_TOKEN` secret, merge the reviewed change, and push a tag matching the package version (for example `v1.0.1`). The workflow verifies the tag, reruns checks, publishes with npm provenance, verifies the registry version, and attaches the package tarball and SHA-256 file to the GitHub Release.
+The repository provides `.github/workflows/ci.yml` for Linux and Windows pull-request checks. Both platforms run the public-host smoke against `@deepseek-ai/dsh@0.1.0-rc.6`; Linux also runs the real PTY flow. `.github/workflows/release.yml` repeats both checks, publishes with npm provenance, verifies the registry version, and attaches the package tarball and SHA-256 file to the GitHub Release.
 
 Never move or reuse the existing `v1.0.0` tag for a different commit. Choose a new version for the first verified release.
 

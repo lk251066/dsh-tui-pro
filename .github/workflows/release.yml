@@ -47,7 +47,7 @@ jobs:
           git diff --check
 
       - name: Pack release artifact
-        run: pnpm --dir packages/dsh-tui pack --pack-destination ..
+        run: pnpm run pack:artifact
 
       - name: Verify packed artifact
         run: bash scripts/verify-packed-artifact.sh
@@ -55,9 +55,12 @@ jobs:
       - name: Verify public dsh host
         run: pnpm run verify:public-host
 
+      - name: Verify interactive TUI through a real PTY
+        run: bash scripts/verify-interactive-pty.sh
+
       - name: Publish package
         working-directory: packages/dsh-tui
-        run: pnpm publish --access public --provenance --no-git-checks
+        run: npm publish --access public --provenance
 
       - name: Verify registry publication
         env:
