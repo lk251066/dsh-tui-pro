@@ -1,0 +1,9 @@
+node_modules/
+lib/
+*.log
+.DS_Store
+dist/
+coverage/
+.vite/
+.tsbuildinfo
+pnpm-lock.yaml
