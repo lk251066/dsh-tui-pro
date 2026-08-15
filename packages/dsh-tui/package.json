@@ -5,18 +5,18 @@
   "private": false,
   "type": "module",
   "main": "lib/index.js",
-  "types": "lib/types/index.d.ts",
+  "types": "lib/index.d.ts",
   "exports": {
     ".": {
-      "types": "./lib/types/index.d.ts",
+      "types": "./lib/index.d.ts",
       "default": "./lib/index.js"
     },
     "./invariant": {
-      "types": "./lib/types/invariant.d.ts",
+      "types": "./lib/invariant.d.ts",
       "default": "./lib/invariant.js"
     },
     "./prompt": {
-      "types": "./lib/types/prompt.d.ts",
+      "types": "./lib/prompt.d.ts",
       "default": "./lib/prompt.js"
     },
     "./cordis.patch.yml": "./cordis.patch.yml",
