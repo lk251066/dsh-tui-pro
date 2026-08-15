@@ -18,6 +18,7 @@ The 2026-08-15 repair verification produced these results:
 | Empty-`DSH_HOME` tarball installation | Passed |
 | `dsh plugin ... why` | Passed; one installed `@lk251066/dsh-tui@1.0.1` |
 | `dsh --profile tui-smoke --dump-config` | Passed; the package bundle layer is active |
+| GitHub CI workflow | Added for Linux and Windows; pending the first remote run |
 | Non-TTY real entry launch | Reached the plugin's intentional TTY check after all modules loaded |
 | Interactive TTY smoke | Pending; the current automation host could not create a working Windows ConPTY session |
 | Clean npm registry installation | Pending because the package is not published |
@@ -100,3 +101,5 @@ dsh --profile tui-registry
 ```
 
 Use another empty `DSH_HOME`. Completion requires the registry installation to behave like the reviewed tarball.
+
+The release workflow performs the registry version check and creates the GitHub Release after `NPM_TOKEN` is configured. It does not replace the interactive TTY smoke or the manual review of user-visible behavior.

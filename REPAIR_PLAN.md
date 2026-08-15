@@ -21,7 +21,7 @@ Publication remains blocked until every phase below is complete. The existing `v
 
 1. The real interactive TTY workflow and required demonstration evidence are not recorded.
 2. The changed user-visible behavior still needs the repository's keyless snapshot evidence.
-3. The repair changes do not yet have an approved and merged GitHub pull request.
+3. The repair changes do not yet have an approved and merged GitHub pull request. Draft PR #1 now carries the source and release workflows.
 4. `@lk251066/dsh-tui` is not published to npm, so registry installation cannot yet be verified.
 5. No new GitHub tag or Release identifies the repaired commit.
 
@@ -97,7 +97,7 @@ The packed artifact, rather than a workspace link, completes the full flow witho
 
 ## Phase 5: Publish one reproducible commit
 
-Status: pending.
+Status: release workflow committed; publication is pending npm credentials, PR approval, and the interactive evidence.
 
 - Commit source, tests, package metadata, generated outputs, and documentation that describe the same version.
 - Push a feature branch and review the exact GitHub diff; merge only after the required checks pass.
