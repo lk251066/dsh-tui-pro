@@ -18,7 +18,7 @@ The 2026-08-15 repair verification produced these results:
 | Empty-`DSH_HOME` tarball installation | Passed |
 | `dsh plugin ... why` | Passed; one installed `@lk251066/dsh-tui@1.0.1` |
 | `dsh --profile tui-smoke --dump-config` | Passed; the package bundle layer is active |
-| GitHub CI workflow | Added for Linux and Windows; pending the first remote run |
+| GitHub CI workflow | Passed on Ubuntu and Windows: install, type check, 431 tests, lint, whitespace, clean pack, and artifact audit |
 | Non-TTY real entry launch | Reached the plugin's intentional TTY check after all modules loaded |
 | Interactive TTY smoke | Pending; the current automation host could not create a working Windows ConPTY session |
 | Clean npm registry installation | Pending because the package is not published |

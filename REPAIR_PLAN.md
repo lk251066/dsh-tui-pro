@@ -124,6 +124,7 @@ All commands operate from public artifacts and the GitHub commit, npm package, a
 - [x] Clean-profile tarball installation transcript
 - [ ] Clean-profile registry installation transcript
 - [x] Config dump showing the bundle layer is active
+- [x] GitHub CI passed on Ubuntu and Windows
 - [ ] Interactive TUI smoke evidence for the real startup and shutdown path
 - [ ] GitHub branch, tag, Release, and npm version aligned to one commit
 
