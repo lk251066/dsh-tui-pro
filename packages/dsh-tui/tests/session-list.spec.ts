@@ -1,134 +1,118 @@
-import { describe, expect, it } from 'vitest'
+import { visibleWidth } from '@earendil-works/pi-tui'
+import { describe, expect, it, vi } from 'vitest'
 import { SessionListComponent, type SessionListItem } from '../src/components/session-list.ts'
 import { createPalette } from '../src/components/theme.ts'
 
+const palette = createPalette({ truecolor: false, colorName: 'blue' })
+const items: SessionListItem[] = [
+  {
+    id: 'main',
+    title: 'Main session',
+    cwd: 'D:\\work\\deepseekharness',
+    status: 'running',
+    lastActivityAgo: 'now',
+    isActive: true,
+  },
+  {
+    id: 'debug',
+    title: 'Debug session',
+    cwd: '/work/api',
+    status: 'idle',
+    lastActivityAgo: '8m',
+    isActive: false,
+  },
+]
+
+function createList(overrides: Partial<ConstructorParameters<typeof SessionListComponent>[1]> = {}) {
+  return new SessionListComponent(palette, {
+    maxRows: () => 12,
+    ...overrides,
+  })
+}
+
 describe('SessionListComponent', () => {
-  const palette = createPalette({ truecolor: false, colorName: 'blue' })
+  it('renders a compact empty state at the requested width', () => {
+    const list = createList()
+    const lines = list.render(32)
 
-  it('renders empty list', () => {
-    const list = new SessionListComponent(palette, 20)
-    list.setItems([])
-    const lines = list.render(30)
-    expect(lines.some(line => line.includes('(no sessions)'))).toBe(true)
+    expect(lines.join('\n')).toContain('No live sessions')
+    expect(lines.every(line => visibleWidth(line) === 32)).toBe(true)
   })
 
-  it('renders session items with status and cwd', () => {
-    const items: SessionListItem[] = [
-      {
-        id: 'main',
-        title: 'Main Session',
-        cwd: '/home/user/project',
-        status: 'running',
-        lastActivityAgo: '2m ago',
-        isActive: true,
-      },
-      {
-        id: 'debug',
-        title: 'Debug Session',
-        cwd: '/home/user/api',
-        status: 'idle',
-        lastActivityAgo: '1h ago',
-        isActive: false,
-      },
-    ]
-    const list = new SessionListComponent(palette, 20)
-    list.setItems(items)
+  it('renders two rows per session with workspace and activity metadata', () => {
+    const list = createList()
+    list.setItems(items, 'main')
     const lines = list.render(40)
-
     const text = lines.join('\n')
-    expect(text).toContain('Main Session')
-    expect(text).toContain('Debug Session')
-    expect(text).toContain('/home/user/project')
-    expect(text).toContain('running')
-    expect(text).toContain('idle')
+
+    expect(text).toContain('Main session')
+    expect(text).toContain('deepseekharness')
+    expect(text).toContain('Debug session')
+    expect(text).toContain('api')
+    expect(lines.every(line => visibleWidth(line) === 40)).toBe(true)
   })
 
-  it('highlights selected item', () => {
-    const items: SessionListItem[] = [
-      { id: 'a', title: 'A', cwd: '/a', status: 'idle', lastActivityAgo: '1m ago', isActive: false },
-      { id: 'b', title: 'B', cwd: '/b', status: 'idle', lastActivityAgo: '2m ago', isActive: false },
-    ]
-    const list = new SessionListComponent(palette, 20)
-    list.setItems(items)
+  it('preserves selection across refreshes and accepts an active-session preference', () => {
+    const list = createList()
+    list.setItems(items, 'debug')
+    expect(list.getSelectedSessionId()).toBe('debug')
 
-    // Initially selects first item
-    expect(list.getSelectedSessionId()).toBe('a')
+    list.setItems([...items].reverse())
+    expect(list.getSelectedSessionId()).toBe('debug')
 
-    list.selectNext()
-    expect(list.getSelectedSessionId()).toBe('b')
-
-    list.selectPrevious()
-    expect(list.getSelectedSessionId()).toBe('a')
+    list.setItems(items, 'main')
+    expect(list.getSelectedSessionId()).toBe('main')
   })
 
-  it('wraps navigation at boundaries', () => {
-    const items: SessionListItem[] = [
-      { id: 'a', title: 'A', cwd: '/a', status: 'idle', lastActivityAgo: '1m ago', isActive: false },
-      { id: 'b', title: 'B', cwd: '/b', status: 'idle', lastActivityAgo: '2m ago', isActive: false },
-    ]
-    const list = new SessionListComponent(palette, 20)
-    list.setItems(items)
+  it('wraps keyboard navigation and activates the selected session', () => {
+    const onActivate = vi.fn()
+    const onChange = vi.fn()
+    const list = createList({ onActivate, onChange })
+    list.setItems(items, 'main')
 
-    // At first item, previous wraps to last
-    expect(list.getSelectedSessionId()).toBe('a')
-    list.selectPrevious()
-    expect(list.getSelectedSessionId()).toBe('b')
+    list.handleInput('\x1b[A')
+    expect(list.getSelectedSessionId()).toBe('debug')
+    list.handleInput('\x1b[B')
+    expect(list.getSelectedSessionId()).toBe('main')
+    list.handleInput('\r')
 
-    // At last item, next wraps to first
-    list.selectNext()
-    expect(list.getSelectedSessionId()).toBe('a')
+    expect(onChange).toHaveBeenCalledTimes(2)
+    expect(onActivate).toHaveBeenCalledWith('main')
   })
 
-  it('truncates long titles and paths', () => {
-    const longTitle = 'A'.repeat(50)
-    const longPath = '/home/user/very/long/path/to/project/directory'
-    const items: SessionListItem[] = [
-      {
-        id: 'long',
-        title: longTitle,
-        cwd: longPath,
-        status: 'idle',
-        lastActivityAgo: '1m ago',
-        isActive: false,
-      },
-    ]
-    const list = new SessionListComponent(palette, 20)
-    list.setItems(items)
-    const lines = list.render(30)
+  it('returns focus on Right or Escape', () => {
+    const onExit = vi.fn()
+    const list = createList({ onExit })
 
-    const text = lines.join('\n')
-    // Should contain ellipsis due to truncation
-    expect(text).toContain('…')
+    list.handleInput('\x1b[C')
+    list.handleInput('\x1b')
+
+    expect(onExit).toHaveBeenCalledTimes(2)
   })
 
-  it('shows scroll indicators when list exceeds visible height', () => {
-    const items: SessionListItem[] = Array.from({ length: 10 }, (_, i) => ({
-      id: `session-${i}`,
-      title: `Session ${i}`,
-      cwd: `/home/session${i}`,
-      status: 'idle' as const,
-      lastActivityAgo: `${i}m ago`,
-      isActive: false,
+  it('uses reverse video only for the focused selection', () => {
+    const list = createList()
+    list.setItems(items, 'main')
+    expect(list.render(40).join('\n')).not.toContain('\x1b[7m')
+
+    list.focused = true
+    expect(list.render(40).join('\n')).toContain('\x1b[7m')
+  })
+
+  it('keeps the selected row visible in a bounded viewport', () => {
+    const many = Array.from({ length: 10 }, (_, index): SessionListItem => ({
+      id: `session-${index}`,
+      title: `Session ${index}`,
+      cwd: `/work/session-${index}`,
+      status: 'idle',
+      lastActivityAgo: `${index}m`,
+      isActive: index === 8,
     }))
-    const list = new SessionListComponent(palette, 5) // Only 5 visible
-    list.setItems(items)
-    const lines = list.render(40)
+    const list = createList({ maxRows: () => 8 })
+    list.setItems(many, 'session-8')
+    const text = list.render(36).join('\n')
 
-    const text = lines.join('\n')
-    // Should show "more below" indicator
-    expect(text).toContain('more below')
-  })
-
-  it('marks active session with (current)', () => {
-    const items: SessionListItem[] = [
-      { id: 'a', title: 'A', cwd: '/a', status: 'idle', lastActivityAgo: '1m ago', isActive: true },
-      { id: 'b', title: 'B', cwd: '/b', status: 'idle', lastActivityAgo: '2m ago', isActive: false },
-    ]
-    const list = new SessionListComponent(palette, 20)
-    list.setItems(items)
-    const lines = list.render(40)
-
-    const text = lines.join('\n')
-    expect(text).toContain('(current)')
+    expect(text).toContain('Session 8')
+    expect(text).toContain('↑')
   })
 })

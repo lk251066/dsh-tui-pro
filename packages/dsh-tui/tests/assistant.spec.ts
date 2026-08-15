@@ -311,11 +311,14 @@ describe('setupAssistant', () => {
     // The real factory calls setup on a SCOPED agent context; the scoped
     // layer is what turns the same-name persona section into a shadow.
     const agentKey = {}
-    const scope = createScope(ctx, agentKey)
-    setupAssistant(scope.ctx)
-    // The setup drives an inject fiber; its registrations land once the
-    // injected services resolve.
-    await new Promise(resolve => setTimeout(resolve, 25))
+    let scope!: ReturnType<typeof createScope>
+    await ctx.inject(['systemPrompt', 'tools'], (pluginCtx: Context) => {
+      scope = createScope(pluginCtx, agentKey)
+    })
+    await scope.ctx.fiber.await()
+    setupAssistant(scope.ctx, { slots: () => [] } as never)
+    // The setup drives an inject fiber; wait for its observable registration.
+    await vi.waitFor(() => { expect(memory.installTools).toHaveBeenCalledTimes(1) })
     expect(memory.installTools).toHaveBeenCalledTimes(1)
     const globalAssembly = await ctx.systemPrompt.assemble({ scope: ctx })
     expect(globalAssembly.sections.map(section => section.text)).not.toContain(ASSISTANT_PERSONA)

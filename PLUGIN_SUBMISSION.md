@@ -1,196 +1,53 @@
-# dsh-tui-pro - Plugin Submission Info
+# dsh-tui-pro Plugin Submission Draft
 
-## Basic Information
+## Submission status
 
-**Package Name:** `@lk251066/dsh-tui`  
-**Display Name:** dsh-tui-pro  
-**Version:** 1.0.0  
-**License:** MIT  
-**Author:** lk251066  
-**Repository:** https://github.com/lk251066/dsh-tui-pro
+This plugin is not ready for submission to dshfind.com or another public plugin catalog. The source, tarball, clean-profile installation, configuration composition, and runtime module-resolution checks pass. The interactive terminal evidence, approved GitHub change, npm package, tag, and GitHub Release remain pending.
 
-## Description
+The release blockers and acceptance evidence are tracked in [REPAIR_PLAN.md](REPAIR_PLAN.md). Submit this document only after that plan is complete and replace every pending value below with public evidence.
 
-**English:**
-Community-maintained interactive terminal UI plugin for DeepSeek Harness. Features full-screen terminal interface with Claude Code-inspired layout, multi-session management, personal assistant with memory, fleet monitoring, syntax highlighting, and comprehensive approval workflows.
+## Package information
 
-**中文:**
-社区维护的 DeepSeek Harness 交互式终端 UI 插件。提供全屏终端界面（Claude Code 风格布局）、多会话管理、带记忆的个人助手、fleet 监控、语法高亮和完整的审批工作流。
+| Field | Value |
+| --- | --- |
+| Package | `@lk251066/dsh-tui` |
+| Display name | `dsh-tui-pro` |
+| License | MIT |
+| Repository | <https://github.com/lk251066/dsh-tui-pro> |
+| npm | Pending publication |
+| Verified release | Pending |
 
-## Installation
+`@lk251066/dsh-tui` is the only supported package name. It owns both the TUI plugin and its `cordis.patch.yml` layer through the `dsh.bundle.patch` manifest field.
+
+## Intended description
+
+Community-maintained interactive terminal UI plugin for DeepSeek Harness. It provides full-screen terminal interaction, multi-session navigation, a personal assistant session, fleet monitoring, syntax highlighting, diff rendering, and approval workflows.
+
+Feature wording must be checked against the packed-artifact smoke test before submission. Do not publish test counts, compatibility claims, screenshots, or commands that were verified only through a workspace link.
+
+## Intended installation
+
+The submission may advertise this command only after the registry verification succeeds:
 
 ```bash
-npm install @lk251066/dsh-tui
-# or
-pnpm add @lk251066/dsh-tui
+dsh plugin --profile tui add @lk251066/dsh-tui
 ```
 
-## Usage
+## Submission checklist
 
-### Method 1: Direct Profile Configuration
+- [x] Source type check, tests, lint, and build pass in the current working tree.
+- [x] The local npm tarball contains all exports and `cordis.patch.yml`.
+- [x] Every runtime package referenced by the bundle resolves from a clean dsh profile.
+- [x] Tarball installation activates the package as a profile bundle.
+- [ ] The same checks pass on the reviewed commit and registry package.
+- [ ] The real TUI starts, switches sessions, handles approvals, and shuts down cleanly.
+- [ ] User-visible behavior has the required snapshot and demonstration evidence.
+- [ ] The npm version, GitHub tag, GitHub Release, and reviewed commit agree.
+- [ ] The public installation command succeeds without the development workspace or `.tarballs/` directory.
 
-```yaml
-# ~/.dsh/profiles/tui/cordis.yml
-plugins:
-  ~ui-tui:
-    $require: '@lk251066/dsh-tui'
-    sessionId: main
-    showReasoning: true
-    theme:
-      color: true
-      truecolor: true
-```
+## Public links
 
-### Method 2: Use Bundle (Recommended)
-
-Create a bundle profile in your project:
-
-```json
-{
-  "name": "@my-org/dsh-tui-bundle",
-  "version": "1.0.0",
-  "dsh": {
-    "bundle": {
-      "patch": "./cordis.patch.yml"
-    }
-  },
-  "dependencies": {
-    "@deepseek-ai/dsh-base": "^0.1.0",
-    "@lk251066/dsh-tui": "^1.0.0"
-  }
-}
-```
-
-```yaml
-# cordis.patch.yml
-- insert:
-    - id: tui-prompt
-      name: '@lk251066/dsh-tui/prompt'
-    - id: tui
-      name: '@lk251066/dsh-tui'
-      config:
-        sessionId: main
-        showReasoning: true
-```
-
-Then use: `dsh --profile my-bundle`
-
-## Key Features
-
-### Core UI
-- ✨ Full-screen terminal interface
-- 🎨 Syntax highlighting (lazy-loaded, LRU cached)
-- 📝 Diff rendering with line numbers
-- 🔄 Multi-session management (LRU eviction)
-
-### Assistant & Memory
-- 🤖 Personal assistant session (fixed ID)
-- 🧠 Persistent memory system
-- 💬 Inter-session messaging
-
-### Monitoring & Control
-- 📊 Fleet monitoring (`/fleet`)
-- 📥 Queue dock for pending turns
-- ⚙️ Goal management (`/goal`, Ctrl+G)
-- 📊 Context pressure warnings
-
-### Approval & Safety
-- 🔐 Approval dialogs with risk confirmation
-- ⚠️ Shift+Tab permission ring (safe → workspace → danger)
-- ✅ Human-in-the-loop for dangerous operations
-
-### Session Management
-- 🔄 Session switcher (Ctrl+N new, /sessions list)
-- 📤 Session export (`/export`)
-- 🍴 Session forking (`/fork`)
-- 🔄 Resume picker (`/resume`)
-
-### Theme & Customization
-- 🎨 8 built-in theme presets
-- 🌈 True color support
-- 🎭 Automatic terminal capability detection
-
-## Commands
-
-- `/assistant` - Switch to personal assistant session
-- `/memories` - Browse and manage memories (r:refresh, d:delete)
-- `/fleet` - View all active sessions across processes
-- `/new` - Create new session
-- `/sessions` - List and switch sessions
-- `/resume` - Resume from persisted sessions
-- `/fork` - Fork current session
-- `/export` - Export session to markdown
-- `/theme` - Change theme preset
-- `/goal` - Manage current goal
-- `/queue` - Show message queue
-- `/context` - Show context breakdown
-- `/agents` - List active agents
-- `/jobs` - List background jobs
-- `/settings` - Show settings
-
-## Keyboard Shortcuts
-
-- `Ctrl+N` - New session
-- `Ctrl+G` - Goal actions
-- `Ctrl+C` (double tap) - Exit
-- `Ctrl+O` - Toggle tool visibility
-- `Shift+Tab` - Cycle permission presets
-- `↑/↓` - Message queue navigation (when empty prompt)
-- `Tab` - Autocomplete / focus navigation
-
-## Requirements
-
-**Peer Dependencies:**
-- `@deepseek-ai/cordis` ^0.1.0
-- `@deepseek-ai/dsh-agent` ^0.1.0
-- `@deepseek-ai/dsh-session` ^0.1.0
-- `@deepseek-ai/dsh-llm` ^0.1.0
-- `@deepseek-ai/dsh-commands` ^0.1.0
-- And other core packages (see package.json)
-
-**Optional Dependencies:**
-- `@deepseek-ai/dsh-memory` - For `/memories` and assistant memory
-- `@deepseek-ai/dsh-skill` - For skill invocation
-- `@deepseek-ai/dsh-session-persistence` - For `/resume`
-- `@deepseek-ai/dsh-session-query` - For `/fleet` cross-process monitoring
-
-**Runtime:**
-- Node.js: ^22.19.0 || >=24.0.0
-- Terminal: ANSI color support (truecolor recommended)
-
-## Tags
-
-terminal, tui, ui, interface, assistant, memory, multi-session, monitoring, approval, workflow, claude-code, syntax-highlighting, diff, theme
-
-## Category
-
-UI / Frontend
-
-## Screenshots
-
-(TODO: Add terminal screenshots showing:
-1. Main chat interface with syntax highlighting
-2. Approval dialog with risk confirmation
-3. Fleet monitoring view
-4. Memory browser
-5. Split-view assistant hub)
-
-## Links
-
-- **GitHub**: https://github.com/lk251066/dsh-tui-pro
-- **Issues**: https://github.com/lk251066/dsh-tui-pro/issues
-- **Documentation**: https://github.com/lk251066/dsh-tui-pro/tree/master/packages/dsh-tui
-
-## Notes for dshfind.com Reviewers
-
-- This is a community fork and enhancement of the original `@deepseek-ai/dsh-tui` which was removed from the main harness repository (commit 10bb9cbf, 2026-08-04)
-- Includes all original features plus new enhancements (assistant hub, fleet monitoring, split-view layout)
-- Fully tested with 400+ test cases
-- Follows official DeepSeek Harness plugin conventions
-- Compatible with dsh-base bundles
-- Can be used standalone or as part of a custom profile
-
-## Support
-
-For issues, questions, or contributions, please visit:
-https://github.com/lk251066/dsh-tui-pro/issues
+- Repository: <https://github.com/lk251066/dsh-tui-pro>
+- Issues: <https://github.com/lk251066/dsh-tui-pro/issues>
+- npm package: pending
+- Verified GitHub Release: pending

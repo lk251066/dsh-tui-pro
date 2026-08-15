@@ -1,134 +1,63 @@
+import { Container, Text, visibleWidth } from '@earendil-works/pi-tui'
 import { describe, expect, it } from 'vitest'
-import { Container, Text } from '@earendil-works/pi-tui'
 import { SplitLayoutComponent } from '../src/components/split-layout.ts'
 import { createPalette } from '../src/components/theme.ts'
 
+const palette = createPalette({ truecolor: false, colorName: 'blue' })
+
+function createSplit(left: string, right: string): SplitLayoutComponent {
+  const split = new SplitLayoutComponent(palette)
+  const leftPane = new Container()
+  leftPane.addChild(new Text(left, 0, 0))
+  const rightPane = new Container()
+  rightPane.addChild(new Text(right, 0, 0))
+  split.setLeftPane(leftPane)
+  split.setRightPane(rightPane)
+  return split
+}
+
 describe('SplitLayoutComponent', () => {
-  const palette = createPalette({ truecolor: false, colorName: 'blue' })
+  it('renders both panes with a fixed 40-column sidebar on wide terminals', () => {
+    const lines = createSplit('left', 'right').render(120)
 
-  it('renders two panes side-by-side', () => {
-    const split = new SplitLayoutComponent(palette)
-
-    const leftPane = new Container()
-    leftPane.addChild(new Text('Left content', 0, 0))
-
-    const rightPane = new Container()
-    rightPane.addChild(new Text('Right content', 0, 0))
-
-    split.setLeftPane(leftPane)
-    split.setRightPane(rightPane)
-
-    const lines = split.render(80)
-
-    // Should have separator character
-    expect(lines.some(line => line.includes('│'))).toBe(true)
-
-    // Both panes' content should appear
-    const text = lines.join('\n')
-    expect(text).toContain('Left content')
-    expect(text).toContain('Right content')
+    expect(lines[0]).toContain('left')
+    expect(lines[0]).toContain('right')
+    expect(lines[0]?.indexOf('│')).toBeGreaterThan(40)
+    expect(visibleWidth(lines[0] ?? '')).toBe(120)
   })
 
-  it('allocates left pane width within bounds', () => {
-    const split = new SplitLayoutComponent(palette, {
-      minLeftWidth: 20,
-      maxLeftWidthRatio: 0.3,
-    })
+  it('shrinks the sidebar only to preserve the chat minimum width', () => {
+    const line = createSplit('left', 'right').render(72)[0] ?? ''
+    const plain = line.replace(/\x1b\[[0-9;]*m/gu, '')
 
-    const leftPane = new Container()
-    leftPane.addChild(new Text('L', 0, 0))
+    expect(plain.indexOf('│')).toBe(31)
+    expect(visibleWidth(line)).toBe(72)
+  })
 
-    const rightPane = new Container()
-    rightPane.addChild(new Text('R', 0, 0))
+  it('uses visible width when colored content contains ANSI escapes', () => {
+    const line = createSplit(palette.accent('selected'), palette.error('failure')).render(80)[0] ?? ''
+    const plain = line.replace(/\x1b\[[0-9;]*m/gu, '')
 
-    split.setLeftPane(leftPane)
-    split.setRightPane(rightPane)
+    expect(plain.indexOf('│')).toBe(39)
+    expect(plain.slice(40).trimEnd()).toBe('failure')
+    expect(visibleWidth(line)).toBe(80)
+  })
+
+  it('pads shorter panes so every rendered row keeps the separator', () => {
+    const split = new SplitLayoutComponent(palette)
+    const left = new Container()
+    left.addChild(new Text('one', 0, 0))
+    const right = new Container()
+    right.addChild(new Text('one\ntwo\nthree', 0, 0))
+    split.setLeftPane(left)
+    split.setRightPane(right)
 
     const lines = split.render(100)
-
-    // Left pane should be ~30% of 100 = 30 cols
-    // Line format: <30 cols left><separator><rest right>
-    const firstLine = lines[0] || ''
-    const separatorPos = firstLine.indexOf('│')
-
-    // Should be around 30 (allowing some padding)
-    expect(separatorPos).toBeGreaterThanOrEqual(15)
-    expect(separatorPos).toBeLessThanOrEqual(50)
-  })
-
-  it('respects minimum left width', () => {
-    const split = new SplitLayoutComponent(palette)
-
-    const leftPane = new Container()
-    leftPane.addChild(new Text('L', 0, 0))
-
-    const rightPane = new Container()
-    rightPane.addChild(new Text('R', 0, 0))
-
-    split.setLeftPane(leftPane)
-    split.setRightPane(rightPane)
-
-    // Narrow terminal: left should still get 25 cols minimum (hardcoded)
-    const lines = split.render(60)
-    const firstLine = lines[0] || ''
-    const separatorPos = firstLine.indexOf('│')
-
-    expect(separatorPos).toBeGreaterThanOrEqual(25)
-  })
-
-  it('pads short panes to equal height', () => {
-    const split = new SplitLayoutComponent(palette)
-
-    const leftPane = new Container()
-    leftPane.addChild(new Text('L1', 0, 0))
-    leftPane.addChild(new Text('L2', 0, 0))
-
-    const rightPane = new Container()
-    rightPane.addChild(new Text('R1', 0, 0))
-    rightPane.addChild(new Text('R2', 0, 0))
-    rightPane.addChild(new Text('R3', 0, 0))
-    rightPane.addChild(new Text('R4', 0, 0))
-
-    split.setLeftPane(leftPane)
-    split.setRightPane(rightPane)
-
-    const lines = split.render(80)
-
-    // Should have at least 4 lines (right pane's height)
-    expect(lines.length).toBeGreaterThanOrEqual(4)
-
-    // All lines should have the separator
+    expect(lines.length).toBe(3)
     expect(lines.every(line => line.includes('│'))).toBe(true)
   })
 
-  it('shows placeholder when panes not configured', () => {
-    const split = new SplitLayoutComponent(palette)
-
-    const lines = split.render(80)
-
-    expect(lines[0]).toContain('split layout not configured')
-  })
-
-  it('reserves minimum right pane width', () => {
-    const split = new SplitLayoutComponent(palette)
-
-    const leftPane = new Container()
-    leftPane.addChild(new Text('L', 0, 0))
-
-    const rightPane = new Container()
-    rightPane.addChild(new Text('R', 0, 0))
-
-    split.setLeftPane(leftPane)
-    split.setRightPane(rightPane)
-
-    const lines = split.render(100)
-    const firstLine = lines[0] || ''
-    const separatorPos = firstLine.indexOf('│')
-    const rightWidth = 100 - separatorPos - 1
-
-    // Component caps left at width - 40, so right gets at least 40 cols
-    // With maxLeftWidthRatio = 0.35, left = floor(100 * 0.35) = 35
-    // Right = 100 - 35 - 1 = 64 cols
-    expect(rightWidth).toBeGreaterThanOrEqual(40)
+  it('renders nothing until both panes are configured', () => {
+    expect(new SplitLayoutComponent(palette).render(80)).toEqual([])
   })
 })
