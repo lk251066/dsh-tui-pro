@@ -93,6 +93,7 @@
     "@types/diff": "^6.0.0",
     "@xterm/headless": "^5.5.0",
     "@deepseek-ai/cordis": "file:../../.tarballs/deepseek-ai-cordis-4.0.1.tgz",
+    "@deepseek-ai/cordis-plugin-loader": "1.0.2",
     "@deepseek-ai/dsh-agent": "file:../../.tarballs/deepseek-ai-dsh-agent-0.1.0-rc.5.tgz",
     "@deepseek-ai/dsh-agent-loop": "file:../../.tarballs/deepseek-ai-dsh-agent-loop-0.1.0-rc.5.tgz",
     "@deepseek-ai/dsh-commands": "file:../../.tarballs/deepseek-ai-dsh-commands-0.1.0-rc.5.tgz",

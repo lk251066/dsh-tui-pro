@@ -8,7 +8,7 @@
 
 import { execFileSync } from 'node:child_process'
 import { homedir } from 'node:os'
-import { isAbsolute, relative, resolve, sep } from 'node:path'
+import { isAbsolute, relative, resolve, sep, win32 } from 'node:path'
 import {
   CURSOR_MARKER,
   Editor,
@@ -64,6 +64,7 @@ export class HintEditor extends Editor {
  */
 export function formatCwd(cwd: string | undefined): string {
   if (cwd === undefined) return 'cwd unset'
+  if (process.platform !== 'win32' && win32.isAbsolute(cwd)) return cwd
   const home = homedir()
   const rel = relative(resolve(home), resolve(cwd))
   if (rel === '') return '~'
