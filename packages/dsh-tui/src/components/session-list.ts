@@ -1,126 +1,159 @@
 /**
- * Session list component for the assistant's left pane.
- * Displays all active sessions with status, title, cwd, and last activity.
+ * Compact, focusable live-session navigator for the persistent left pane.
+ * @module @deepseek-ai/dsh-tui/components/session-list
  */
 
-import { Container } from '@earendil-works/pi-tui'
-import type { Palette } from '../components/theme.ts'
+import {
+  Container,
+  Key,
+  matchesKey,
+  truncateToWidth,
+  visibleWidth,
+} from '@earendil-works/pi-tui'
+import type { Palette } from './theme.ts'
 
-interface SessionListItem {
-  id: string
-  title: string
-  cwd: string
-  status: 'idle' | 'running'
-  lastActivityAgo: string
-  isActive: boolean
+/** One rendered live-session row. */
+export interface SessionListItem {
+  readonly id: string
+  readonly title: string
+  readonly cwd: string
+  readonly status: 'idle' | 'running'
+  readonly lastActivityAgo: string
+  readonly isActive: boolean
 }
 
+/** Host callbacks and dynamic sizing for {@link SessionListComponent}. */
+export interface SessionListOptions {
+  /** Maximum rows the component may contribute to the terminal frame. */
+  maxRows(): number
+  /** Activate the selected session. */
+  onActivate?(sessionId: string): void
+  /** Return focus to the chat editor. */
+  onExit?(): void
+  /** Repaint after selection or focus changes. */
+  onChange?(): void
+}
+
+function padToWidth(value: string, width: number): string {
+  const clipped = truncateToWidth(value, Math.max(0, width), '')
+  return clipped + ' '.repeat(Math.max(0, width - visibleWidth(clipped)))
+}
+
+function workspaceLabel(cwd: string): string {
+  const normalized = cwd.replaceAll('\\', '/').replace(/\/$/u, '')
+  const leaf = normalized.slice(normalized.lastIndexOf('/') + 1)
+  return leaf || cwd
+}
+
+/** Renders and navigates live sessions without owning registry state. */
 export class SessionListComponent extends Container {
-  private items: SessionListItem[] = []
+  focused = false
+  private items: readonly SessionListItem[] = []
   private selectedIndex = 0
-  private readonly maxVisibleItems: number
 
   constructor(
     private readonly palette: Palette,
-    maxHeight: number,
+    private readonly options: SessionListOptions,
   ) {
     super()
-    this.maxVisibleItems = Math.max(3, maxHeight - 4) // Reserve space for header and borders
   }
 
-  setItems(items: SessionListItem[]): void {
+  /** Replace rows while preserving a still-valid selection. */
+  setItems(items: readonly SessionListItem[], preferredSessionId?: string): void {
+    const selectedId = preferredSessionId ?? this.getSelectedSessionId()
     this.items = items
-    // Clamp selected index
-    if (this.selectedIndex >= items.length) {
-      this.selectedIndex = Math.max(0, items.length - 1)
-    }
+    const selectedIndex = selectedId === undefined
+      ? -1
+      : items.findIndex(item => item.id === selectedId)
+    this.selectedIndex = selectedIndex >= 0
+      ? selectedIndex
+      : Math.min(this.selectedIndex, Math.max(0, items.length - 1))
   }
 
+  /** Return the selected live session id, if any. */
   getSelectedSessionId(): string | undefined {
     return this.items[this.selectedIndex]?.id
   }
 
+  /** Move selection to the next row, wrapping at the end. */
   selectNext(): void {
     if (this.items.length === 0) return
     this.selectedIndex = (this.selectedIndex + 1) % this.items.length
   }
 
+  /** Move selection to the previous row, wrapping at the start. */
   selectPrevious(): void {
     if (this.items.length === 0) return
     this.selectedIndex = (this.selectedIndex - 1 + this.items.length) % this.items.length
   }
 
+  handleInput(data: string): void {
+    if (matchesKey(data, Key.up)) {
+      this.selectPrevious()
+      this.options.onChange?.()
+      return
+    }
+    if (matchesKey(data, Key.down)) {
+      this.selectNext()
+      this.options.onChange?.()
+      return
+    }
+    if (matchesKey(data, Key.enter)) {
+      const selectedId = this.getSelectedSessionId()
+      if (selectedId !== undefined) this.options.onActivate?.(selectedId)
+      return
+    }
+    if (matchesKey(data, Key.right) || matchesKey(data, Key.escape)) {
+      this.options.onExit?.()
+    }
+  }
+
   override render(width: number): string[] {
-    const lines: string[] = []
-    const innerWidth = Math.max(1, width - 2)
-
-    // Header
-    const headerText = `Sessions (${this.items.length})`
-    lines.push(this.palette.text(headerText.padEnd(innerWidth)))
-    lines.push('─'.repeat(width))
-
+    if (width <= 0) return []
+    const lines = [
+      padToWidth(this.palette.bold(` Sessions ${this.items.length}`), width),
+      this.palette.dim('─'.repeat(width)),
+    ]
     if (this.items.length === 0) {
-      lines.push(this.palette.dim('  (no sessions)'))
+      lines.push(this.palette.dim(padToWidth('  No live sessions', width)))
       return lines
     }
 
-    // Calculate visible window
+    const visibleItems = Math.max(1, Math.floor((this.options.maxRows() - lines.length) / 2))
     const start = Math.max(0, Math.min(
-      this.selectedIndex - Math.floor(this.maxVisibleItems / 2),
-      this.items.length - this.maxVisibleItems,
+      this.selectedIndex - Math.floor(visibleItems / 2),
+      this.items.length - visibleItems,
     ))
-    const end = Math.min(this.items.length, start + this.maxVisibleItems)
+    const end = Math.min(this.items.length, start + visibleItems)
 
-    // Render items
-    for (let i = start; i < end; i++) {
-      const item = this.items[i]
-      if (!item) continue
-      const isSelected = i === this.selectedIndex
-      const prefix = isSelected ? '▸ ' : '  '
-      const statusIcon = item.status === 'running' ? '●' : '·'
-      const activeMarker = item.isActive ? ' (current)' : ''
+    for (let index = start; index < end; index++) {
+      const item = this.items[index]
+      if (item === undefined) continue
+      const selected = index === this.selectedIndex
+      const marker = item.status === 'running'
+        ? this.palette.accent('●')
+        : this.palette.dim('○')
+      const active = item.isActive ? this.palette.bold('›') : ' '
+      const titleWidth = Math.max(1, width - 5)
+      const title = truncateToWidth(item.title, titleWidth, '…')
+      const titleLine = padToWidth(` ${active} ${marker} ${title}`, width)
 
-      // Title line (truncate if needed)
-      const titleMaxLen = innerWidth - 4
-      const titleText = item.title.length > titleMaxLen
-        ? item.title.slice(0, titleMaxLen - 1) + '…'
-        : item.title
+      const workspace = truncateToWidth(workspaceLabel(item.cwd), Math.max(1, width - 8), '…')
+      const age = item.lastActivityAgo
+      const gap = ' '.repeat(Math.max(1, width - 3 - visibleWidth(workspace) - visibleWidth(age)))
+      const detailLine = padToWidth(this.palette.dim(`   ${workspace}${gap}${age}`), width)
 
-      const titleLine = `${prefix}${statusIcon} ${titleText}${activeMarker}`
-      const titleColor = isSelected ? this.palette.accent : this.palette.text
-      lines.push(titleColor(titleLine.padEnd(innerWidth)))
-
-      // CWD line (indented, dim)
-      const cwdMaxLen = innerWidth - 6
-      const cwdText = item.cwd.length > cwdMaxLen
-        ? '…' + item.cwd.slice(-(cwdMaxLen - 1))
-        : item.cwd
-      const cwdLine = `    ${cwdText}`
-      lines.push(this.palette.dim(cwdLine.padEnd(innerWidth)))
-
-      // Status + age line (indented, dim)
-      const statusText = `    ${item.status}, ${item.lastActivityAgo}`
-      lines.push(this.palette.dim(statusText.padEnd(innerWidth)))
-
-      // Blank separator
-      if (i < end - 1) {
-        lines.push('')
+      if (selected && this.focused) {
+        lines.push(this.palette.selected(titleLine), this.palette.selected(detailLine))
+      } else {
+        lines.push(titleLine, detailLine)
       }
     }
 
-    // Scroll indicators
-    if (start > 0) {
-      lines[2] = this.palette.dim(`  ↑ ${start} more above`.padEnd(innerWidth))
-    }
+    if (start > 0) lines[1] = this.palette.dim(padToWidth(`─ ↑ ${start}`, width))
     if (end < this.items.length) {
-      const lastIdx = lines.length - 1
-      lines[lastIdx] = this.palette.dim(`  ↓ ${this.items.length - end} more below`.padEnd(innerWidth))
+      lines.push(this.palette.dim(padToWidth(`  ↓ ${this.items.length - end} more`, width)))
     }
-
-    // Footer hint
-    lines.push('')
-    lines.push(this.palette.dim('[← ↑↓: navigate] [Enter: switch]'))
-
-    return lines
+    return lines.slice(0, this.options.maxRows())
   }
 }

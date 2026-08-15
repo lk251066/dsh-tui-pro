@@ -138,13 +138,10 @@ import {
   HintEditor,
 } from './chat/helpers.ts'
 import { createSessionChannel, type SessionChannel } from './chat/session-channel.ts'
-import { createAssistantController, ASSISTANT_SESSION_ID } from './chat/assistant.ts'
-import { createAssistantLayout, type AssistantLayoutController } from './chat/assistant-layout.ts'
-import { MEMORY_UNAVAILABLE_LINES, memoryRows } from './chat/memories.ts'
+import { createAssistantController } from './chat/assistant.ts'
+import { createSessionLayout, type SessionLayoutController } from './chat/session-layout.ts'
+import { MEMORY_UNAVAILABLE_LINES, memoryRows, optionalMemory } from './chat/memories.ts'
 import { fleetLines } from './chat/fleet.ts'
-// Declaration-merges the optional `memory` service onto `Context`; the TUI
-// reads it per use and never imports the package's runtime code.
-import type { MemoryId } from '@deepseek-ai/dsh-memory'
 import {
   createChannelRegistry,
   DEFAULT_MAX_LIVE_SLOTS,
@@ -341,6 +338,10 @@ export interface TuiController {
   dispose(): Promise<void>
 }
 
+interface TuiConstructionState {
+  failed: boolean
+}
+
 /**
  * One live session's full per-session state: the chat channel, the per-session
  * docks, the approval answerer that claims only this slot's agent, and the
@@ -373,6 +374,22 @@ export function createTuiChat(
   ctx: Context,
   config: Config,
   runtime: TuiRuntime,
+): TuiController {
+  const construction: TuiConstructionState = { failed: false }
+  try {
+    return createTuiChatInternal(ctx, config, runtime, construction)
+  } catch (error: unknown) {
+    construction.failed = true
+    throw error
+  }
+}
+
+/** Build the TUI while the exported entry point owns construction rollback state. */
+function createTuiChatInternal(
+  ctx: Context,
+  config: Config,
+  runtime: TuiRuntime,
+  construction: TuiConstructionState,
 ): TuiController {
   const sessionId = SessionId(config.sessionId ?? 'main')
   const initialAgent = ctx.agents.get(sessionId)
@@ -465,7 +482,8 @@ export function createTuiChat(
   let queueDock!: QueueDockController
   const now = (): number => runtime.now?.() ?? Date.now()
   const agentStatus = (): AgentStatus => agent.status
-  const isDisposed = (): boolean => disposed
+  const isDisposed = (): boolean =>
+    disposed || construction.failed || ctx.fiber.state >= FIBER_FAILED
 
   // A configured subtitle renders as a banner line; when absent, the banner has
   // no subtitle. The banner itself sweeps in on start (see startBannerReveal).
@@ -544,7 +562,7 @@ export function createTuiChat(
     const tokens = channel.tokens()
     cwdValue.set(palette.bold(palette.accent(formattedCwd)))
     gitValue.set(branch === undefined ? undefined : palette.dim(` (${displayText(branch)})`))
-    const rate = cacheHitRate(channel.tokens())
+    const rate = cacheHitRate(tokens)
     const usage = `↑${formatTokens(tokens.input)} ↓${formatTokens(tokens.output)}`
     modelValue.set(`  ${palette.dim(displayText(target.current === undefined ? 'model unset' : compactTargetLabel(target.current)))}`)
     tokenValue.set(`  ${palette.dim(rate === undefined ? usage : `${usage}  cache ${rate}%`)}`)
@@ -570,7 +588,7 @@ export function createTuiChat(
           : palette.dim(percentText)
       contextValue.set(`  ${contextMeter(occupancy, palette)} ${percent}${palette.dim(' context')}`)
     }
-    const queued = channel.isRunning() ? undefined : formatQueuedStatus(channel.pendingSteeringCount())
+    const queued = channel.isRunning() ? formatQueuedStatus(channel.pendingSteeringCount()) : undefined
     queuedValue.set(queued === undefined ? undefined : palette.dim(queued))
     // Shift+Tab's preset ring and the plan-mode chip; absent services render nothing.
     const preset = permissionController.chip()
@@ -644,7 +662,7 @@ export function createTuiChat(
   updateTerminalTitle()
 
   const requestRender = (): void => {
-    if (disposed) return
+    if (isDisposed()) return
     updatePromptValues()
     const inputPrompt = renderInputPrompt()
     editor.setPrompt({ first: inputPrompt, continuation: ' '.repeat(visibleWidth(inputPrompt)) })
@@ -930,18 +948,25 @@ export function createTuiChat(
     }
   }
 
+  // The registry mounts its initial slot before returning. That first mount
+  // uses the chat directly; once the registry exists, startup replaces it
+  // synchronously with the persistent split layout before the terminal starts.
+  let sessionLayout: SessionLayoutController | undefined
+
   /** Wire one slot's components into the shared chrome and start its listeners. */
   const mountSlot = (slot: TuiSessionSlot): void => {
-    // Special handling for assistant: use split-view layout with session list
-    if (slot.sessionId === ASSISTANT_SESSION_ID) {
-      assistantLayout.splitLayout.setLeftPane(assistantLayout.sessionList)
-      assistantLayout.splitLayout.setRightPane(slot.channel.chat)
-      assistantLayout.refresh()
-      // Mount the split layout instead of just the chat
-      ui.children.splice(1, 0, assistantLayout.splitLayout)
-    } else {
-      // Normal sessions: mount chat directly (traditional full-width layout)
+    // Publish the mounted slot before attach: listener callbacks and repaint
+    // requests must always observe the channel that owns the mounted UI.
+    agent = slot.agent
+    channel = slot.channel
+    goalBar = slot.goalBar
+    queueDock = slot.queueDock
+    if (sessionLayout === undefined) {
       ui.children.splice(1, 0, slot.channel.chat)
+    } else {
+      sessionLayout.splitLayout.setLeftPane(sessionLayout.sessionList)
+      sessionLayout.splitLayout.setRightPane(slot.channel.chat)
+      ui.children.splice(1, 0, sessionLayout.splitLayout)
     }
     todoContainer.addChild(slot.channel.todo)
     docks.addChild(slot.goalBar.component)
@@ -952,15 +977,9 @@ export function createTuiChat(
   /** Unwire one slot's components and stop its session listeners (switch-away). */
   const unmountSlot = (slot: TuiSessionSlot): void => {
     slot.channel.detach()
-    if (slot.sessionId === ASSISTANT_SESSION_ID) {
-      // Unmount the split layout
-      const splitIndex = ui.children.indexOf(assistantLayout.splitLayout)
-      if (splitIndex >= 0) ui.children.splice(splitIndex, 1)
-    } else {
-      // Normal sessions: unmount chat directly
-      const chatIndex = ui.children.indexOf(slot.channel.chat)
-      if (chatIndex >= 0) ui.children.splice(chatIndex, 1)
-    }
+    const mounted = sessionLayout?.splitLayout ?? slot.channel.chat
+    const mountedIndex = ui.children.indexOf(mounted)
+    if (mountedIndex >= 0) ui.children.splice(mountedIndex, 1)
     todoContainer.clear()
     docks.clear()
   }
@@ -1012,6 +1031,7 @@ export function createTuiChat(
       updatePromptValues()
       next.goalBar.refresh()
       refreshQueueDock()
+      sessionLayout?.refresh()
       requestRender()
     },
     maxLiveSlots: DEFAULT_MAX_LIVE_SLOTS,
@@ -1097,14 +1117,30 @@ export function createTuiChat(
     isDisposed,
   })
 
-  // The assistant hub split-view layout: left pane shows session list, right
-  // pane shows the assistant chat. Only active when assistant is mounted.
-  const assistantLayout: AssistantLayoutController = createAssistantLayout({
+  // Every live session shares one navigator and swaps only the right-hand chat
+  // beneath the common chrome.
+  const persistentLayout = createSessionLayout({
     palette,
     registry,
     terminalRows: () => runtime.terminal.rows,
+    focusEditor: () => {
+      ui.setFocus(editor)
+      requestRender()
+    },
     requestRender,
   })
+  sessionLayout = persistentLayout
+  persistentLayout.splitLayout.setLeftPane(persistentLayout.sessionList)
+  persistentLayout.splitLayout.setRightPane(registry.active().channel.chat)
+  const initialChatIndex = ui.children.indexOf(registry.active().channel.chat)
+  if (initialChatIndex < 0) throw new Error('ui-tui: initial session chat is not mounted')
+  ui.children.splice(initialChatIndex, 1, persistentLayout.splitLayout)
+  persistentLayout.refresh()
+  editor.onNavigateLeft = () => {
+    persistentLayout.refresh()
+    ui.setFocus(persistentLayout.sessionList)
+    requestRender()
+  }
 
   updatePromptValues()
 
@@ -1600,7 +1636,7 @@ export function createTuiChat(
       ],
       agent.session.header.cwd ?? process.cwd(),
     )
-    const sessionReferences = ctx.get('sessionReferences')
+    const sessionReferences = ctx.get('sessionReferenceResolver')
     editor.setAutocompleteProvider(new ReferenceAutocompleteProvider(
       base,
       fileSearch,
@@ -1839,7 +1875,7 @@ export function createTuiChat(
       name: 'memories',
       description: 'Browse and delete the assistant\'s long-term memories',
       handler: () => {
-        const memory = ctx.get('memory')
+        const memory = optionalMemory(ctx)
         if (memory === undefined) {
           appendNotice(MEMORY_UNAVAILABLE_LINES[0] ?? 'Memory is not available in this composition.', 'warning')
           return { kind: 'success' }
@@ -1849,7 +1885,7 @@ export function createTuiChat(
           create: () => new MemoryBrowserDialog(
             rows(),
             palette,
-            id => memory.remove(id as MemoryId),
+            id => memory.remove(id),
             () => { void session.close() },
             rows,
           ),
@@ -2062,7 +2098,7 @@ export function createTuiChat(
       dispatchMessage([{ type: 'text', text: parsed.text }])
       return
     }
-    const sessionReferences = ctx.get('sessionReferences')
+    const sessionReferences = ctx.get('sessionReferenceResolver')
     if (sessionReferences === undefined) {
       restoreSubmittedInput()
       appendNotice('Session reference capability unavailable.', 'error')
@@ -2097,37 +2133,6 @@ export function createTuiChat(
 
   const removeInputListener = ui.addInputListener((data) => {
     if (overlayManager.hasActiveOverlay()) return undefined
-
-    // Assistant split-view navigation: only active when assistant is mounted
-    if (assistantLayout.isActive()) {
-      // Left arrow: focus session list (navigate mode)
-      if (matchesKey(data, Key.left)) {
-        // Focus shifts to session list (implicit: editor loses focus)
-        assistantLayout.refresh()
-        requestRender()
-        return { consume: true }
-      }
-      // Up/Down in session list navigation
-      if (matchesKey(data, Key.up) && !editor.focused) {
-        assistantLayout.selectPrevious()
-        return { consume: true }
-      }
-      if (matchesKey(data, Key.down) && !editor.focused) {
-        assistantLayout.selectNext()
-        return { consume: true }
-      }
-      // Enter: switch to selected session
-      if (matchesKey(data, Key.enter) && !editor.focused) {
-        assistantLayout.switchToSelected()
-        return { consume: true }
-      }
-      // Right arrow or Esc: return focus to editor
-      if ((matchesKey(data, Key.right) || matchesKey(data, Key.escape)) && !editor.focused) {
-        ui.setFocus(editor)
-        requestRender()
-        return { consume: true }
-      }
-    }
 
     // Empty-input ↑ with queued messages pops the newest queued message back
     // into the editor (Claude Code's queue editing): the next submit REPLACES

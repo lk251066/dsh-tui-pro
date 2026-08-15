@@ -131,7 +131,7 @@ describe('CollapsedToolGroupComponent', () => {
 
 /** Minimal terminal recorder: appends every write, replays input sends. */
 class FakeTerminal implements Terminal {
-  columns = 88
+  columns = 140
   rows = 32
   kittyProtocolActive = false
   output = ''

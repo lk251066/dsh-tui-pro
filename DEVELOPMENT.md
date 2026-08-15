@@ -1,242 +1,113 @@
 # Development Guide
 
-This guide covers local development setup for dsh-tui-pro.
+This guide covers local development and release verification for `@lk251066/dsh-tui`. The package is a dsh plugin and profile bundle, not a standalone application.
+
+## Current status
+
+The current working tree passes the source, packed-artifact, public-host, and real-PTY checks. It is not releasable until the review, npm, tag, and GitHub Release steps in [REPAIR_PLAN.md](REPAIR_PLAN.md) are complete.
 
 ## Prerequisites
 
-- Node.js >= 22.19.0 or >= 24.0.0
-- pnpm >= 8.0.0
-- A working DeepSeek Harness installation (for integration testing)
+- Node.js `^22.19.0 || >=24.0.0`
+- pnpm `^11.7.0`
+- A DeepSeek Harness checkout for profile and terminal integration tests
 
-## Initial Setup
-
-### 1. Clone the repository
+## Setup
 
 ```bash
 git clone https://github.com/lk251066/dsh-tui-pro.git
 cd dsh-tui-pro
-```
-
-### 2. Bootstrap dependencies
-
-The TUI plugin depends on `@deepseek-ai/dsh-*` packages. We provide pre-packaged tarballs in `.tarballs/` for offline development.
-
-```bash
 pnpm install
 ```
 
-### 3. Build the plugin
+Development dependencies under `@deepseek-ai/dsh-*` currently resolve from `.tarballs/`. These tarballs are development inputs only and do not prove that the published plugin can resolve its runtime dependencies.
+
+## Local development
+
+The adjacent DeepSeek Harness checkout may include this package as an external workspace member:
+
+```yaml
+packages:
+  - packages/*/*
+  - ../dsh-tui-pro/packages/*
+```
+
+The harness package that launches the profile must also declare `@lk251066/dsh-tui` as a `workspace:*` dependency. Run `pnpm install` in the harness after changing workspace membership, then build the plugin before launching the profile.
 
 ```bash
-pnpm build
-```
+cd ../dsh-tui-pro
+pnpm --filter @lk251066/dsh-tui run build
 
-This compiles TypeScript sources in `packages/dsh-tui/src/` to `packages/dsh-tui/lib/`.
-
-## Development Workflow
-
-### Option A: Link to Local Harness (Recommended)
-
-If you have a local DeepSeek Harness checkout for testing:
-
-1. **Add workspace reference** in the harness's `pnpm-workspace.yaml`:
-
-   ```yaml
-   packages:
-     - packages/*/*
-     - ../dsh-tui-pro  # Add this line
-   ```
-
-2. **Change dependency in harness** from tarball to workspace protocol in `package.json`:
-
-   ```json
-   {
-     "dependencies": {
-       "@lk251066/dsh-tui": "workspace:*"
-     }
-   }
-   ```
-
-3. **Install** to create symlink:
-
-   ```bash
-   cd /path/to/deepseek-harness
-   pnpm install
-   ```
-
-4. **Edit and rebuild**:
-
-   ```bash
-   cd /path/to/dsh-tui-pro
-   # Edit files in packages/dsh-tui/src/
-   pnpm build
-   
-   # Test immediately in harness
-   cd /path/to/deepseek-harness
-   pnpm dsh --profile tui
-   ```
-
-### Option B: Pack and Install
-
-For testing the published artifact format:
-
-```bash
-cd dsh-tui-pro
-pnpm pack --pack-destination .
-
-# Install in harness
-cd /path/to/deepseek-harness
-pnpm add ../dsh-tui-pro/lk251066-dsh-tui-1.0.0.tgz
-```
-
-## Project Structure
-
-```
-dsh-tui-pro/
-├── packages/
-│   └── dsh-tui/              # Main TUI plugin package
-│       ├── src/              # TypeScript sources
-│       │   ├── index.ts      # Plugin entry (apply, inject, name)
-│       │   ├── config.ts     # Configuration schema
-│       │   ├── invariant.ts  # Runtime invariant checks (separate plugin)
-│       │   ├── prompt.ts     # Prompt template service (separate plugin)
-│       │   ├── runtime.ts    # Runtime interfaces
-│       │   ├── chat/         # Session management logic
-│       │   ├── components/   # UI components (pi-tui based)
-│       │   └── extension/    # Extension API (overlay manager)
-│       ├── lib/              # Build output
-│       ├── tests/            # Unit tests
-│       ├── cordis.patch.yml  # Bundle patch configuration
-│       └── package.json
-├── .tarballs/                # Pre-packaged peer dependencies
-├── .scripts/                 # Build and release scripts
-└── patches/                  # pnpm patches for dependencies
-```
-
-## Key Dependencies
-
-### Peer Dependencies (provided by harness)
-
-These must be available in the host harness at runtime:
-
-- `@deepseek-ai/cordis` - Plugin framework
-- `@deepseek-ai/dsh-agent` - Agent lifecycle
-- `@deepseek-ai/dsh-session` - Session model
-- `@deepseek-ai/dsh-llm` - LLM messages
-- `@deepseek-ai/dsh-commands` - Command registry
-- ... (see `package.json` for full list)
-
-### Direct Dependencies (bundled)
-
-- `@earendil-works/pi-tui@0.80.7` - Terminal UI framework
-- `cli-highlight` - Code syntax highlighting
-- `diff` - Diff algorithm
-- `saxes` - XML parsing
-- `schemastery` - Config validation
-
-## Testing
-
-### Unit Tests
-
-```bash
-pnpm test
-```
-
-### Integration Test with Real Harness
-
-```bash
-# Start TUI with your local changes
-cd /path/to/deepseek-harness
+cd ../deepseekharness
 pnpm dsh --profile tui
-
-# Or with debugging
-DEBUG=dsh:* pnpm dsh --profile tui
 ```
 
-### ConPTY Smoke Test
+Workspace linking is only a development path. It can hide missing package files and runtime dependencies, so it is not release evidence.
 
-For Windows ConPTY compatibility testing:
+## Repository checks
+
+Run these commands from the plugin repository root after each repair phase:
 
 ```bash
-node .test-native-tui.cjs
+pnpm run typecheck
+pnpm run test
+pnpm run lint
+pnpm run build
+git diff --check
 ```
 
-Expected output:
-```
-✅ Banner rendered
-✅ Input prompt ready
-✅ No crash
-```
+All commands must exit successfully. Warnings require review but do not substitute for a failing exit status. See [TESTING.md](TESTING.md) for the behavior and artifact checks that follow.
 
-## Common Issues
+## Packed-artifact test
 
-### "Cannot find module '@lk251066/dsh-tui'"
-
-- Check that `apps/cli/package.json` in the harness includes `@lk251066/dsh-tui` as a dependency
-- The `healProfilesModuleFallback` function only symlinks packages in the CLI app's dependency closure
-
-### "Module is not a valid Cordis plugin"
-
-- Verify `dsh` field exists in `package.json`:
-  ```json
-  {
-    "dsh": {
-      "bundle": {
-        "patch": "./cordis.patch.yml"
-      }
-    }
-  }
-  ```
-
-### Type Errors After Upstream Changes
-
-- Rebuild tarballs from upstream:
-  ```bash
-  cd /path/to/deepseek-harness
-  pnpm pack --pack-destination /path/to/dsh-tui-pro/.tarballs
-  ```
-- Update `devDependencies` paths in `packages/dsh-tui/package.json`
-
-## Release Process
-
-### 1. Version Bump
+Build and pack from the repository root so the artifact is generated from the current package manifest:
 
 ```bash
-cd packages/dsh-tui
-npm version patch  # or minor/major
+pnpm run pack:artifact
 ```
 
-### 2. Build and Test
+Inspect the generated archive before installation. It must contain `lib/index.js`, the exported declaration files, `cordis.patch.yml`, `README.md`, `LICENSE`, the bundled patched `pi-tui` editor and its runtime dependencies, and a `package.json` with `dsh.bundle.patch` set to `./cordis.patch.yml`.
+
+Use a new dsh home and a new profile for the install test:
 
 ```bash
-pnpm build
-pnpm test
+dsh plugin --profile tui-smoke add ./lk251066-dsh-tui-<version>.tgz
+dsh --profile tui-smoke --dump-config
+dsh --profile tui-smoke
 ```
 
-### 3. Publish to npm
+Set `DSH_HOME` to an empty temporary directory for all three commands. The install must add `@lk251066/dsh-tui` to the profile dependency list and to `dsh.profile.bundles`; the config dump must resolve every package named by the bundled patch.
 
-```bash
-cd packages/dsh-tui
-npm publish --access public
+## Release process
+
+Publish only after every acceptance item in [REPAIR_PLAN.md](REPAIR_PLAN.md) is complete.
+
+1. Commit the source, tests, generated artifacts, and documentation that describe the same version.
+2. Push the reviewed commit and confirm the GitHub branch matches the local commit.
+3. Run the repository checks, packed-artifact test, public-host smoke, and Linux PTY smoke from that commit.
+4. Publish from `packages/dsh-tui` with `npm publish --access public`.
+5. Confirm `npm view @lk251066/dsh-tui version` and repeat the clean-profile installation using the registry package name.
+6. Create the GitHub tag and Release from the exact published commit. Attach the generated tarball and checksum when GitHub assets are used.
+7. Submit the plugin registry entry only after the public installation command succeeds.
+
+The repository provides `.github/workflows/ci.yml` for Linux and Windows pull-request checks. Both platforms run the public-host smoke against `@deepseek-ai/dsh@0.1.0-rc.6`; Linux also runs the real PTY flow. `.github/workflows/release.yml` repeats both checks, publishes with npm provenance, verifies the registry version, and attaches the package tarball and SHA-256 file to the GitHub Release.
+
+Never move or reuse the existing `v1.0.0` tag for a different commit. Choose a new version for the first verified release.
+
+## Project structure
+
+```text
+dsh-tui-pro/
+  packages/dsh-tui/
+    src/                 TypeScript source
+    tests/               Unit and component tests
+    lib/                 Generated package output
+    cordis.patch.yml     dsh profile layer
+    package.json         npm and dsh bundle metadata
+  scripts/               Packed-artifact and public-host verification
+  REPAIR_PLAN.md         Current blockers and repair order
+  TESTING.md             Verification requirements
 ```
-
-### 4. Tag Release
-
-```bash
-git tag v1.0.1
-git push origin v1.0.1
-```
-
-## Contributing
-
-Contributions welcome! Please:
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests if applicable
-5. Run `pnpm build && pnpm test`
-6. Submit a pull request
 
 ## License
 

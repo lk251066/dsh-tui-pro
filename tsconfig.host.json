@@ -2,7 +2,6 @@
   "extends": "./tsconfig.base.json",
   "files": [],
   "references": [
-    { "path": "packages/dsh-tui" },
-    { "path": "packages/dsh-tui-bundle" }
+    { "path": "packages/dsh-tui" }
   ]
 }

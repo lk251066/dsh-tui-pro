@@ -1,0 +1,78 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    env:
+      NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 11.7.0
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify tag and package version
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          test "${RELEASE_TAG#v}" = "$(node -p "require('./packages/dsh-tui/package.json').version")"
+
+      - name: Run release checks
+        run: |
+          pnpm run typecheck
+          pnpm run test
+          pnpm run lint
+          git diff --check
+
+      - name: Pack release artifact
+        run: pnpm run pack:artifact
+
+      - name: Verify packed artifact
+        run: bash scripts/verify-packed-artifact.sh
+
+      - name: Verify public dsh host
+        run: pnpm run verify:public-host
+
+      - name: Verify interactive TUI through a real PTY
+        run: bash scripts/verify-interactive-pty.sh
+
+      - name: Publish package
+        working-directory: packages/dsh-tui
+        run: npm publish --access public --provenance
+
+      - name: Verify registry publication
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: npm view "@lk251066/dsh-tui@${RELEASE_TAG#v}" version
+
+      - name: Create checksummed GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          archive="packages/lk251066-dsh-tui-${RELEASE_TAG#v}.tgz"
+          sha256sum "$archive" > "$archive.sha256"
+          gh release create "$RELEASE_TAG" "$archive" "$archive.sha256" \
+            --verify-tag --generate-notes --title "$RELEASE_TAG"

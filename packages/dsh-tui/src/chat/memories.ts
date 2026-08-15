@@ -1,17 +1,37 @@
 /**
  * The `/memories` browser: the durable memory store rendered as rows for the
- * keyboard browser dialog. Pure formatting — the command handler reads the
- * optional `ctx.memory` service and degrades to a notice when absent.
+ * keyboard browser dialog. The command handler reads a compatible optional
+ * memory service and degrades to a notice when absent.
  * @module @deepseek-ai/dsh-tui/chat/memories
  */
 
-import type { MemoryRecord } from '@deepseek-ai/dsh-memory'
+import type { Context } from '@deepseek-ai/cordis'
 import type { MemoryRowView } from '../components/dialogs.ts'
+
+/** One memory row exposed by an optional compatible memory service. */
+export interface MemoryRecord {
+  readonly id: string
+  readonly text: string
+  readonly tags: readonly string[]
+  readonly updatedAt: number
+}
+
+/** The memory operations used by the TUI when a compatible service is mounted. */
+export interface CompatibleMemoryService {
+  list(): readonly MemoryRecord[]
+  remove(id: string): Promise<boolean>
+  installTools(agentCtx: Context): void
+}
+
+/** Read the optional dynamically mounted memory service without owning its package. */
+export function optionalMemory(ctx: Context): CompatibleMemoryService | undefined {
+  return (ctx as unknown as { get(name: 'memory'): CompatibleMemoryService | undefined }).get('memory')
+}
 
 /** Rows shown when the memory plugin is not mounted in this composition. */
 export const MEMORY_UNAVAILABLE_LINES = [
   'Memory is not available in this composition.',
-  'Mount @deepseek-ai/dsh-memory (the tui profile does) to give the assistant long-term memory.',
+  'Mount a compatible memory plugin to give the assistant long-term memory.',
 ]
 
 /**

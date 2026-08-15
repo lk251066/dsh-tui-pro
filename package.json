@@ -1,6 +1,6 @@
 {
   "name": "dsh-tui-pro",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "type": "module",
   "engines": {
@@ -12,10 +12,15 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc -b tsconfig.host.json",
-    "lint": "oxlint packages"
+    "lint": "oxlint packages",
+    "pack:artifact": "node scripts/pack-artifact.mjs",
+    "verify:public-host": "node scripts/verify-public-dsh-host.mjs"
   },
   "devDependencies": {
+    "@earendil-works/pi-tui": "0.80.7",
     "@types/node": "^22.10.5",
+    "get-east-asian-width": "1.6.0",
+    "marked": "18.0.5",
     "oxlint": "^0.18.0",
     "tsx": "^4.19.2",
     "typescript": "~5.7.3",

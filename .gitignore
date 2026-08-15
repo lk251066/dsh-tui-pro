@@ -5,5 +5,8 @@ lib/
 dist/
 coverage/
 .vite/
-.tsbuildinfo
-pnpm-lock.yaml
+*.tsbuildinfo
+.tarballs/current/
+.tarballs-new/
+.test-results/
+packages/*.tgz

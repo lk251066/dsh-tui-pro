@@ -79,7 +79,7 @@ export function createModelController(deps: ModelControllerDeps): ModelControlle
       )
     contextResolution = resolution
     void resolution.then((result) => {
-      if (contextResolution !== resolution) return
+      if (deps.isDisposed() || contextResolution !== resolution) return
       if (result.kind === 'error') {
         if (selected !== undefined && result.error instanceof LlmError && result.error.code === 'NO_ADAPTER') {
           awaitingAdapter = true
