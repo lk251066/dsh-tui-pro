@@ -130,6 +130,6 @@ All commands operate from public artifacts and the GitHub commit, npm package, a
 - [x] Config dump showing the rebuilt bundle layer is active
 - [x] GitHub CI passed on Ubuntu and Windows for the final dependency repair
 - [x] Interactive TUI smoke evidence for startup, commands, session switching, and shutdown
-- [x] GitHub branch, tag, Release, and npm version aligned to one commit
+- [x] Reviewed release commit, GitHub tag, GitHub Release, and npm version aligned
 
 No phase may be waived because a workspace-linked build succeeds.
