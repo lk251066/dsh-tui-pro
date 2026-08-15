@@ -93,7 +93,7 @@ Publish only after every acceptance item in [REPAIR_PLAN.md](REPAIR_PLAN.md) is 
 6. Create the GitHub tag and Release from the exact published commit. Attach the generated tarball and checksum when GitHub assets are used.
 7. Submit the plugin registry entry only after the public installation command succeeds.
 
-The repository provides `.github/workflows/ci.yml` for Linux and Windows pull-request checks. `.github/workflows/release.yml` is the executable public-release path: configure the repository `NPM_TOKEN` secret, merge the reviewed change, and push a tag matching the package version (for example `v1.0.1`). The workflow verifies the tag, reruns checks, publishes with npm provenance, verifies the registry version, and attaches the package tarball and SHA-256 file to the GitHub Release.
+The repository provides `.github/workflows/ci.yml` for Linux and Windows pull-request checks. Both CI and release run `pnpm run verify:public-host` against public `@deepseek-ai/dsh@0.1.0-rc.6`. `.github/workflows/release.yml` is the executable public-release path: configure the repository `NPM_TOKEN` secret, merge the reviewed change, and push a tag matching the package version (for example `v1.0.1`). The workflow verifies the tag, reruns checks, publishes with npm provenance, verifies the registry version, and attaches the package tarball and SHA-256 file to the GitHub Release.
 
 Never move or reuse the existing `v1.0.0` tag for a different commit. Choose a new version for the first verified release.
 
@@ -107,7 +107,7 @@ dsh-tui-pro/
     lib/                 Generated package output
     cordis.patch.yml     dsh profile layer
     package.json         npm and dsh bundle metadata
-  .tarballs/             Development-only dsh package inputs
+  scripts/               Packed-artifact and public-host verification
   REPAIR_PLAN.md         Current blockers and repair order
   TESTING.md             Verification requirements
 ```

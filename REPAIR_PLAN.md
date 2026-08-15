@@ -6,7 +6,7 @@ This document is the source of truth for making `@lk251066/dsh-tui` independentl
 
 Ship one package: `@lk251066/dsh-tui`. Its package manifest already defines `dsh.bundle.patch`, so the repository will not create or publish a separate `@lk251066/dsh-tui-bundle` compatibility package.
 
-Publication remains blocked until every phase below is complete. The existing `v1.0.0` tag and repository-root tarball are not release candidates. Phases 1-3 are complete in the current working tree; Phase 4 has passed installation and module loading but still needs interactive evidence; Phase 5 has not started.
+Publication remains blocked until every phase below is complete. The existing `v1.0.0` tag and repository-root tarball are not release candidates. Phases 1-3 are complete in the current working tree; Phase 4 has passed installation, configuration composition, and non-interactive module loading against public `@deepseek-ai/dsh@0.1.0-rc.6` but still needs interactive evidence; Phase 5 has not started.
 
 ## Resolved defects
 
@@ -16,6 +16,9 @@ Publication remains blocked until every phase below is complete. The existing `v
 4. A forced clean build removes deleted modules and emits every published entry point.
 5. The package tarball contains `cordis.patch.yml`, `dsh.bundle.patch` metadata, JavaScript, declarations, README, and LICENSE without source or test files.
 6. Tests use one `@deepseek-ai/dsh-scope` instance, matching the runtime Service Definition packages.
+7. Every public bundle row is backed by a package dependency; the default patch no longer loads the unpublished `@deepseek-ai/dsh-memory` package.
+8. Development, peer, and bundle dependency versions use the same public dsh rc.6 package line; the source tree no longer compiles against private rc.5 tarballs.
+9. The public dependency graph is recorded in `pnpm-lock.yaml`, and CI installs it without dependency drift.
 
 ## Remaining blockers
 
@@ -44,7 +47,7 @@ The command exits successfully without relying on files outside the repository.
 
 ## Phase 2: Repair TUI lifecycle and session behavior
 
-Status: complete in the current working tree. All 431 tests pass.
+Status: complete in the current working tree. All 432 tests pass.
 
 - Establish the shared layout controller before any initial slot can mount or any callback can reach it.
 - Make the active session channel an explicit input to prompt metric refresh; no render path may infer a channel that has not been published.
@@ -62,7 +65,7 @@ All tests pass with no unhandled rejection after Vitest exits. A focused regress
 
 ## Phase 3: Make the package self-contained
 
-Status: complete for the local tarball. Clean-profile installation and the real dsh loader resolve the package and every bundle row. The profile package manager reports host API peers as absent because it cannot see dsh's installation fallback; runtime loading confirms the documented dsh resolution path supplies them.
+Status: complete. The artifact audit rejects undeclared bundle plugins and the unpublished memory plugin in the default patch. The rebuilt tarball passes the automated public-host runtime verification.
 
 - Audit every bare package name in `cordis.patch.yml` against `dependencies`, `peerDependencies`, and the dsh CLI dependency closure.
 - Declare each runtime package in the owning manifest unless the supported dsh installation explicitly provides it.
@@ -83,7 +86,7 @@ The dry run contains the built entry points, matching declarations, `cordis.patc
 
 ## Phase 4: Prove the real dsh entry path
 
-Status: installation, `why`, profile manifest, configuration dump, and runtime module loading pass. A non-interactive launch reaches the intentional `stdin`/`stdout` TTY requirement. The interactive workflow, keyless snapshot, and demonstration artifact remain pending.
+Status: installation, `why`, profile manifest, configuration dump, and non-interactive module loading pass against public `@deepseek-ai/dsh@0.1.0-rc.6`. The launch reaches only the intentional TTY requirement. The interactive workflow, keyless snapshot, and demonstration artifact remain pending.
 
 - Install the generated tarball with `dsh plugin --profile tui-smoke add <absolute-tarball-path>` while `DSH_HOME` points to an empty temporary directory.
 - Confirm the profile records `@lk251066/dsh-tui` as both a dependency and a bundle layer.
@@ -121,10 +124,10 @@ All commands operate from public artifacts and the GitHub commit, npm package, a
 - [ ] Clean `git status` at the reviewed commit
 - [x] Successful type check, tests, lint, build, and `git diff --check` in the current working tree
 - [x] `npm pack` file list reviewed
-- [x] Clean-profile tarball installation transcript
+- [x] Clean-profile tarball installation and repaired runtime transcript
 - [ ] Clean-profile registry installation transcript
-- [x] Config dump showing the bundle layer is active
-- [x] GitHub CI passed on Ubuntu and Windows
+- [x] Config dump showing the rebuilt bundle layer is active
+- [ ] GitHub CI passed on Ubuntu and Windows for the final dependency repair
 - [ ] Interactive TUI smoke evidence for the real startup and shutdown path
 - [ ] GitHub branch, tag, Release, and npm version aligned to one commit
 

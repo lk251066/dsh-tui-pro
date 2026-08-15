@@ -9,21 +9,21 @@ The 2026-08-15 repair verification produced these results:
 | Check | Result |
 | --- | --- |
 | `pnpm run typecheck` | Passed |
-| `pnpm run test` | Passed: 34 files, 431 tests |
+| `pnpm run test` | Passed: 34 files, 432 tests |
 | `pnpm run lint` | Passed with 42 warnings and no errors |
 | `pnpm run build` | Passed |
 | `git diff --check` | Passed |
 | Forced clean package build | Passed; `lib/index.js` exists and deleted `assistant-layout` output is absent |
 | `pnpm pack` | Passed; package content reviewed |
-| Empty-`DSH_HOME` tarball installation | Passed |
+| Empty-`DSH_HOME` tarball installation | Passed through the automated public-host smoke |
 | `dsh plugin ... why` | Passed; one installed `@lk251066/dsh-tui@1.0.1` |
-| `dsh --profile tui-smoke --dump-config` | Passed; the package bundle layer is active |
-| GitHub CI workflow | Passed on Ubuntu and Windows: install, type check, 431 tests, lint, whitespace, clean pack, and artifact audit |
-| Non-TTY real entry launch | Reached the plugin's intentional TTY check after all modules loaded |
+| `dsh --profile tui-public-smoke --dump-config` | Passed; every declared bundle row is active and memory is absent |
+| GitHub CI workflow | Pending for the final dependency repair; the preceding commit passed on Ubuntu and Windows |
+| Public `@deepseek-ai/dsh@0.1.0-rc.6` launch | Passed module loading and reached only the intentional non-TTY error |
 | Interactive TTY smoke | Pending; the current automation host could not create a working Windows ConPTY session |
 | Clean npm registry installation | Pending because the package is not published |
 
-The first five checks must be repeated on the reviewed commit. Local success does not replace the pending interactive and public-registry checks.
+The checks must pass again on the reviewed commit. Local success does not replace the pending interactive and public-registry checks.
 
 ## Source checks
 
@@ -70,9 +70,11 @@ dsh --profile tui-smoke --dump-config
 dsh --profile tui-smoke
 ```
 
-Verify that installation adds the package to the profile dependencies and `dsh.profile.bundles`. The config dump must include the TUI rows and resolve every bare package in the bundled patch.
+Verify that installation adds the package to the profile dependencies and `dsh.profile.bundles`. The config dump must include the TUI rows and resolve every bare package in the bundled patch. The default patch intentionally omits long-term memory because `@deepseek-ai/dsh-memory` is not publicly installable.
 
-`pnpm peers check` inside the profile reports the plugin's dsh API peers as missing because pnpm sees only the profile manifest. The dsh launcher supplies those peers from its installation dependency closure through the profile module fallback. Treat a real launcher load as the resolution check; the verified launch resolved all bundle rows and stopped only at the explicit TTY requirement.
+The TUI's Service Definition packages remain peers supplied by the dsh host. Plugins named directly by `cordis.patch.yml` are package dependencies so profile installation does not rely on the host's incidental transitive dependency tree. Treat a real launcher load as the final resolution check.
+
+`pnpm run verify:public-host` automates this flow with public `@deepseek-ai/dsh@0.1.0-rc.6`. It requires the current tarball in `packages/`, creates an isolated host and `DSH_HOME`, verifies `add`, `why`, and `--dump-config`, and requires the non-interactive launch to stop only at the TTY check without a module-resolution error.
 
 ## Interactive behavior
 

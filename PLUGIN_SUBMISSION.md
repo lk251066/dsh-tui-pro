@@ -2,7 +2,7 @@
 
 ## Submission status
 
-This plugin is not ready for submission to dshfind.com or another public plugin catalog. The source, tarball, clean-profile installation, configuration composition, and runtime module-resolution checks pass. The interactive terminal evidence, approved GitHub change, npm package, tag, and GitHub Release remain pending.
+This plugin is not ready for submission to dshfind.com or another public plugin catalog. The source, package, and clean-profile public-host checks pass. The interactive terminal evidence, approved GitHub change, npm package, tag, and GitHub Release remain pending.
 
 The release blockers and acceptance evidence are tracked in [REPAIR_PLAN.md](REPAIR_PLAN.md). Submit this document only after that plan is complete and replace every pending value below with public evidence.
 
@@ -37,8 +37,8 @@ dsh plugin --profile tui add @lk251066/dsh-tui
 
 - [x] Source type check, tests, lint, and build pass in the current working tree.
 - [x] The local npm tarball contains all exports and `cordis.patch.yml`.
-- [x] Every runtime package referenced by the bundle resolves from a clean dsh profile.
-- [x] Tarball installation activates the package as a profile bundle.
+- [x] Every runtime package referenced by the rebuilt bundle resolves from a clean dsh profile.
+- [x] Rebuilt tarball installation activates the package as a profile bundle.
 - [ ] The same checks pass on the reviewed commit and registry package.
 - [ ] The real TUI starts, switches sessions, handles approvals, and shuts down cleanly.
 - [ ] User-visible behavior has the required snapshot and demonstration evidence.

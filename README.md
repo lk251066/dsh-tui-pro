@@ -4,7 +4,7 @@ Community-maintained interactive terminal UI plugin for [DeepSeek Harness](https
 
 ## Release status
 
-The source tree and a newly packed `@lk251066/dsh-tui@1.0.1` artifact pass the local source, package-content, and clean-profile installation checks. The repaired version is not yet reviewed or published to npm.
+The source tree and a newly packed `@lk251066/dsh-tui@1.0.1` artifact pass the source, package-content, and empty-profile runtime checks against public `@deepseek-ai/dsh@0.1.0-rc.6`. The repaired version is not yet reviewed or published to npm.
 
 Do not use the existing `v1.0.0` GitHub tag or repository-root `lk251066-dsh-tui-1.0.0.tgz`. They predate the repaired source and bundle metadata. The current local package artifact is a verification input, not a public release.
 
@@ -24,7 +24,7 @@ The package itself owns the TUI plugin and its `cordis.patch.yml` profile layer.
 
 - Full-screen terminal interface
 - Multi-session navigation and session resume
-- Personal assistant session with persistent memory
+- Personal assistant session with optional memory integration
 - Fleet monitoring across sessions
 - Syntax highlighting, diff rendering, and Markdown rendering
 - Approval dialogs with risk confirmation

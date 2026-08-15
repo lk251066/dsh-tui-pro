@@ -6,7 +6,6 @@ dist/
 coverage/
 .vite/
 *.tsbuildinfo
-pnpm-lock.yaml
 .tarballs/current/
 .tarballs-new/
 .test-results/

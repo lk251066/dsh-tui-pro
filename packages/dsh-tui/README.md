@@ -39,15 +39,15 @@ The bundled `cordis.patch.yml` installs the TUI with these defaults:
     maxToolOutputLines: 6
 ```
 
-The package also exports `@lk251066/dsh-tui/prompt` and `@lk251066/dsh-tui/invariant` for its bundle composition. Treat the bundled patch as the supported entry path; direct manual profile composition must provide every service injected by the TUI.
+The package also exports `@lk251066/dsh-tui/prompt` and `@lk251066/dsh-tui/invariant` for its bundle composition. Treat the bundled patch as the supported entry path; direct manual profile composition must provide every service injected by the TUI. Long-term memory is optional and is not mounted by the default bundle because no compatible public `@deepseek-ai/dsh-memory` package is available.
 
 ## Runtime requirements
 
 - Node.js `^22.19.0 || >=24.0.0`
-- A compatible DeepSeek Harness installation
+- DeepSeek Harness `@deepseek-ai/dsh@0.1.0-rc.6` (the verified public host)
 - A terminal with ANSI escape-sequence support
 
-The final supported dsh version and runtime dependency set will be fixed by the isolated installation test before publication.
+The bundle declares every non-host plugin it loads as a runtime dependency. Its Service Definition peers, runtime plugins, and development checks all use the public rc.6 package line.
 
 ## Development
 

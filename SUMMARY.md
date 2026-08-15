@@ -1,6 +1,6 @@
 # Project Status
 
-`@lk251066/dsh-tui` now passes its source checks, produces a complete npm tarball, installs into an empty `DSH_HOME`, registers itself as a dsh bundle, composes its patch, and resolves every module through the real dsh entry path. The non-TTY smoke reached the plugin's intentional TTY check without a module or initialization error.
+`@lk251066/dsh-tui` passes its source checks, produces a complete npm tarball, and installs into an empty profile hosted by public `@deepseek-ai/dsh@0.1.0-rc.6`. Every default bundle plugin is a runtime dependency, the unpublished memory plugin is absent, and the real non-interactive entry path reaches only the intentional TTY requirement.
 
 Release remains pending. A real interactive terminal smoke, the required snapshot and demonstration evidence, a reviewed GitHub commit, npm publication, and an aligned GitHub tag and Release are not complete.
 

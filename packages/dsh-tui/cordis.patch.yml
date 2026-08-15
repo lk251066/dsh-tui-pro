@@ -48,9 +48,6 @@
       config:
         backend: json
 
-    - id: memory
-      name: '@deepseek-ai/dsh-memory'
-
     - id: tui-prompt
       name: '@lk251066/dsh-tui/prompt'
 

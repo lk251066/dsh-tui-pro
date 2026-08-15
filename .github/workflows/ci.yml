@@ -35,7 +35,7 @@ jobs:
           version: 11.7.0
 
       - name: Install dependencies
-        run: pnpm install --no-frozen-lockfile
+        run: pnpm install --frozen-lockfile
 
       - name: Type check
         run: pnpm run typecheck
@@ -55,3 +55,6 @@ jobs:
       - name: Verify packed artifact
         shell: bash
         run: bash scripts/verify-packed-artifact.sh
+
+      - name: Verify public dsh host
+        run: pnpm run verify:public-host

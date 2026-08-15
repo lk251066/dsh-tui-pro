@@ -8,12 +8,13 @@ The `v1.0.0` tag is not an installable public release: no npm package was publis
 
 ### Fixed
 
-- Align the TUI with the current DeepSeek Harness APIs and package versions.
+- Align the TUI, peer dependencies, and development checks with the public DeepSeek Harness rc.6 packages.
 - Initialize the shared session layout before mounting a session and keep one layout owner across session switches.
 - Guard prompt status refresh until an active channel exists.
 - Package the bundle patch, compiled entry points, declarations, README, and license in one installable artifact.
 - Build from a clean `lib` directory during `prepack` so deleted modules cannot leak into a release.
-- Verify 431 tests and installation through an empty dsh profile.
+- Declare every default bundle plugin as a runtime dependency and omit the unpublished memory plugin from the default profile.
+- Verify 432 tests and the packed artifact through an empty dsh profile hosted by public `@deepseek-ai/dsh@0.1.0-rc.6`.
 
 ## [1.0.0] - 2026-08-15 (repository tag only)
 

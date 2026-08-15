@@ -140,11 +140,8 @@ import {
 import { createSessionChannel, type SessionChannel } from './chat/session-channel.ts'
 import { createAssistantController } from './chat/assistant.ts'
 import { createSessionLayout, type SessionLayoutController } from './chat/session-layout.ts'
-import { MEMORY_UNAVAILABLE_LINES, memoryRows } from './chat/memories.ts'
+import { MEMORY_UNAVAILABLE_LINES, memoryRows, optionalMemory } from './chat/memories.ts'
 import { fleetLines } from './chat/fleet.ts'
-// Declaration-merges the optional `memory` service onto `Context`; the TUI
-// reads it per use and never imports the package's runtime code.
-import type { MemoryId } from '@deepseek-ai/dsh-memory'
 import {
   createChannelRegistry,
   DEFAULT_MAX_LIVE_SLOTS,
@@ -1857,7 +1854,7 @@ export function createTuiChat(
       name: 'memories',
       description: 'Browse and delete the assistant\'s long-term memories',
       handler: () => {
-        const memory = ctx.get('memory')
+        const memory = optionalMemory(ctx)
         if (memory === undefined) {
           appendNotice(MEMORY_UNAVAILABLE_LINES[0] ?? 'Memory is not available in this composition.', 'warning')
           return { kind: 'success' }
@@ -1867,7 +1864,7 @@ export function createTuiChat(
           create: () => new MemoryBrowserDialog(
             rows(),
             palette,
-            id => memory.remove(id as MemoryId),
+            id => memory.remove(id),
             () => { void session.close() },
             rows,
           ),

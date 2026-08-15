@@ -6,7 +6,11 @@ import { Context } from '@deepseek-ai/cordis'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import { createScope } from '@deepseek-ai/dsh-scope'
 import ToolRegistry from '@deepseek-ai/dsh-tools'
-import { ASSISTANT_PERSONA, setupAssistant } from '../src/chat/assistant.ts'
+import {
+  ASSISTANT_PERSONA,
+  ASSISTANT_PERSONA_WITH_MEMORY,
+  setupAssistant,
+} from '../src/chat/assistant.ts'
 import {
   createTuiTestHarness,
   disposeTuiTestHarness,
@@ -321,10 +325,35 @@ describe('setupAssistant', () => {
     await vi.waitFor(() => { expect(memory.installTools).toHaveBeenCalledTimes(1) })
     expect(memory.installTools).toHaveBeenCalledTimes(1)
     const globalAssembly = await ctx.systemPrompt.assemble({ scope: ctx })
-    expect(globalAssembly.sections.map(section => section.text)).not.toContain(ASSISTANT_PERSONA)
+    expect(globalAssembly.sections.map(section => section.text)).not.toContain(ASSISTANT_PERSONA_WITH_MEMORY)
+    const scopedAssembly = await ctx.systemPrompt.assemble({ scope: agentKey })
+    const persona = scopedAssembly.sections.find(section => section.name === 'deployment:persona')
+    expect(persona?.text).toBe(ASSISTANT_PERSONA_WITH_MEMORY)
+    scope.dispose()
+    await ctx.fiber.dispose()
+  })
+
+  it('does not advertise memory tools when no compatible service is mounted', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt)
+    await ctx.plugin(ToolRegistry)
+    const agentKey = {}
+    let scope!: ReturnType<typeof createScope>
+    await ctx.inject(['systemPrompt', 'tools'], (pluginCtx: Context) => {
+      scope = createScope(pluginCtx, agentKey)
+    })
+    await scope.ctx.fiber.await()
+    setupAssistant(scope.ctx, { slots: () => [] } as never)
+    await vi.waitFor(async () => {
+      const assembly = await ctx.systemPrompt.assemble({ scope: agentKey })
+      const section = assembly.sections.find(candidate => candidate.name === 'deployment:persona')
+      expect(section?.text).toBe(ASSISTANT_PERSONA)
+    })
     const scopedAssembly = await ctx.systemPrompt.assemble({ scope: agentKey })
     const persona = scopedAssembly.sections.find(section => section.name === 'deployment:persona')
     expect(persona?.text).toBe(ASSISTANT_PERSONA)
+    expect(persona?.text).not.toContain('memory_search')
+    expect(persona?.text).not.toContain('memory_save')
     scope.dispose()
     await ctx.fiber.dispose()
   })
