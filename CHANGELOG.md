@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 The `v1.0.0` tag is not an installable public release: no npm package was published, and the repository-root tarball does not contain the required dsh bundle metadata. See [REPAIR_PLAN.md](REPAIR_PLAN.md) for the first verified release criteria.
 
-## [1.0.1] - Unreleased
+## [1.0.1] - 2026-08-16
 
 ### Fixed
 
@@ -17,6 +17,8 @@ The `v1.0.0` tag is not an installable public release: no npm package was publis
 - Stop late model-context callbacks when TUI construction fails or the owning Cordis fiber starts unloading.
 - Declare every default bundle plugin as a runtime dependency and omit the unpublished memory plugin from the default profile.
 - Verify the packed artifact through an empty dsh profile and a real PTY hosted by public `@deepseek-ai/dsh@0.1.0-rc.6`.
+
+The published npm package, annotated `v1.0.1` tag, and checksummed GitHub Release identify the same reviewed commit. The package was installed from the public registry into a new host and exercised through a real PTY before release completion.
 
 ## [1.0.0] - 2026-08-15 (repository tag only)
 
@@ -61,5 +63,6 @@ The `v1.0.0` tag is not an installable public release: no npm package was publis
 ## Links
 
 - **Repository**: https://github.com/lk251066/dsh-tui-pro
-- **NPM Package**: pending publication as `@lk251066/dsh-tui`
-- **Plugin Registry**: pending verified release
+- **NPM Package**: https://www.npmjs.com/package/@lk251066/dsh-tui
+- **GitHub Release**: https://github.com/lk251066/dsh-tui-pro/releases/tag/v1.0.1
+- **Plugin Catalog**: ready for submission using [PLUGIN_SUBMISSION.md](PLUGIN_SUBMISSION.md)

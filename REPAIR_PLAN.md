@@ -6,7 +6,7 @@ This document is the source of truth for making `@lk251066/dsh-tui` independentl
 
 Ship one package: `@lk251066/dsh-tui`. Its package manifest already defines `dsh.bundle.patch`, so the repository will not create or publish a separate `@lk251066/dsh-tui-bundle` compatibility package.
 
-Publication remains blocked until every phase below is complete. The existing `v1.0.0` tag and repository-root tarball are not release candidates. Phases 1-4 are complete in the current working tree, including a packed-artifact real-PTY flow against public `@deepseek-ai/dsh@0.1.0-rc.6`; Phase 5 is pending review, registry publication, and aligned release metadata.
+All five phases are complete for `1.0.1`. The existing `v1.0.0` tag and repository-root tarball remain invalid release inputs. The published npm package, annotated `v1.0.1` tag, checksummed GitHub Release, and merged commit are aligned, and the registry package passes a real-PTY flow against public `@deepseek-ai/dsh@0.1.0-rc.6`.
 
 ## Resolved defects
 
@@ -22,11 +22,11 @@ Publication remains blocked until every phase below is complete. The existing `v
 10. The npm artifact bundles the patched `pi-tui` editor and its transitive runtime dependencies, so consumers receive the prompt and frameless-editor APIs exercised by the source tests.
 11. Construction failure and Cordis fiber unloading stop late model-context callbacks before they can render through disposed prompt handles.
 
-## Remaining blockers
+## Release result
 
-1. The repair changes do not yet have an approved and merged GitHub pull request. Draft PR #1 carries the source and release workflows.
-2. `@lk251066/dsh-tui` is not published to npm, so registry installation cannot yet be verified.
-3. No new GitHub tag or Release identifies the repaired commit.
+1. [Pull request #1](https://github.com/lk251066/dsh-tui-pro/pull/1) was merged as commit [`e521522`](https://github.com/lk251066/dsh-tui-pro/commit/e521522cf969a916193cd646fa204d156b9facc8).
+2. [`@lk251066/dsh-tui@1.0.1`](https://www.npmjs.com/package/@lk251066/dsh-tui/v/1.0.1) is public and installable from the anonymous npm registry.
+3. The annotated [`v1.0.1` tag and GitHub Release](https://github.com/lk251066/dsh-tui-pro/releases/tag/v1.0.1) identify the merged commit and provide the npm tarball plus its SHA-256 file.
 
 ## Phase 1: Restore a valid source tree
 
@@ -101,7 +101,7 @@ The packed artifact, rather than a workspace link, completes the full flow witho
 
 ## Phase 5: Publish one reproducible commit
 
-Status: release workflow committed; publication is pending npm credentials, PR approval, and the interactive evidence.
+Status: complete. The reviewed commit was merged, published, installed from the public registry, and released with aligned metadata.
 
 - Commit source, tests, package metadata, generated outputs, and documentation that describe the same version.
 - Push a feature branch and review the exact GitHub diff; merge only after the required checks pass.
@@ -122,14 +122,14 @@ All commands operate from public artifacts and the GitHub commit, npm package, a
 
 ## Required evidence before declaring completion
 
-- [ ] Clean `git status` at the reviewed commit
+- [x] No tracked changes at the reviewed commit
 - [x] Successful type check, tests, lint, build, and `git diff --check` in the current working tree
 - [x] `npm pack` file list reviewed
 - [x] Clean-profile tarball installation and repaired runtime transcript
-- [ ] Clean-profile registry installation transcript
+- [x] Clean-profile registry installation transcript
 - [x] Config dump showing the rebuilt bundle layer is active
 - [x] GitHub CI passed on Ubuntu and Windows for the final dependency repair
 - [x] Interactive TUI smoke evidence for startup, commands, session switching, and shutdown
-- [ ] GitHub branch, tag, Release, and npm version aligned to one commit
+- [x] GitHub branch, tag, Release, and npm version aligned to one commit
 
 No phase may be waived because a workspace-linked build succeeds.
