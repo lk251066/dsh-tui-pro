@@ -4,19 +4,19 @@ Interactive terminal UI plugin and profile bundle for [DeepSeek Harness](https:/
 
 ## Release status
 
-This package is not published to npm. Its packed artifact passes installation and real-PTY interaction against the public dsh rc.6 host, but release still requires the reviewed commit, registry verification, tag, and GitHub Release in [REPAIR_PLAN.md](../../REPAIR_PLAN.md).
+Version `1.0.1` is published on [npm](https://www.npmjs.com/package/@lk251066/dsh-tui) with provenance and is mirrored by the checksummed [GitHub Release](https://github.com/lk251066/dsh-tui-pro/releases/tag/v1.0.1). The registry package passes empty-profile installation and real-PTY interaction against the public dsh rc.6 host.
 
 ## Installation
 
 The supported package name is `@lk251066/dsh-tui`. It declares its own `dsh.bundle.patch`, so a separate `@lk251066/dsh-tui-bundle` package is neither required nor supported.
 
-After an npm release is available, install it with:
+Install it with:
 
 ```bash
 dsh plugin --profile tui add @lk251066/dsh-tui
 ```
 
-For local artifact testing before publication, follow [TESTING.md](../../TESTING.md). Do not use the repository-root `lk251066-dsh-tui-1.0.0.tgz`; it predates the required bundle metadata.
+For artifact and integration verification, follow [TESTING.md](../../TESTING.md). Do not use the repository-root `lk251066-dsh-tui-1.0.0.tgz`; it predates the required bundle metadata.
 
 ## Usage
 

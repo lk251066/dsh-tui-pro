@@ -4,7 +4,7 @@
 
 ## Current verification
 
-The 2026-08-15 repair verification produced these results:
+The 2026-08-15 repair checks and 2026-08-16 release verification produced these results:
 
 | Check | Result |
 | --- | --- |
@@ -21,9 +21,12 @@ The 2026-08-15 repair verification produced these results:
 | GitHub CI workflow | Passed on Ubuntu and Windows, including the public rc.6 host smoke |
 | Public `@deepseek-ai/dsh@0.1.0-rc.6` launch | Passed module loading and reached only the intentional non-TTY error |
 | Interactive TTY smoke | Passed in WSL2 with GNU `script`; the Linux CI and release jobs run the same flow |
-| Clean npm registry installation | Pending because the package is not published |
+| Anonymous npm metadata | Passed for `@lk251066/dsh-tui@1.0.1`; integrity and shasum are public |
+| Clean npm registry installation | Passed in a new WSL2 host and empty `DSH_HOME` |
+| Registry-package interactive TTY smoke | Passed startup, commands, session switching, and shutdown |
+| GitHub Release artifact | Passed; downloaded npm tarball SHA-1 matches `dist.shasum`, with SHA-256 attached |
 
-The checks must pass again on the reviewed commit. Local success does not replace the pending public-registry check.
+The source checks passed on the reviewed commit, and the final integration checks used the anonymous public registry rather than a workspace link or local tarball.
 
 ## Source checks
 
@@ -94,7 +97,7 @@ Exercise these behaviors through the installed profile:
 
 ## Registry verification
 
-After publication, repeat the integration test with the public package name:
+Verify a release with the public package name:
 
 ```bash
 npm view @lk251066/dsh-tui version
@@ -105,4 +108,6 @@ dsh --profile tui-registry
 
 Use another empty `DSH_HOME`. Completion requires the registry installation to behave like the reviewed tarball.
 
-The release workflow performs the registry version check and creates the GitHub Release after `NPM_TOKEN` is configured. It does not replace the interactive TTY smoke or the manual review of user-visible behavior.
+For `1.0.1`, these commands passed in a new WSL2 host using an empty `/tmp` directory as `DSH_HOME`. `why` reported one installed `@lk251066/dsh-tui@1.0.1`, the config dump contained the prompt and main plugin rows, the non-interactive launch reached only the expected TTY requirement, and the real-PTY script completed.
+
+The release workflow polls anonymous registry metadata after publication, then creates the checksummed GitHub Release. It does not replace the interactive TTY smoke or the manual review of user-visible behavior.

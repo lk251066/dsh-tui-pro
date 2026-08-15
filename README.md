@@ -4,15 +4,15 @@ Community-maintained interactive terminal UI plugin for [DeepSeek Harness](https
 
 ## Release status
 
-The source tree and a newly packed `@lk251066/dsh-tui@1.0.1` artifact pass the source, package-content, empty-profile, and real-PTY runtime checks against public `@deepseek-ai/dsh@0.1.0-rc.6`. The repaired version is not yet merged or published to npm.
+Version `1.0.1` is publicly available on [npm](https://www.npmjs.com/package/@lk251066/dsh-tui) and in the [GitHub Release](https://github.com/lk251066/dsh-tui-pro/releases/tag/v1.0.1). The npm package, `v1.0.1` tag, and Release all identify commit [`e521522`](https://github.com/lk251066/dsh-tui-pro/commit/e521522cf969a916193cd646fa204d156b9facc8).
 
-Do not use the existing `v1.0.0` GitHub tag or repository-root `lk251066-dsh-tui-1.0.0.tgz`. They predate the repaired source and bundle metadata. The current local package artifact is a verification input, not a public release.
+Do not use the existing `v1.0.0` GitHub tag or repository-root `lk251066-dsh-tui-1.0.0.tgz`. They predate the repaired source and bundle metadata. Treat repository-local tarballs as verification inputs; install from npm or the `v1.0.1` Release.
 
-See [REPAIR_PLAN.md](REPAIR_PLAN.md) for the blocking defects, repair order, and release acceptance criteria.
+The source tree, published package, empty-profile installation, and real-PTY runtime pass against public `@deepseek-ai/dsh@0.1.0-rc.6`. See [REPAIR_PLAN.md](REPAIR_PLAN.md) for the completed repair record and release evidence.
 
 ## Intended installation
 
-After the package is published and the release checks pass, the supported installation command will be:
+Install the released package with:
 
 ```bash
 dsh plugin --profile tui add @lk251066/dsh-tui
@@ -29,7 +29,7 @@ The package itself owns the TUI plugin and its `cordis.patch.yml` profile layer.
 - Syntax highlighting, diff rendering, and Markdown rendering
 - Approval dialogs with risk confirmation
 
-These features pass the packed-artifact PTY smoke and repository snapshot suite. Public release still requires the reviewed GitHub commit, npm registry installation, and aligned tag and GitHub Release in [REPAIR_PLAN.md](REPAIR_PLAN.md).
+These features pass the published-package PTY smoke and repository snapshot suite. The registry package was installed into a new public dsh host and an empty `DSH_HOME` before the release was declared complete.
 
 ## Development
 
