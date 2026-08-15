@@ -1,0 +1,65 @@
+# Independent TUI bundle patch
+# This file makes @lk251066/dsh-tui usable as a bundle in profile package.json
+
+- id: agent-loop
+  config:
+    agents:
+      - id: main
+        sessionId: main
+        provider: deepseek-official
+        model: deepseek-v4-pro
+        cwd: !!js process.cwd()
+
+- id: system-prompt
+  config:
+    persona: >-
+      You are a coding agent powered by the {{model}} model. Your working directory is {{cwd}}.
+
+      Verify your work by running the code or tests. Keep answers brief and factual.
+
+- id: hmr
+  disabled: true
+
+- id: tools
+  config:
+    mode: !!js process.env.DSH_TOOLS_MODE
+
+- insert:
+    - id: session-reference
+      name: '@deepseek-ai/dsh-session-reference'
+
+    - id: session-projection-cache
+      name: '@deepseek-ai/dsh-session-projection-cache'
+      config:
+        writeEveryEvents: 200
+        writeIntervalMs: 5000
+
+    - id: session-stats
+      name: '@deepseek-ai/dsh-session-stats'
+
+    - id: storage
+      name: '@deepseek-ai/dsh-storage'
+    - id: storage-json
+      name: '@deepseek-ai/dsh-storage-json'
+      config:
+        root: !!js dshHomePath('storages')
+    - id: storage-domain
+      name: '@deepseek-ai/dsh-storage-domain'
+      config:
+        backend: json
+
+    - id: memory
+      name: '@deepseek-ai/dsh-memory'
+
+    - id: tui-prompt
+      name: '@lk251066/dsh-tui/prompt'
+
+    - id: tui
+      name: '@lk251066/dsh-tui'
+      config:
+        sessionId: main
+        showReasoning: true
+        maxToolOutputLines: 6
+
+    - id: tool-ask-user
+      name: '@deepseek-ai/dsh-tool-ask-user'

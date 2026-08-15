@@ -1,2 +1,11 @@
 packages:
   - packages/*
+
+# Prevent phantom dependencies
+shared-workspace-lockfile: true
+save-workspace-protocol: true
+allowBuilds:
+  esbuild: true
+
+patchedDependencies:
+  '@earendil-works/pi-tui@0.80.7': patches/@earendil-works__pi-tui@0.80.7.patch

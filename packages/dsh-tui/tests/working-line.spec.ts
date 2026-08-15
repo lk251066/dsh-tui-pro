@@ -1,0 +1,87 @@
+import { describe, expect, it } from 'vitest'
+import { WorkingLineComponent } from '../src/components/working-line.ts'
+import { createPalette } from '../src/components/theme.ts'
+
+/** Fixed render clock so elapsed time and stall gaps are exact in assertions. */
+const NOW = 1_700_000_000_000
+
+/** The dim and warning SGR opens a `createPalette(true)` (dark) line carries. */
+const DIM_SGR = '\x1b[2;39m'
+const WARNING_SGR = '\x1b[33m'
+
+function makeLine(): WorkingLineComponent {
+  return new WorkingLineComponent(createPalette(true), () => NOW)
+}
+
+describe('working line', () => {
+  it('renders nothing while idle', () => {
+    const line = makeLine()
+    line.update(true, NOW - 1000, 'Reading src/foo.ts', '⠋', { verb: 'Pondering', emittedTokens: 99 })
+    line.update(false, undefined, undefined, undefined)
+    expect(line.render(80)).toEqual([])
+  })
+
+  it('keeps the legacy four-argument call shape working', () => {
+    const line = makeLine()
+    line.update(true, NOW - 1500, undefined, '⠙')
+    const [row] = line.render(80)
+    expect(row).toContain(DIM_SGR)
+    expect(row).toContain('⠙ Thinking… · 1.5s')
+    expect(row).not.toContain('↓')
+  })
+
+  it('shows the turn verb and elapsed time between tools', () => {
+    const line = makeLine()
+    line.update(true, NOW - 2000, undefined, '⠙', { verb: 'Pondering' })
+    const [row] = line.render(80)
+    expect(row).toContain('⠙ Pondering · 2.0s')
+    expect(row).not.toContain('Thinking…')
+  })
+
+  it('prefers a pending tool activity over the turn verb', () => {
+    const line = makeLine()
+    line.update(true, NOW - 2000, 'Reading src/foo.ts', '⠋', { verb: 'Pondering', emittedTokens: 12 })
+    const [row] = line.render(80)
+    expect(row).toContain('⠋ Reading src/foo.ts')
+    expect(row).not.toContain('Pondering')
+  })
+
+  it('appends the token segment only for a positive count', () => {
+    const line = makeLine()
+    line.update(true, NOW - 1000, undefined, '⠋', { verb: 'Vibing', emittedTokens: 128 })
+    expect(line.render(80)[0]).toContain('· 1.0s · ↓ 128 tokens')
+    line.update(true, NOW - 1000, undefined, '⠋', { verb: 'Vibing', emittedTokens: 0 })
+    expect(line.render(80)[0]).not.toContain('↓')
+    line.update(true, NOW - 1000, undefined, '⠋', { verb: 'Vibing' })
+    expect(line.render(80)[0]).not.toContain('↓')
+  })
+
+  it('paints the line warning-colored once output stalls past three seconds', () => {
+    const line = makeLine()
+    line.update(true, NOW - 10_000, undefined, '⠋', { verb: 'Pondering', lastOutputAt: NOW - 5000 })
+    const stalled = line.render(80)[0]
+    expect(stalled).toContain(WARNING_SGR)
+    expect(stalled).not.toContain(DIM_SGR)
+    // Exactly three seconds is not yet a stall; only beyond it is.
+    line.update(true, NOW - 10_000, undefined, '⠋', { verb: 'Pondering', lastOutputAt: NOW - 3000 })
+    expect(line.render(80)[0]).toContain(DIM_SGR)
+  })
+
+  it('stays dim while output flows and when staleness cannot be judged', () => {
+    const line = makeLine()
+    line.update(true, NOW - 10_000, undefined, '⠋', { verb: 'Pondering', lastOutputAt: NOW - 1000 })
+    expect(line.render(80)[0]).toContain(DIM_SGR)
+    line.update(true, NOW - 10_000, undefined, '⠋', { verb: 'Pondering' })
+    expect(line.render(80)[0]).toContain(DIM_SGR)
+  })
+
+  it('truncates to the given width, tokens segment first to go', () => {
+    const line = makeLine()
+    line.update(true, NOW - 1000, undefined, '⠋', { verb: 'Reticulating', emittedTokens: 12_345 })
+    const [row] = line.render(80)
+    expect(row).toContain('↓ 12345 tokens')
+    const narrow = line.render(10)[0]
+    expect(narrow).not.toContain('Reticulating')
+    expect(narrow).not.toContain('↓')
+  })
+})
