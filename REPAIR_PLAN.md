@@ -127,7 +127,7 @@ All commands operate from public artifacts and the GitHub commit, npm package, a
 - [x] Clean-profile tarball installation and repaired runtime transcript
 - [ ] Clean-profile registry installation transcript
 - [x] Config dump showing the rebuilt bundle layer is active
-- [ ] GitHub CI passed on Ubuntu and Windows for the final dependency repair
+- [x] GitHub CI passed on Ubuntu and Windows for the final dependency repair
 - [ ] Interactive TUI smoke evidence for the real startup and shutdown path
 - [ ] GitHub branch, tag, Release, and npm version aligned to one commit
 

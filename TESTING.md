@@ -18,7 +18,7 @@ The 2026-08-15 repair verification produced these results:
 | Empty-`DSH_HOME` tarball installation | Passed through the automated public-host smoke |
 | `dsh plugin ... why` | Passed; one installed `@lk251066/dsh-tui@1.0.1` |
 | `dsh --profile tui-public-smoke --dump-config` | Passed; every declared bundle row is active and memory is absent |
-| GitHub CI workflow | Pending for the final dependency repair; the preceding commit passed on Ubuntu and Windows |
+| GitHub CI workflow | Passed on Ubuntu and Windows, including the public rc.6 host smoke |
 | Public `@deepseek-ai/dsh@0.1.0-rc.6` launch | Passed module loading and reached only the intentional non-TTY error |
 | Interactive TTY smoke | Pending; the current automation host could not create a working Windows ConPTY session |
 | Clean npm registry installation | Pending because the package is not published |
