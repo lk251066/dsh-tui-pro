@@ -10,7 +10,7 @@ Do not use the existing `v1.0.0` GitHub tag; it predates the repaired source and
 
 The source tree, published package, empty-profile installation, and real-PTY runtime pass against public `@deepseek-ai/dsh@0.1.0-rc.6`. Version `1.0.2` adds the persistent workspace sidebar and fixed operational status display. See [REPAIR_PLAN.md](REPAIR_PLAN.md) for the completed repair record and release evidence.
 
-The current source contains the `1.1.0` full-screen workbench. It uses the terminal alternate screen, so the invoking shell remains unchanged after exit; chat history scrolls only inside the framed left pane while the right sidebar and input remain fixed. Use a locally packed artifact until npm publishes `1.1.0`; npm still serves `1.0.2`.
+Version `1.1.0` is published on [npm](https://www.npmjs.com/package/@lk251066/dsh-tui/v/1.1.0) and mirrored by the checksummed [GitHub Release](https://github.com/lk251066/dsh-tui-pro/releases/tag/v1.1.0). It uses the terminal alternate screen, so the invoking shell remains unchanged after exit; chat history scrolls only inside the framed left pane while the right sidebar and input remain fixed.
 
 ## Intended installation
 

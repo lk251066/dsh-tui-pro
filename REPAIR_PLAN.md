@@ -8,11 +8,11 @@ Ship one package: `@lk251066/dsh-tui`. Its package manifest already defines `dsh
 
 All five phases are complete for `1.0.2`. The existing `v1.0.0` tag and repository-root tarball remain invalid release inputs. The published npm package, annotated `v1.0.2` tag, checksummed GitHub Release, and reviewed commit are aligned, and the registry package passes a real-PTY flow against public `@deepseek-ai/dsh@0.1.0-rc.6`.
 
-## Unreleased terminal workbench
+## Version 1.1.0 terminal workbench
 
 The current source uses one full-screen workbench. The transcript, tools, dialogs, and editor occupy the left main area; Workspace, Sessions, Current, and Status stay on the right. The editor stays fixed at the bottom, Page Up and Page Down scroll only the transcript, and inline dialogs temporarily replace the editor. The public `1.0.2` artifact retains its released layout until a later version is published.
 
-The same source also renders user messages before their assistant responses, starts the bundle in the personal assistant session, and supports `/new` plus `/new <path>` across project directories. The `1.1.0` workbench enters the terminal alternate screen, reserves an outer frame, and keeps transcript scrolling inside its inner viewport. Type checking, all 442 tests, lint with 38 warnings and no errors, build, artifact packing, Windows and Linux empty-profile loading, and the Linux real PTY flow pass for the `1.1.0` artifact. The source is ready to commit and push; npm publication and a GitHub Release remain separate actions.
+The same source also renders user messages before their assistant responses, starts the bundle in the personal assistant session, and supports `/new` plus `/new <path>` across project directories. The `1.1.0` workbench enters the terminal alternate screen, reserves an outer frame, and keeps transcript scrolling inside its inner viewport. Type checking, all 442 tests, lint with 38 warnings and no errors, build, artifact packing, Windows and Linux empty-profile loading, and the Linux real PTY flow pass for the `1.1.0` artifact. The release workflow repeated those checks, published npm `1.1.0`, and created the checksummed GitHub Release from commit `81b72c8`.
 
 ## Version 1.0.2 sidebar release
 
@@ -41,6 +41,7 @@ The release passes type checking, all 440 tests, lint with warnings only, build,
 3. The annotated [`v1.0.1` tag and GitHub Release](https://github.com/lk251066/dsh-tui-pro/releases/tag/v1.0.1) identify the merged commit and provide the npm tarball plus its SHA-256 file.
 4. [`@lk251066/dsh-tui@1.0.2`](https://www.npmjs.com/package/@lk251066/dsh-tui/v/1.0.2) adds the persistent workspace sidebar and fixed status display.
 5. The annotated [`v1.0.2` tag and GitHub Release](https://github.com/lk251066/dsh-tui-pro/releases/tag/v1.0.2) identify the reviewed release commit and provide the npm tarball plus its SHA-256 file.
+6. [`@lk251066/dsh-tui@1.1.0`](https://www.npmjs.com/package/@lk251066/dsh-tui/v/1.1.0), annotated [`v1.1.0`](https://github.com/lk251066/dsh-tui-pro/releases/tag/v1.1.0), and the GitHub Release assets identify commit [`81b72c8`](https://github.com/lk251066/dsh-tui-pro/commit/81b72c8810e52b3c12d0f1558be30c5b2ad8c57e).
 
 ## Phase 1: Restore a valid source tree
 

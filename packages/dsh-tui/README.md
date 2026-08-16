@@ -6,7 +6,7 @@ Interactive terminal UI plugin and profile bundle for [DeepSeek Harness](https:/
 
 Version `1.0.2` is published on [npm](https://www.npmjs.com/package/@lk251066/dsh-tui) with provenance and is mirrored by the checksummed [GitHub Release](https://github.com/lk251066/dsh-tui-pro/releases/tag/v1.0.2). The registry package passes empty-profile installation and real-PTY interaction against the public dsh rc.6 host.
 
-The repository source contains the pending `1.1.0` terminal workbench layout. Build and install the local artifact to test it; the npm `1.0.2` package still contains the prior sidebar implementation.
+Version `1.1.0` is published on [npm](https://www.npmjs.com/package/@lk251066/dsh-tui/v/1.1.0) and mirrored by the checksummed [GitHub Release](https://github.com/lk251066/dsh-tui-pro/releases/tag/v1.1.0). It contains the framed terminal workbench layout.
 
 ## Installation
 
