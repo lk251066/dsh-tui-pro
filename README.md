@@ -10,7 +10,7 @@ Do not use the existing `v1.0.0` GitHub tag; it predates the repaired source and
 
 The source tree, published package, empty-profile installation, and real-PTY runtime pass against public `@deepseek-ai/dsh@0.1.0-rc.6`. Version `1.0.2` adds the persistent workspace sidebar and fixed operational status display. See [REPAIR_PLAN.md](REPAIR_PLAN.md) for the completed repair record and release evidence.
 
-The current source contains an unreleased full-screen workbench with chat and input on the left and a persistent Workspace, Sessions, Current, and Status sidebar on the right. Use a locally packed artifact to test this layout; npm still serves the released `1.0.2` implementation.
+The current source contains the `1.1.0` full-screen workbench. It uses the terminal alternate screen, so the invoking shell remains unchanged after exit; chat history scrolls only inside the framed left pane while the right sidebar and input remain fixed. Use a locally packed artifact until npm publishes `1.1.0`; npm still serves `1.0.2`.
 
 ## Intended installation
 
@@ -24,7 +24,7 @@ The package itself owns the TUI plugin and its `cordis.patch.yml` profile layer.
 
 ## Intended features
 
-- Full-screen terminal interface
+- Alternate-screen terminal interface with a full outer frame
 - Persistent right-side workspace, live-session, current-activity, and status sidebar
 - Internal transcript paging with fixed input and status areas
 - Multi-session navigation and session resume
@@ -34,7 +34,7 @@ The package itself owns the TUI plugin and its `cordis.patch.yml` profile layer.
 - Syntax highlighting, diff rendering, and Markdown rendering
 - Approval dialogs with risk confirmation
 
-The current source passes 441 tests, clean build and packing, empty-profile installation against public dsh rc.6, and a real Linux PTY flow. Version `1.1.0` is prepared in the source manifest but is not published.
+The current source passes 442 tests, clean build and packing, empty-profile installation against public dsh rc.6, and a real Linux PTY flow. Version `1.1.0` is prepared in the source manifest but is not published.
 
 ## Development
 

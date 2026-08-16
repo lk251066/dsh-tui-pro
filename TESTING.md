@@ -30,7 +30,7 @@ The source checks passed on the reviewed commit, and the final integration check
 
 ## Unreleased workbench verification
 
-The workbench uses `HeadlessTerminal` snapshots because pi-tui emits incremental ANSI updates rather than a complete screen on every render. Coverage includes right-sidebar placement, fixed-bottom input, Page Up and Page Down transcript scrolling, session switching without remounting the workbench, queue retention after unrelated durable messages, and inline-dialog replacement of the editor.
+The workbench uses `HeadlessTerminal` snapshots because pi-tui emits incremental ANSI updates rather than a complete screen on every render. Coverage includes alternate-buffer activation and restoration, zero scrollback growth while transcript rows append, the full outer frame, right-sidebar placement, fixed-bottom input, Page Up and Page Down transcript scrolling, session switching without remounting the workbench, queue retention after unrelated durable messages, and inline-dialog replacement of the editor.
 
 Run the focused evidence with:
 
@@ -45,7 +45,7 @@ Current source evidence:
 | Check | Result |
 | --- | --- |
 | `pnpm run typecheck` | Passed |
-| `pnpm run test` | Passed: 35 files, 441 tests |
+| `pnpm run test` | Passed: 35 files, 442 tests |
 | `pnpm run lint` | Passed with 38 warnings and no errors |
 | `pnpm run build` | Passed |
 | `pnpm run pack:artifact` | Passed: 298 files, including workbench JavaScript and declarations |
@@ -119,10 +119,11 @@ Exercise these behaviors through the installed profile:
 8. Resume and active-session title updates appear in the relevant UI.
 9. `sidebarWidth: 36` changes the right-sidebar width on a wide terminal; terminals below 65 columns hide the sidebar and retain the full-width main area.
 10. At 32, 24, and 10 rows, inspect which rows remain in the viewport; use at least 24 rows when verifying that Workspace, Sessions, Status, and the editor are visible together.
-11. Page Up and Page Down move only the transcript; the header, editor, dialog area, and sidebar remain fixed, and each session preserves its own scroll position.
-12. `/new` uses the active workspace, `/new <path>` validates and uses another project, and file and skill completion follow the active session's workspace.
-13. Repeated session switching preserves each transcript and input state.
-14. Normal exit disposes listeners and processes without an unhandled rejection.
+11. The launch enters the alternate screen and the exit restores the shell without adding TUI history to normal scrollback.
+12. Page Up and Page Down move only the transcript; the header, editor, dialog area, outer frame, and sidebar remain fixed, and each session preserves its own scroll position.
+13. `/new` uses the active workspace, `/new <path>` validates and uses another project, and file and skill completion follow the active session's workspace.
+14. Repeated session switching preserves each transcript and input state.
+15. Normal exit disposes listeners and processes without an unhandled rejection.
 
 `scripts/verify-interactive-pty.sh` drives the packed plugin through a Python standard-library PTY. The driver answers terminal capability queries, runs the optional-memory diagnostic, creates and switches sessions, opens the session picker, and performs double-Ctrl+C shutdown. The captured ANSI stream is replayed through `@xterm/headless`; the check requires the compact title, every sidebar section, Workspace to the right of the separator, and the editor to the left. The repository snapshot suite remains the keyless evidence for stable rendered output.
 

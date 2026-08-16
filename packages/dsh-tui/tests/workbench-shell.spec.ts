@@ -32,44 +32,49 @@ function createWorkbench(options: {
 }
 
 describe('WorkbenchShellComponent', () => {
-  it('fills the terminal height and keeps the sidebar on the right', () => {
+  it('fills the terminal with an outer frame and keeps the sidebar on the right', () => {
     const lines = createWorkbench().render(100)
     const plain = lines.map(stripSgr)
 
     expect(lines).toHaveLength(8)
-    expect(plain[0]?.indexOf('│')).toBe(67)
-    expect(plain[0]?.slice(68)).toContain('Workspace')
+    expect(plain[0]).toBe(`┌${'─'.repeat(98)}┐`)
+    expect(plain[7]).toBe(`└${'─'.repeat(98)}┘`)
+    expect(plain.slice(1, -1).every(line => line.startsWith('│') && line.endsWith('│'))).toBe(true)
+    expect(plain[1]?.indexOf('│', 1)).toBe(66)
+    expect(plain[1]?.slice(67)).toContain('Workspace')
     expect(plain.every(line => visibleWidth(line) === 100)).toBe(true)
   })
 
   it('fixes the input area to the bottom of the main column', () => {
     const plain = createWorkbench({ rows: 6 }).render(90).map(stripSgr)
-    const separator = plain[0]?.indexOf('│') ?? -1
+    const separator = plain[1]?.indexOf('│', 1) ?? -1
 
-    expect(plain[5]?.slice(0, separator).trim()).toBe('dsh >')
-    expect(plain[5]?.slice(separator + 1).trim()).toBe('')
+    expect(plain[4]?.slice(1, separator).trim()).toBe('dsh >')
+    expect(plain[4]?.slice(separator + 1, -1).trim()).toBe('')
   })
 
   it('clips long transcripts to the internal viewport while keeping shared chrome fixed', () => {
     const transcript = Array.from({ length: 12 }, (_, index) => `row ${String(index)}`).join('\n')
-    const plain = createWorkbench({ rows: 6, transcript }).render(100).map(stripSgr)
-    const main = plain.map(line => line.slice(0, line.indexOf('│')).trim())
-    const sidebar = plain.map(line => line.slice(line.indexOf('│') + 1).trim())
+    const plain = createWorkbench({ rows: 8, transcript }).render(100).map(stripSgr)
+    const content = plain.slice(1, -1)
+    const main = content.map(line => line.slice(1, line.indexOf('│', 1)).trim())
+    const sidebar = content.map(line => line.slice(line.indexOf('│', 1) + 1, -1).trim())
 
-    expect(plain).toHaveLength(6)
+    expect(plain).toHaveLength(8)
     expect(main).toEqual(['header', '', 'row 10', 'row 11', 'queue', 'dsh >'])
     expect(sidebar).toEqual(['Workspace', 'Sessions', 'Status', '', '', ''])
   })
 
   it('scrolls the transcript without moving the header, input, or sidebar', () => {
     const transcript = Array.from({ length: 12 }, (_, index) => `row ${String(index)}`).join('\n')
-    const workbench = createWorkbench({ rows: 6, transcript })
+    const workbench = createWorkbench({ rows: 8, transcript })
 
     workbench.scrollPageUp(100)
     const scrolled = workbench.render(100).map(stripSgr)
-    expect(scrolled.map(line => line.slice(0, line.indexOf('│')).trim()))
+    const content = scrolled.slice(1, -1)
+    expect(content.map(line => line.slice(1, line.indexOf('│', 1)).trim()))
       .toEqual(['header', '', 'row 8', 'row 9', 'queue', 'dsh >'])
-    expect(scrolled.map(line => line.slice(line.indexOf('│') + 1).trim()))
+    expect(content.map(line => line.slice(line.indexOf('│', 1) + 1, -1).trim()))
       .toEqual(['Workspace', 'Sessions', 'Status', '', '', ''])
 
     workbench.scrollToBottom()
@@ -109,14 +114,16 @@ describe('WorkbenchShellComponent', () => {
     for (const width of [64, 26, 10]) {
       const lines = createWorkbench({ rows: 3 }).render(width).map(stripSgr)
       expect(lines).toHaveLength(3)
-      expect(lines.every(line => !line.includes('│'))).toBe(true)
+      expect(lines[0]).toBe(`┌${'─'.repeat(width - 2)}┐`)
+      expect(lines[2]).toBe(`└${'─'.repeat(width - 2)}┘`)
+      expect(lines[1]?.startsWith('│')).toBe(true)
+      expect(lines[1]?.endsWith('│')).toBe(true)
       expect(lines.every(line => visibleWidth(line) === width)).toBe(true)
     }
   })
 
-  it('renders only the main column below the separator minimum', () => {
-    const lines = createWorkbench({ rows: 2, input: 'x' }).render(2)
-    expect(lines.some(line => line.includes('│'))).toBe(false)
-    expect(lines.slice(-2)).toEqual(['e ', 'x '])
+  it('keeps the outer frame at the smallest supported terminal width', () => {
+    const lines = createWorkbench({ rows: 2, input: 'x' }).render(2).map(stripSgr)
+    expect(lines).toEqual(['┌┐', '└┘'])
   })
 })

@@ -53,6 +53,12 @@ interface TranscriptViewportState {
   lastWidth: number
 }
 
+function frameLine(width: number, left: string, fill: string, right: string): string {
+  if (width <= 0) return ''
+  if (width === 1) return fill
+  return `${left}${fill.repeat(width - 2)}${right}`
+}
+
 function padToWidth(value: string, width: number): string {
   const clipped = truncateToWidth(value, Math.max(0, width), '')
   return clipped + ' '.repeat(Math.max(0, width - visibleWidth(clipped)))
@@ -82,7 +88,7 @@ export class WorkbenchShellComponent implements Component {
 
   /** Width available to the main work area for the supplied terminal width. */
   mainWidth(width: number): number {
-    return this.columnWidths(width).main
+    return this.columnWidths(Math.max(0, width - 2)).main
   }
 
   /** Rows consumed by the fixed input area at the current main width. */
@@ -131,21 +137,40 @@ export class WorkbenchShellComponent implements Component {
     const height = Math.max(0, Math.floor(this.options.terminalRows()))
     if (width <= 0 || height === 0) return []
 
-    const widths = this.columnWidths(width)
-    if (widths.sidebar === 0) {
-      return this.renderMain(widths.main, height).map(line => padToWidth(line, widths.main))
+    const top = this.palette.accent(frameLine(width, '┌', '─', '┐'))
+    if (height === 1) return [top]
+    const bottom = this.palette.accent(frameLine(width, '└', '─', '┘'))
+    if (height === 2) return [top, bottom]
+
+    const innerWidth = Math.max(0, width - 2)
+    const innerHeight = height - 2
+    const leftBorder = this.palette.accent('│')
+    const rightBorder = this.palette.accent('│')
+    if (innerWidth === 0) {
+      return [top, ...Array.from({ length: innerHeight }, () => `${leftBorder}${rightBorder}`), bottom]
     }
 
-    const mainLines = this.renderMain(widths.main, height)
+    const widths = this.columnWidths(innerWidth)
+    if (widths.sidebar === 0) {
+      const mainLines = this.renderMain(widths.main, innerHeight)
+      const content = Array.from(
+        { length: innerHeight },
+        (_, index) => `${leftBorder}${padToWidth(mainLines[index] ?? '', widths.main)}${rightBorder}`,
+      )
+      return [top, ...content, bottom]
+    }
+
+    const mainLines = this.renderMain(widths.main, innerHeight)
     const rawSidebarLines = this.options.sidebar.render(widths.sidebar)
-    const sidebarLines = rawSidebarLines.slice(0, height)
+    const sidebarLines = rawSidebarLines.slice(0, innerHeight)
     const separator = this.palette.dim('│')
 
-    return Array.from({ length: height }, (_, index) => {
+    const content = Array.from({ length: innerHeight }, (_, index) => {
       const main = padToWidth(mainLines[index] ?? '', widths.main)
       const sidebar = padToWidth(sidebarLines[index] ?? '', widths.sidebar)
-      return `${main}${separator}${sidebar}`
+      return `${leftBorder}${main}${separator}${sidebar}${rightBorder}`
     })
+    return [top, ...content, bottom]
   }
 
   private columnWidths(width: number): ColumnWidths {
@@ -201,7 +226,7 @@ export class WorkbenchShellComponent implements Component {
     readonly rows: number
     readonly maxOffset: number
   } {
-    const height = Math.max(0, Math.floor(this.options.terminalRows()))
+    const height = Math.max(0, Math.floor(this.options.terminalRows()) - 2)
     const rows = this.mainSections(this.mainWidth(width), height).transcriptRows
     const transcriptWidth = this.mainWidth(width)
     const lineCount = this.transcript.render(transcriptWidth).length

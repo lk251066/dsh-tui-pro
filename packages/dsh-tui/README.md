@@ -6,7 +6,7 @@ Interactive terminal UI plugin and profile bundle for [DeepSeek Harness](https:/
 
 Version `1.0.2` is published on [npm](https://www.npmjs.com/package/@lk251066/dsh-tui) with provenance and is mirrored by the checksummed [GitHub Release](https://github.com/lk251066/dsh-tui-pro/releases/tag/v1.0.2). The registry package passes empty-profile installation and real-PTY interaction against the public dsh rc.6 host.
 
-The repository source after `1.0.2` contains an unreleased terminal workbench layout. Build and install the local artifact to test that layout; the npm `1.0.2` package still contains the released sidebar implementation.
+The repository source contains the pending `1.1.0` terminal workbench layout. Build and install the local artifact to test it; the npm `1.0.2` package still contains the prior sidebar implementation.
 
 ## Installation
 
@@ -42,7 +42,7 @@ After successful installation and profile validation:
 dsh --profile tui
 ```
 
-The bundled profile opens the personal assistant session. The TUI renders transcript, tool output, dialogs, and editor in the left main area. A right sidebar keeps Workspace, Sessions, Current, and Status fixed while Page Up and Page Down scroll only the active transcript. An active inline dialog temporarily replaces the editor and restores its draft when the dialog closes.
+The bundled profile opens the personal assistant session. The TUI enters the terminal alternate screen and renders a full outer frame. Transcript, tool output, dialogs, and editor occupy the left inner area; a right sidebar keeps Workspace, Sessions, Current, and Status fixed while Page Up and Page Down scroll only the active transcript. An active inline dialog temporarily replaces the editor and restores its draft when the dialog closes. Stopping the TUI restores the invoking terminal and its scrollback.
 
 Press F6 from the editor to focus Sessions. Use Up and Down to select, Enter to switch, and Left Arrow, F6, or Escape to return to the editor. Persisted sessions from previous processes remain available through `/resume`; the sidebar lists only sessions live in the current process.
 
@@ -66,7 +66,7 @@ The bundled `cordis.patch.yml` installs the TUI with these defaults:
     maxToolOutputLines: 6
 ```
 
-`sidebarWidth` sets the preferred right-sidebar width in terminal columns, defaults to 32, and accepts values of 24 or greater. Below 65 total columns the sidebar hides so the main area remains usable. A height of at least 24 rows is recommended to keep Workspace, Sessions, Current, Status, and the editor visible together.
+`sidebarWidth` sets the preferred right-sidebar width in terminal columns, defaults to 32, and accepts values of 24 or greater. The outer frame reserves one row and column on each edge. Below 65 total columns the sidebar hides so the main area remains usable. A height of at least 24 rows is recommended to keep Workspace, Sessions, Current, Status, and the editor visible together.
 
 The package also exports `@lk251066/dsh-tui/prompt` and `@lk251066/dsh-tui/invariant` for its bundle composition. Treat the bundled patch as the supported entry path; direct manual profile composition must provide every service injected by the TUI. Long-term memory is optional and is not mounted by the default bundle because no compatible public `@deepseek-ai/dsh-memory` package is available.
 

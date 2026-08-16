@@ -28,6 +28,8 @@ python3 "$repo_root/scripts/drive-interactive-pty.py" \
 grep -aqF 'Memory is not available in this' "$capture"
 grep -aqF 'New session session-' "$capture"
 grep -aqF 'assistant' "$capture"
+grep -aqF $'\x1b[?1049h' "$capture"
+grep -aqF $'\x1b[?1049l' "$capture"
 grep -qF 'Workspace' "$readable"
 grep -qF 'Sessions' "$readable"
 grep -qF 'Status' "$readable"
@@ -42,11 +44,15 @@ lines = Path(sys.argv[1]).read_text(encoding='utf-8').splitlines()
 title = next((line for line in lines if 'dsh DEEPSEEK HARNESS' in line), None)
 workspace = next((line for line in lines if 'Workspace' in line and '│' in line), None)
 editor = next((line for line in lines if ('dsh >' in line or 'dsh   ' in line) and '│' in line), None)
+if not lines or not lines[0].startswith('┌') or not lines[-1].startswith('└'):
+    raise SystemExit('outer frame is not preserved across the terminal viewport')
 if title is None:
     raise SystemExit('compact workbench title is missing')
-if workspace is None or workspace.index('Workspace') < workspace.rfind('│'):
+workspace_separators = [] if workspace is None else [index for index, value in enumerate(workspace) if value == '│']
+if workspace is None or len(workspace_separators) < 3 or workspace.index('Workspace') < workspace_separators[1]:
     raise SystemExit('Workspace is not rendered in the right sidebar')
-if editor is None or min(index for marker in ('dsh >', 'dsh   ') if (index := editor.find(marker)) >= 0) > editor.rfind('│'):
+editor_separators = [] if editor is None else [index for index, value in enumerate(editor) if value == '│']
+if editor is None or len(editor_separators) < 3 or min(index for marker in ('dsh >', 'dsh   ') if (index := editor.find(marker)) >= 0) > editor_separators[-2]:
     raise SystemExit('editor is not rendered in the left main area')
 PY
 ! grep -aqF 'fatal load failure' "$capture"

@@ -1556,6 +1556,39 @@ describe('goodbye message and /resume', () => {
   })
 })
 describe('pi-tui chat lifecycle and transcript', () => {
+  it('uses the alternate screen without growing terminal scrollback', async () => {
+    const terminal = new HeadlessTerminal(100, 24)
+    const result = await createTuiTestHarness(terminal, vi.fn(), {
+      omitInitialLifecycle: true,
+      omitWelcome: true,
+      beforeMount(session) {
+        for (let index = 0; index < 80; index += 1) appendUser(session, `fixed viewport row ${String(index)}`)
+      },
+    })
+    await terminal.waitForFrame(0)
+
+    expect(terminal.bufferType).toBe('alternate')
+    expect(terminal.scrollbackBase).toBe(0)
+
+    for (let index = 0; index < 8; index += 1) {
+      const before = terminal.frames
+      result.session.append('user/message', createUserMessage({
+        content: [{ type: 'text', text: `new viewport row ${String(index)}` }],
+        source: { kind: 'user' },
+      }), { surfaceOp: 'append' })
+      await terminal.waitForFrame(before)
+      expect(terminal.scrollbackBase).toBe(0)
+    }
+
+    const viewport = await terminal.snapshot()
+    expect(viewport).toContain(`┌${'─'.repeat(98)}┐`)
+    expect(viewport).toContain(`└${'─'.repeat(98)}┘`)
+
+    await disposeTuiTestHarness(result)
+    await terminal.flush()
+    expect(terminal.bufferType).toBe('normal')
+  })
+
   it('renders a claimed user message before the assistant response for the same step', async () => {
     const terminal = new HeadlessTerminal(140, 32)
     const result = await createTuiTestHarness(terminal, vi.fn(), {
@@ -3009,6 +3042,11 @@ describe('pi-tui chat lifecycle and transcript', () => {
     agentEvents(result.ctx, result.agent).emit('agent/status', { status: 'running' })
     result.terminal.send('/status')
     result.terminal.send('\r')
+    await tick()
+    for (let page = 0; page < 8 && !result.terminal.output.includes('Session status'); page += 1) {
+      result.terminal.send('\x1b[5~')
+      await tick()
+    }
     await vi.waitFor(() => {
       expect(result.terminal.output).toContain('Session status')
     })
@@ -4285,6 +4323,32 @@ describe('pi-tui chat lifecycle and transcript', () => {
 
   it('discovers and executes plugin commands, then removes TUI-local commands on disposal', async () => {
     const result = await setup()
+    expect(result.ctx.commands.list(result.agent).map(command => command.name)).toEqual([
+      'agents',
+      'assistant',
+      'clear',
+      'context',
+      'details',
+      'exit',
+      'export',
+      'fleet',
+      'fork',
+      'help',
+      'jobs',
+      'memories',
+      'model',
+      'new',
+      'palette',
+      'queue',
+      'quit',
+      'reload',
+      'rename',
+      'resume',
+      'sessions',
+      'settings',
+      'status',
+      'theme',
+    ])
     const handler = vi.fn(({ rawInput }: CommandInvocation) => ({
       kind: 'success' as const,
       text: `PLUGIN:${rawInput}`,
@@ -6326,7 +6390,7 @@ describe('TUI user-interaction dialogs', () => {
     await tick()
     expect(result.terminal.output).toContain('long question?')
     expect(result.terminal.output).toContain('Esc cancel')
-    result.terminal.resize(60, 4)
+    result.terminal.resize(60, 6)
     result.terminal.send('\r')
     await tick()
     expect(result.terminal.output).toContain('Enter an answer')
@@ -6363,7 +6427,7 @@ describe('TUI user-interaction dialogs', () => {
     const result = await setup({
       config: { questionDialogWidth: 60, questionDialogMaxHeight: 6 },
     })
-    result.terminal.resize(60, 2)
+    result.terminal.resize(60, 4)
     const answer = result.ctx.userQuestions.ask({
       questions: [{ id: 'one-row-dialog', question: 'Answer this deliberately long question?' }],
     })
@@ -6380,7 +6444,7 @@ describe('TUI user-interaction dialogs', () => {
     const result = await setup({
       config: { questionDialogWidth: 60, questionDialogMaxHeight: 6 },
     })
-    result.terminal.resize(60, 3)
+    result.terminal.resize(60, 5)
     const answer = result.ctx.userQuestions.ask({
       questions: [{ id: 'two-row-dialog', question: 'Answer this deliberately long question?' }],
     })
@@ -6397,7 +6461,7 @@ describe('TUI user-interaction dialogs', () => {
     const result = await setup({
       config: { questionDialogWidth: 60, questionDialogMaxHeight: 6 },
     })
-    result.terminal.resize(60, 4)
+    result.terminal.resize(60, 6)
     const answer = result.ctx.userQuestions.ask({
       questions: [{
         id: 'three-row-options',
@@ -6847,6 +6911,9 @@ describe('terminal mounting', () => {
     await tick()
     expect(ctx.commands.list(ctx.agents.get(SessionId('failed-start-session'))!)).toEqual([])
     expect(terminal.stopped).toBe(1)
+    expect(terminal.output).toContain('\x1b[?1049h\x1b[H')
+    expect(terminal.output).toContain('\x1b[?1049l')
+    expect(terminal.output.indexOf('\x1b[?1049h')).toBeLessThan(terminal.output.indexOf('\x1b[?1049l'))
     expect(terminal.progress).toEqual([false, true, false])
     expect(ctx.get('tui')).toBeUndefined()
     await expect(ctx.userQuestions.ask({ questions: [{ id: 'late', question: 'Late?' }] }))

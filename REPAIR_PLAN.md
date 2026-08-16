@@ -12,7 +12,7 @@ All five phases are complete for `1.0.2`. The existing `v1.0.0` tag and reposito
 
 The current source uses one full-screen workbench. The transcript, tools, dialogs, and editor occupy the left main area; Workspace, Sessions, Current, and Status stay on the right. The editor stays fixed at the bottom, Page Up and Page Down scroll only the transcript, and inline dialogs temporarily replace the editor. The public `1.0.2` artifact retains its released layout until a later version is published.
 
-The same source also renders user messages before their assistant responses, starts the bundle in the personal assistant session, and supports `/new` plus `/new <path>` across project directories. Type checking, all 441 tests, lint with 38 warnings and no errors, build, artifact packing, Windows and Linux empty-profile loading, and the Linux real PTY flow pass for the `1.1.0` artifact. The source is ready to commit and push; npm publication and a GitHub Release remain separate actions.
+The same source also renders user messages before their assistant responses, starts the bundle in the personal assistant session, and supports `/new` plus `/new <path>` across project directories. The `1.1.0` workbench enters the terminal alternate screen, reserves an outer frame, and keeps transcript scrolling inside its inner viewport. Type checking, all 442 tests, lint with 38 warnings and no errors, build, artifact packing, Windows and Linux empty-profile loading, and the Linux real PTY flow pass for the `1.1.0` artifact. The source is ready to commit and push; npm publication and a GitHub Release remain separate actions.
 
 ## Version 1.0.2 sidebar release
 

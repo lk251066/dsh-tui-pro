@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 The `v1.0.0` tag is not an installable public release: no npm package was published, and the repository-root tarball does not contain the required dsh bundle metadata. See [REPAIR_PLAN.md](REPAIR_PLAN.md) for the first verified release criteria.
 
-## Unreleased
+## [1.1.0] - 2026-08-16
 
 ### Changed
 
@@ -15,6 +15,8 @@ The `v1.0.0` tag is not an installable public release: no npm package was publis
 - Move model, context, token, cache, queue, permission, and plan values exclusively into the right Status section.
 - Start the bundled profile in the personal assistant session.
 - Let `/new` create a session in the active project and `/new <path>` create one in another project.
+- Run the workbench in the terminal alternate screen so TUI redraws never grow the invoking shell's scrollback.
+- Draw an accent outer frame around the full terminal viewport; transcript, sidebar, dialogs, and editor use the framed inner area.
 
 ### Fixed
 

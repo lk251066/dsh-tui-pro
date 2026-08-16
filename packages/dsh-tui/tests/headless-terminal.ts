@@ -161,6 +161,16 @@ export class HeadlessTerminal implements Terminal {
     return this.emulator.rows
   }
 
+  /** Active VT buffer name used by full-screen lifecycle assertions. */
+  get bufferType(): 'normal' | 'alternate' {
+    return this.emulator.buffer.active.type
+  }
+
+  /** Number of rows retained above the active viewport. */
+  get scrollbackBase(): number {
+    return this.emulator.buffer.active.baseY
+  }
+
   start(onInput: (data: string) => void, onResize: () => void): void {
     this.started += 1
     this.onInput = onInput

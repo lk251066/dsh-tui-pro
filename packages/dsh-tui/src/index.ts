@@ -101,6 +101,7 @@ import {
 } from './components/transcript.ts'
 import { FramedEditorComponent } from './components/framed-editor.ts'
 import { WorkbenchShellComponent } from './components/workbench-shell.ts'
+import { FullScreenTerminal } from './full-screen-terminal.ts'
 import { NoticeSlotComponent, type NoticeKind } from './components/notice-slot.ts'
 import { WorkingLineComponent } from './components/working-line.ts'
 import { contextPressureLevel } from './chat/context-pressure.ts'
@@ -419,7 +420,8 @@ function createTuiChatInternal(
   })
   const mdTheme = markdownTheme(palette, codeHighlighter.highlightCode)
   codeHighlighter.preload()
-  const ui = new TUI(runtime.terminal, resolved.showHardwareCursor)
+  const workbenchRows = (): number => Math.max(0, runtime.terminal.rows - 2)
+  const ui = new TUI(new FullScreenTerminal(runtime.terminal), resolved.showHardwareCursor)
   const todoContainer = new Container()
   const questionContainer = new Container()
   const mainHeader = new Container()
@@ -947,7 +949,7 @@ function createTuiChatInternal(
         questionMaxHeight: () => {
           return Math.max(1, Math.min(
             resolved.questionDialogMaxHeight,
-            runtime.terminal.rows,
+            workbenchRows(),
           ))
         },
         pendingCallLabel: callId => slotChannel.toolCardLabel(callId),
@@ -1140,7 +1142,7 @@ function createTuiChatInternal(
   const persistentLayout = createSessionLayout({
     palette,
     registry,
-    terminalRows: () => runtime.terminal.rows,
+    terminalRows: workbenchRows,
     now,
     activity: workingLine,
     focusEditor: () => {
@@ -1277,7 +1279,7 @@ function createTuiChatInternal(
     questionMaxHeight: () => {
       return Math.max(1, Math.min(
         resolved.questionDialogMaxHeight,
-        runtime.terminal.rows,
+        workbenchRows(),
       ))
     },
   })

@@ -11,7 +11,7 @@ The sidebar contains four sections:
 
 The default sidebar width is 32 columns and `sidebarWidth` accepts values from 24 columns upward. At 65 columns or more, the layout keeps both the 24-column sidebar minimum and a usable main area. Below 65 columns, the sidebar hides so the editor and dialogs keep the full terminal width.
 
-The root component always renders exactly the terminal height. Short transcripts leave flexible space above the editor. Long transcripts scroll inside their own viewport with Page Up and Page Down, while the header, editor, dialogs, and sidebar remain fixed. Each session retains its own transcript position; new rows do not pull an intentionally scrolled viewport back to the live tail.
+The workbench enters the terminal alternate screen before it renders and restores the invoking terminal when it stops. Its accent outer frame occupies the terminal edge; transcript, header, dialogs, editor, and sidebar use the inner rows and columns. Short transcripts leave flexible space above the editor. Long transcripts scroll inside their own viewport with Page Up and Page Down, while the header, editor, dialogs, and sidebar remain fixed. Each session retains its own transcript position; new rows do not pull an intentionally scrolled viewport back to the live tail.
 
 F6 moves focus from the editor into Sessions. Up and Down change the selected live session, Enter activates it, and Left Arrow, F6, or Escape returns focus to the editor. Background session title, activity, and running-state changes refresh the list without requiring a switch.
 
