@@ -2,7 +2,7 @@
 
 ## Submission status
 
-Version `1.1.0` is published. The GitHub release workflow repeated the source, package, clean-profile public-host, snapshot, and real-PTY checks from commit `81b72c8`, then published npm and its checksummed GitHub Release. The npm package, annotated tag, GitHub commit, and release assets identify the same version.
+Version `1.2.0` is published. The GitHub release workflow repeated the source, package, clean-profile public-host, snapshot, and real-PTY checks from commit `a3ead1b`, then published npm and its checksummed GitHub Release. The npm package, annotated tag, GitHub commit, and release assets identify the same version.
 
 The public repository now carries the `dsh-plugin` GitHub topic, which is dshfind's official submission mechanism. dshfind synchronizes that topic daily at 10:17 China Standard Time. Its current public snapshot does not yet contain `lk251066/dsh-tui-pro`; the next successful site sync is required before its listing URL can be verified.
 
@@ -17,7 +17,7 @@ The completed repair and acceptance evidence are tracked in [REPAIR_PLAN.md](REP
 | License | MIT |
 | Repository | <https://github.com/lk251066/dsh-tui-pro> |
 | npm | <https://www.npmjs.com/package/@lk251066/dsh-tui> |
-| Verified release | <https://github.com/lk251066/dsh-tui-pro/releases/tag/v1.1.0> |
+| Verified release | <https://github.com/lk251066/dsh-tui-pro/releases/tag/v1.2.0> |
 | dshfind submission | <https://github.com/topics/dsh-plugin> |
 
 `@lk251066/dsh-tui` is the only supported package name. It owns both the TUI plugin and its `cordis.patch.yml` layer through the `dsh.bundle.patch` manifest field.
@@ -53,5 +53,5 @@ dsh plugin --profile tui add @lk251066/dsh-tui
 - Repository: <https://github.com/lk251066/dsh-tui-pro>
 - Issues: <https://github.com/lk251066/dsh-tui-pro/issues>
 - npm package: <https://www.npmjs.com/package/@lk251066/dsh-tui>
-- Verified GitHub Release: <https://github.com/lk251066/dsh-tui-pro/releases/tag/v1.1.0>
+- Verified GitHub Release: <https://github.com/lk251066/dsh-tui-pro/releases/tag/v1.2.0>
 - dshfind discovery source: <https://github.com/topics/dsh-plugin>

@@ -48,6 +48,7 @@ The release passes type checking, all 440 tests, lint with warnings only, build,
 4. [`@lk251066/dsh-tui@1.0.2`](https://www.npmjs.com/package/@lk251066/dsh-tui/v/1.0.2) adds the persistent workspace sidebar and fixed status display.
 5. The annotated [`v1.0.2` tag and GitHub Release](https://github.com/lk251066/dsh-tui-pro/releases/tag/v1.0.2) identify the reviewed release commit and provide the npm tarball plus its SHA-256 file.
 6. [`@lk251066/dsh-tui@1.1.0`](https://www.npmjs.com/package/@lk251066/dsh-tui/v/1.1.0), annotated [`v1.1.0`](https://github.com/lk251066/dsh-tui-pro/releases/tag/v1.1.0), and the GitHub Release assets identify commit [`81b72c8`](https://github.com/lk251066/dsh-tui-pro/commit/81b72c8810e52b3c12d0f1558be30c5b2ad8c57e).
+7. [`@lk251066/dsh-tui@1.2.0`](https://www.npmjs.com/package/@lk251066/dsh-tui/v/1.2.0), annotated [`v1.2.0`](https://github.com/lk251066/dsh-tui-pro/releases/tag/v1.2.0), and the checksummed GitHub Release assets identify commit [`a3ead1b`](https://github.com/lk251066/dsh-tui-pro/commit/a3ead1b2ca6cfed6a16024efd5552879d90aa4fb).
 
 ## Phase 1: Restore a valid source tree
 
