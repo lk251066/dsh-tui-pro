@@ -4,7 +4,7 @@ This guide covers local development and release verification for `@lk251066/dsh-
 
 ## Current status
 
-The published `1.0.1` commit passes the source, packed-artifact, public-host, and real-PTY checks. Unreleased working-tree changes must repeat the relevant checks before they are submitted or published; see [REPAIR_PLAN.md](REPAIR_PLAN.md).
+The published `1.0.2` commit passes the source, packed-artifact, public-host, and real-PTY checks. Unreleased working-tree changes must repeat the relevant checks before they are submitted or published; see [REPAIR_PLAN.md](REPAIR_PLAN.md).
 
 ## Prerequisites
 

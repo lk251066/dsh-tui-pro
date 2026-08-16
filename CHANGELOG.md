@@ -6,6 +6,8 @@ The `v1.0.0` tag is not an installable public release: no npm package was publis
 
 ## Unreleased
 
+## [1.0.2] - 2026-08-16
+
 ### Added
 
 - Add a configurable persistent workspace sidebar with live sessions, agent status, model, context, token, queue, permission, and plan values.
@@ -80,5 +82,5 @@ The published npm package, annotated `v1.0.1` tag, and checksummed GitHub Releas
 
 - **Repository**: https://github.com/lk251066/dsh-tui-pro
 - **NPM Package**: https://www.npmjs.com/package/@lk251066/dsh-tui
-- **GitHub Release**: https://github.com/lk251066/dsh-tui-pro/releases/tag/v1.0.1
+- **GitHub Release**: https://github.com/lk251066/dsh-tui-pro/releases/tag/v1.0.2
 - **Plugin Catalog**: ready for submission using [PLUGIN_SUBMISSION.md](PLUGIN_SUBMISSION.md)

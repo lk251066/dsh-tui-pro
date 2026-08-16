@@ -4,13 +4,11 @@ Community-maintained interactive terminal UI plugin for [DeepSeek Harness](https
 
 ## Release status
 
-Version `1.0.1` is publicly available on [npm](https://www.npmjs.com/package/@lk251066/dsh-tui) and in the [GitHub Release](https://github.com/lk251066/dsh-tui-pro/releases/tag/v1.0.1). The npm package, `v1.0.1` tag, and Release all identify commit [`e521522`](https://github.com/lk251066/dsh-tui-pro/commit/e521522cf969a916193cd646fa204d156b9facc8).
+Version `1.0.2` is publicly available on [npm](https://www.npmjs.com/package/@lk251066/dsh-tui) and in the [GitHub Release](https://github.com/lk251066/dsh-tui-pro/releases/tag/v1.0.2). The npm package, `v1.0.2` tag, and checksummed Release identify the same reviewed source.
 
-Do not use the existing `v1.0.0` GitHub tag or repository-root `lk251066-dsh-tui-1.0.0.tgz`. They predate the repaired source and bundle metadata. Treat repository-local tarballs as verification inputs; install from npm or the `v1.0.1` Release.
+Do not use the existing `v1.0.0` GitHub tag or repository-root `lk251066-dsh-tui-1.0.0.tgz`. They predate the repaired source and bundle metadata. Treat repository-local tarballs as verification inputs; install from npm or the `v1.0.2` Release.
 
-The source tree, published package, empty-profile installation, and real-PTY runtime pass against public `@deepseek-ai/dsh@0.1.0-rc.6`. See [REPAIR_PLAN.md](REPAIR_PLAN.md) for the completed repair record and release evidence.
-
-The current working tree also contains an unreleased persistent workspace sidebar. It is not part of `1.0.1` until a new reviewed commit, package version, tag, and Release are published together.
+The source tree, published package, empty-profile installation, and real-PTY runtime pass against public `@deepseek-ai/dsh@0.1.0-rc.6`. Version `1.0.2` adds the persistent workspace sidebar and fixed operational status display. See [REPAIR_PLAN.md](REPAIR_PLAN.md) for the completed repair record and release evidence.
 
 ## Intended installation
 
@@ -32,7 +30,7 @@ The package itself owns the TUI plugin and its `cordis.patch.yml` profile layer.
 - Syntax highlighting, diff rendering, and Markdown rendering
 - Approval dialogs with risk confirmation
 
-The `1.0.1` feature set passes the published-package PTY smoke and repository snapshot suite. The unreleased sidebar passes source checks, 440 tests, artifact packing, and clean-profile public-host loading. It still requires a new real-PTY verification and a version bump before the next release.
+The `1.0.2` feature set passes 440 tests, artifact verification, empty-profile public-host loading, and a real-PTY screen replay that requires every sidebar section.
 
 ## Development
 

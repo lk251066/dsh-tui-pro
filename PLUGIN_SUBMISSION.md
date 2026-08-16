@@ -2,7 +2,7 @@
 
 ## Submission status
 
-This plugin is ready for submission to dshfind.com or another public plugin catalog. The source, package, clean-profile public-host, registry installation, snapshot, and real-PTY checks pass. The npm package, annotated tag, merged GitHub commit, and checksummed GitHub Release identify version `1.0.1`.
+This plugin is ready for submission to dshfind.com or another public plugin catalog. The source, package, clean-profile public-host, registry installation, snapshot, and real-PTY checks pass. The npm package, annotated tag, merged GitHub commit, and checksummed GitHub Release identify version `1.0.2`.
 
 The completed repair and acceptance evidence are tracked in [REPAIR_PLAN.md](REPAIR_PLAN.md). Catalog publication remains a separate submission action.
 
@@ -15,7 +15,7 @@ The completed repair and acceptance evidence are tracked in [REPAIR_PLAN.md](REP
 | License | MIT |
 | Repository | <https://github.com/lk251066/dsh-tui-pro> |
 | npm | <https://www.npmjs.com/package/@lk251066/dsh-tui> |
-| Verified release | <https://github.com/lk251066/dsh-tui-pro/releases/tag/v1.0.1> |
+| Verified release | <https://github.com/lk251066/dsh-tui-pro/releases/tag/v1.0.2> |
 
 `@lk251066/dsh-tui` is the only supported package name. It owns both the TUI plugin and its `cordis.patch.yml` layer through the `dsh.bundle.patch` manifest field.
 
@@ -35,7 +35,7 @@ dsh plugin --profile tui add @lk251066/dsh-tui
 
 ## Submission checklist
 
-- [x] Source type check, tests, lint, and build pass at the reviewed `1.0.1` commit.
+- [x] Source type check, tests, lint, and build pass at the reviewed `1.0.2` commit.
 - [x] The local npm tarball contains all exports and `cordis.patch.yml`.
 - [x] Every runtime package referenced by the rebuilt bundle resolves from a clean dsh profile.
 - [x] Rebuilt tarball installation activates the package as a profile bundle.
@@ -50,4 +50,4 @@ dsh plugin --profile tui add @lk251066/dsh-tui
 - Repository: <https://github.com/lk251066/dsh-tui-pro>
 - Issues: <https://github.com/lk251066/dsh-tui-pro/issues>
 - npm package: <https://www.npmjs.com/package/@lk251066/dsh-tui>
-- Verified GitHub Release: <https://github.com/lk251066/dsh-tui-pro/releases/tag/v1.0.1>
+- Verified GitHub Release: <https://github.com/lk251066/dsh-tui-pro/releases/tag/v1.0.2>

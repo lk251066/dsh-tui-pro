@@ -28,9 +28,9 @@ The 2026-08-15 repair checks and 2026-08-16 release verification produced these 
 
 The source checks passed on the reviewed commit, and the final integration checks used the anonymous public registry rather than a workspace link or local tarball.
 
-## Unreleased sidebar regression
+## Version 1.0.2 sidebar verification
 
-The current sidebar work uses `HeadlessTerminal` snapshots because pi-tui emits incremental ANSI updates rather than a complete screen on every render. The regression covers an unchanged queued message after a durable transcript append, transcript growth beyond the viewport, a resize from 32 to 24 rows, and queue drain to zero.
+The `1.0.2` sidebar uses `HeadlessTerminal` snapshots because pi-tui emits incremental ANSI updates rather than a complete screen on every render. The regression covers an unchanged queued message after a durable transcript append, transcript growth beyond the viewport, a resize from 32 to 24 rows, and queue drain to zero.
 
 Run the focused evidence with:
 
@@ -40,7 +40,7 @@ pnpm exec vitest run packages/dsh-tui/tests/split-layout.spec.ts packages/dsh-tu
 
 This focused result does not replace the source, artifact, clean-profile, or real-PTY checks required for a new release.
 
-Current local evidence for the unreleased tree:
+Release evidence:
 
 | Check | Result |
 | --- | --- |
@@ -54,8 +54,6 @@ Current local evidence for the unreleased tree:
 | `why` and `--dump-config` | Passed; all required bundle rows resolve and memory remains absent |
 | Non-interactive launch | Passed module loading and reached only the required TTY error |
 | Current-tree real PTY | Passed from the packed plugin in an empty WSL profile; the replayed 140x32 screen contains Workspace, Sessions, Status, Queue, Perm, and Plan |
-
-Do not publish the current tarball as `1.0.1`; that version already identifies the reviewed public release.
 
 ## Source checks
 

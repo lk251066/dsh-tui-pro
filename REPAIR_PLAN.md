@@ -6,13 +6,13 @@ This document is the source of truth for making `@lk251066/dsh-tui` independentl
 
 Ship one package: `@lk251066/dsh-tui`. Its package manifest already defines `dsh.bundle.patch`, so the repository will not create or publish a separate `@lk251066/dsh-tui-bundle` compatibility package.
 
-All five phases are complete for `1.0.1`. The existing `v1.0.0` tag and repository-root tarball remain invalid release inputs. The published npm package, annotated `v1.0.1` tag, checksummed GitHub Release, and merged commit are aligned, and the registry package passes a real-PTY flow against public `@deepseek-ai/dsh@0.1.0-rc.6`.
+All five phases are complete for `1.0.2`. The existing `v1.0.0` tag and repository-root tarball remain invalid release inputs. The published npm package, annotated `v1.0.2` tag, checksummed GitHub Release, and reviewed commit are aligned, and the registry package passes a real-PTY flow against public `@deepseek-ai/dsh@0.1.0-rc.6`.
 
-## Current unreleased work
+## Version 1.0.2 sidebar release
 
-The working tree adds a persistent workspace sidebar. The implementation bottom-aligns the sidebar with the transcript so long conversations do not scroll it out of the terminal viewport, and detached session title, activity, and running-state changes refresh without a switch. Headless-terminal coverage checks queue retention after unrelated durable messages, long transcript growth, terminal height reduction, and queue drain.
+Version `1.0.2` adds a persistent workspace sidebar. The implementation bottom-aligns the sidebar with the transcript so long conversations do not scroll it out of the terminal viewport, and detached session title, activity, and running-state changes refresh without a switch. Headless-terminal coverage checks queue retention after unrelated durable messages, long transcript growth, terminal height reduction, and queue drain.
 
-This work is locally implemented but is not part of `1.0.1` and has not been submitted as a new GitHub or npm release. The current tree passes type checking, all 440 tests, lint with warnings only, build, artifact packing, clean-profile public-host loading, and a real-PTY run from the packed plugin. The replayed terminal screen contains the persistent Workspace, Sessions, Status, Queue, Perm, and Plan rows. The package version must advance beyond the already published `1.0.1` before a new release.
+The release passes type checking, all 440 tests, lint with warnings only, build, artifact packing, clean-profile public-host loading, and a real-PTY run from the packed plugin. The replayed terminal screen contains the persistent Workspace, Sessions, Status, Queue, Perm, and Plan rows.
 
 ## Resolved defects
 
@@ -33,6 +33,8 @@ This work is locally implemented but is not part of `1.0.1` and has not been sub
 1. [Pull request #1](https://github.com/lk251066/dsh-tui-pro/pull/1) was merged as commit [`e521522`](https://github.com/lk251066/dsh-tui-pro/commit/e521522cf969a916193cd646fa204d156b9facc8).
 2. [`@lk251066/dsh-tui@1.0.1`](https://www.npmjs.com/package/@lk251066/dsh-tui/v/1.0.1) is public and installable from the anonymous npm registry.
 3. The annotated [`v1.0.1` tag and GitHub Release](https://github.com/lk251066/dsh-tui-pro/releases/tag/v1.0.1) identify the merged commit and provide the npm tarball plus its SHA-256 file.
+4. [`@lk251066/dsh-tui@1.0.2`](https://www.npmjs.com/package/@lk251066/dsh-tui/v/1.0.2) adds the persistent workspace sidebar and fixed status display.
+5. The annotated [`v1.0.2` tag and GitHub Release](https://github.com/lk251066/dsh-tui-pro/releases/tag/v1.0.2) identify the reviewed release commit and provide the npm tarball plus its SHA-256 file.
 
 ## Phase 1: Restore a valid source tree
 
