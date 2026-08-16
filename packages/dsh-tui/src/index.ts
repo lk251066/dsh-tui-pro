@@ -6,7 +6,9 @@
  */
 
 import { randomUUID } from 'node:crypto'
+import { stat } from 'node:fs/promises'
 import { createRequire } from 'node:module'
+import { resolve } from 'node:path'
 import {
   CombinedAutocompleteProvider,
   Container,
@@ -98,9 +100,9 @@ import {
   HeaderComponent,
 } from './components/transcript.ts'
 import { FramedEditorComponent } from './components/framed-editor.ts'
+import { WorkbenchShellComponent } from './components/workbench-shell.ts'
 import { NoticeSlotComponent, type NoticeKind } from './components/notice-slot.ts'
 import { WorkingLineComponent } from './components/working-line.ts'
-import { logoFullWidth, logoSingleWordWidth, SHIMMER_INTERVAL_MS, SHIMMER_WIDTH } from './components/logo.ts'
 import { contextPressureLevel } from './chat/context-pressure.ts'
 import {
   compactTargetLabel,
@@ -131,14 +133,16 @@ import {
 } from './chat/skill-invocation.ts'
 import { ReferenceAutocompleteProvider } from './chat/autocomplete.ts'
 import {
-  BANNER_REVEAL_INTERVAL_MS,
-  BANNER_REVEAL_STEPS,
   formatCwd,
   gitBranch,
   HintEditor,
 } from './chat/helpers.ts'
 import { createSessionChannel, type SessionChannel } from './chat/session-channel.ts'
-import { createAssistantController } from './chat/assistant.ts'
+import {
+  ASSISTANT_SESSION_ID,
+  createAssistantController,
+  setupAssistant,
+} from './chat/assistant.ts'
 import { createSessionLayout, type SessionLayoutController } from './chat/session-layout.ts'
 import { MEMORY_UNAVAILABLE_LINES, memoryRows, optionalMemory } from './chat/memories.ts'
 import { fleetLines } from './chat/fleet.ts'
@@ -418,6 +422,9 @@ function createTuiChatInternal(
   const ui = new TUI(runtime.terminal, resolved.showHardwareCursor)
   const todoContainer = new Container()
   const questionContainer = new Container()
+  const mainHeader = new Container()
+  const auxiliary = new Container()
+  const inputArea = new Container()
   const inputTemplate = parseTuiPromptTemplate(displayInlineText(resolved.theme.inputPrompt))
   /**
    * Read one prompt value for a render. A render that races the final teardown
@@ -456,12 +463,14 @@ function createTuiChatInternal(
   // Optional: skills mount conditionally, so read the global service store
   // rather than declaring an injection that would make the TUI require them.
   const skills = ctx.get('skills')
-  const cwd = agent.session.header.cwd ?? process.cwd()
-  const fileSearch = new WorkspaceFileSearch(cwd, {
+  const initialCwd = agent.session.header.cwd ?? process.cwd()
+  const activeCwd = (): string => agent.session.header.cwd ?? initialCwd
+  const fileSearchConfig = {
     maxResults: resolved.fileSearchMaxResults,
     maxEntries: resolved.fileSearchMaxEntries,
     excludedDirectories: resolved.fileSearchExcludedDirectories,
-  })
+  }
+  let fileSearch = new WorkspaceFileSearch(initialCwd, fileSearchConfig)
   const skillAbort = new AbortController()
   const liveErrors = new Set<string>()
   const commandControllers = new Set<AbortController>()
@@ -481,39 +490,30 @@ function createTuiChatInternal(
   let goalBar!: GoalBarController
   let queueDock!: QueueDockController
   let sessionLayout: SessionLayoutController | undefined
+  let workbench: WorkbenchShellComponent | undefined
   const now = (): number => runtime.now?.() ?? Date.now()
   const agentStatus = (): AgentStatus => agent.status
   const isDisposed = (): boolean =>
     disposed || construction.failed || ctx.fiber.state >= FIBER_FAILED
 
-  // A configured subtitle renders as a banner line; when absent, the banner has
-  // no subtitle. The banner itself sweeps in on start (see startBannerReveal).
   let sessionTitle = foldSessionTitle(agent.session.events)?.title
   let formattedCwd = displayText(runtime.formatCwd?.(agent.session.header.cwd) ?? formatCwd(agent.session.header.cwd))
-  /**
-   * Condensed identity segments for a session that already carries
-   * conversation (Claude Code's CondensedLogo convention): the five-row
-   * startup banner yields to one `dsh DEEPSEEK HARNESS v… · model cwd —
-   * title` row, read per render so the header collapses the moment the first
-   * user message lands. A history-less session gets the full banner instead.
-   */
-  const condensedHeaderInfo = (): CondensedHeaderInfo | undefined => {
-    const started = agent.session.events.some(event => event.type === 'user/message')
-    if (!started) return undefined
-    return {
-      version: TUI_VERSION,
-      model: target.current === undefined ? '' : compactTargetLabel(target.current),
-      cwd: formattedCwd,
-      title: sessionTitle,
-    }
-  }
+  /** Compact workbench identity read per render for session and model changes. */
+  const condensedHeaderInfo = (): CondensedHeaderInfo => ({
+    version: TUI_VERSION,
+    model: target.current === undefined ? '' : compactTargetLabel(target.current),
+    cwd: formattedCwd,
+    title: sessionTitle ?? (agent.session.events.some(event => event.type === 'user/message')
+      ? undefined
+      : config.welcome),
+  })
   const header = new HeaderComponent(
     () => sessionTitle ?? config.welcome,
     palette,
     resolved.theme.color && resolved.theme.truecolor,
     condensedHeaderInfo,
   )
-  let branch = runtime.gitBranch?.(cwd) ?? gitBranch(cwd)
+  let branch = runtime.gitBranch?.(initialCwd) ?? gitBranch(initialCwd)
   const promptValues: TuiPromptValueHandle[] = [
     ctx.tuiPrompt.register('cwd', palette.bold(palette.accent(formattedCwd))),
     ctx.tuiPrompt.register('git/worktree', branch === undefined ? undefined : palette.dim(` (${displayText(branch)})`)),
@@ -602,7 +602,7 @@ function createTuiChatInternal(
     const stats = statsStrip(insights)
     statsValue.set(stats === undefined ? undefined : palette.dim(`  ${stats}`))
     sessionLayout?.updateStatus({
-      cwd: displayText(agent.session.header.cwd ?? cwd),
+      cwd: displayText(activeCwd()),
       branch: branch === undefined ? undefined : displayText(branch),
       status: agent.status,
       model: displayText(target.current === undefined ? 'model unset' : compactTargetLabel(target.current)),
@@ -655,22 +655,19 @@ function createTuiChatInternal(
     parseTuiPromptTemplate(displayInlineText(resolved.theme.rightPrompt)),
     valueName => safePromptValue(valueName),
   )
-  ui.addChild(header)
-  ui.addChild(new Spacer(1))
-  ui.addChild(todoContainer)
+  mainHeader.addChild(header)
+  mainHeader.addChild(new Spacer(1))
+  auxiliary.addChild(todoContainer)
   // Docks (goal bar, steering queue) mount into this slot in order once their
   // controllers exist; an empty container renders nothing.
   const docks = new Container()
-  ui.addChild(docks)
-  ui.addChild(compactionStatusLine)
-  ui.addChild(questionContainer)
-  // Claude Code chrome: the working status line sits directly above the
-  // rounded input box, and the prompt's context row moves below it.
+  auxiliary.addChild(docks)
+  auxiliary.addChild(compactionStatusLine)
+  // The right sidebar owns live working status; the main input area stays quiet.
   const workingLine = new WorkingLineComponent(palette, now)
-  ui.addChild(workingLine)
   const editorFrame = new FramedEditorComponent(editor)
-  ui.addChild(editorFrame)
-  ui.addChild(promptContext)
+  inputArea.addChild(editorFrame)
+  inputArea.addChild(promptContext)
   ui.setFocus(editor)
   const updateTerminalTitle = (): void => {
     runtime.terminal.setTitle(displayText(
@@ -707,7 +704,7 @@ function createTuiChatInternal(
   // pollute the durable transcript. Errors, warnings, and anything the user
   // may need to scroll back to keep going through appendNotice.
   const noticeSlot = new NoticeSlotComponent(palette, requestRender)
-  ui.addChild(noticeSlot)
+  inputArea.addChild(noticeSlot)
   const showTransientNotice = (message: string, kind: NoticeKind = 'info'): void => {
     noticeSlot.show(message, kind)
   }
@@ -948,11 +945,9 @@ function createTuiChatInternal(
         appendNotice,
         agent: slotAgent,
         questionMaxHeight: () => {
-          const width = runtime.terminal.columns
-          const editorRows = editor.render(width).length
           return Math.max(1, Math.min(
             resolved.questionDialogMaxHeight,
-            runtime.terminal.rows - editorRows,
+            runtime.terminal.rows,
           ))
         },
         pendingCallLabel: callId => slotChannel.toolCardLabel(callId),
@@ -968,7 +963,7 @@ function createTuiChatInternal(
 
   // The registry mounts its initial slot before returning. That first mount
   // uses the chat directly; once the registry exists, startup replaces it
-  // synchronously with the persistent split layout before the terminal starts.
+  // synchronously with the persistent workbench before the terminal starts.
   /** Wire one slot's components into the shared chrome and start its listeners. */
   const mountSlot = (slot: TuiSessionSlot): void => {
     // Publish the mounted slot before attach: listener callbacks and repaint
@@ -977,13 +972,7 @@ function createTuiChatInternal(
     channel = slot.channel
     goalBar = slot.goalBar
     queueDock = slot.queueDock
-    if (sessionLayout === undefined) {
-      ui.children.splice(1, 0, slot.channel.chat)
-    } else {
-      sessionLayout.splitLayout.setLeftPane(sessionLayout.sidebar)
-      sessionLayout.splitLayout.setRightPane(slot.channel.chat)
-      ui.children.splice(1, 0, sessionLayout.splitLayout)
-    }
+    workbench?.setTranscript(slot.channel.chat)
     todoContainer.addChild(slot.channel.todo)
     docks.addChild(slot.goalBar.component)
     docks.addChild(slot.queueDock.component)
@@ -993,9 +982,6 @@ function createTuiChatInternal(
   /** Unwire one slot's components and stop its session listeners (switch-away). */
   const unmountSlot = (slot: TuiSessionSlot): void => {
     slot.channel.detach()
-    const mounted = sessionLayout?.splitLayout ?? slot.channel.chat
-    const mountedIndex = ui.children.indexOf(mounted)
-    if (mountedIndex >= 0) ui.children.splice(mountedIndex, 1)
     todoContainer.clear()
     docks.clear()
   }
@@ -1040,13 +1026,17 @@ function createTuiChatInternal(
       // its transcript from the log so events it missed render now.
       next.channel.rebuildTranscript(false)
       void ctx.sessions.flush(previous.agent.session).catch(() => {})
-      const nextCwd = next.agent.session.header.cwd ?? cwd
+      const nextCwd = next.agent.session.header.cwd ?? initialCwd
+      fileSearch.dispose()
+      fileSearch = new WorkspaceFileSearch(nextCwd, fileSearchConfig)
       formattedCwd = displayText(runtime.formatCwd?.(nextCwd) ?? formatCwd(nextCwd))
       branch = runtime.gitBranch?.(nextCwd) ?? gitBranch(nextCwd)
       sessionTitle = foldSessionTitle(next.agent.session.events)?.title
       header.invalidate()
       updateTerminalTitle()
       setStatus(next.agent.status)
+      refreshCommandAutocomplete()
+      if (skills !== undefined) refreshSkillCommands(skills)
       updatePromptValues()
       next.goalBar.refresh()
       refreshQueueDock()
@@ -1059,6 +1049,8 @@ function createTuiChatInternal(
     },
   }, agent)
 
+  if (agent.session.id === ASSISTANT_SESSION_ID) setupAssistant(agent.ctx, registry)
+
   /** One `/sessions` row over a live slot: title (or id), status, turns. */
   const describeSlot = (slot: TuiSessionSlot): SessionChoice => {
     const idText = displayText(String(slot.sessionId))
@@ -1068,7 +1060,7 @@ function createTuiChatInternal(
     return {
       sessionId: slot.sessionId,
       label: title ?? shortId,
-      detail: `${title === undefined ? '' : `${shortId} · `}${slot.agent.status}${turns > 0 ? ` · ${turns} turn${turns === 1 ? '' : 's'}` : ''}`,
+      detail: `${title === undefined ? '' : `${shortId} · `}${displayText(slot.agent.session.header.cwd ?? '(unknown)')} · ${slot.agent.status}${turns > 0 ? ` · ${turns} turn${turns === 1 ? '' : 's'}` : ''}`,
       active: registry.isActive(slot),
     }
   }
@@ -1109,18 +1101,26 @@ function createTuiChatInternal(
    * created agent runs the same loop and routing as the initial one; its slot
    * mounts under the shared chrome immediately.
    */
-  const newSession = (): void => {
+  const newSession = (rawPath = ''): void => {
     const freshId = SessionId(`session-${randomUUID()}`)
-    void ctx.agents.create({ sessionId: freshId, seed: [], meta: { cwd } }).then(
-      (handle) => {
-        if (disposed) return
-        registry.adopt(handle.agent)
-        showTransientNotice(`New session ${displayText(String(freshId))}.`)
-      },
-      (error: unknown) => {
-        if (!disposed) appendNotice(`New session failed: ${errorChain(error)}`, 'error')
-      },
-    )
+    const requested = rawPath.trim()
+    const projectCwd = resolve(activeCwd(), requested === '' ? '.' : requested)
+    const create = async (): Promise<void> => {
+      if (disposed) return
+      const handle = await ctx.agents.create({ sessionId: freshId, seed: [], meta: { cwd: projectCwd } })
+      if (disposed) return
+      registry.adopt(handle.agent)
+      showTransientNotice(`New session ${displayText(String(freshId))} in ${displayText(projectCwd)}.`)
+    }
+    const operation = requested === ''
+      ? create()
+      : stat(projectCwd).then(async (status) => {
+          if (!status.isDirectory()) throw new Error(`not a directory: ${projectCwd}`)
+          await create()
+        })
+    void operation.catch((error: unknown) => {
+      if (!disposed) appendNotice(`New session failed: ${errorChain(error)}`, 'error')
+    })
   }
 
   // The personal assistant (`/assistant`): a fixed-id session with its own
@@ -1130,19 +1130,19 @@ function createTuiChatInternal(
   const assistant = createAssistantController({
     ctx,
     registry,
-    cwd,
+    cwd: initialCwd,
     appendNotice,
     showTransientNotice,
     isDisposed,
   })
 
-  // Every live session shares one navigator and swaps only the right-hand chat
-  // beneath the common chrome.
+  // Every live session shares one workbench and swaps only its transcript.
   const persistentLayout = createSessionLayout({
     palette,
     registry,
     terminalRows: () => runtime.terminal.rows,
-    sidebarWidth: resolved.sidebarWidth,
+    now,
+    activity: workingLine,
     focusEditor: () => {
       ui.setFocus(editor)
       requestRender()
@@ -1150,13 +1150,19 @@ function createTuiChatInternal(
     requestRender,
   })
   sessionLayout = persistentLayout
-  persistentLayout.splitLayout.setLeftPane(persistentLayout.sidebar)
-  persistentLayout.splitLayout.setRightPane(registry.active().channel.chat)
-  const initialChatIndex = ui.children.indexOf(registry.active().channel.chat)
-  if (initialChatIndex < 0) throw new Error('ui-tui: initial session chat is not mounted')
-  ui.children.splice(initialChatIndex, 1, persistentLayout.splitLayout)
+  workbench = new WorkbenchShellComponent(palette, {
+    terminalRows: () => runtime.terminal.rows,
+    preferredSidebarWidth: resolved.sidebarWidth,
+    header: mainHeader,
+    auxiliary,
+    dialog: questionContainer,
+    input: inputArea,
+    sidebar: persistentLayout.sidebar,
+    transcript: registry.active().channel.chat,
+  })
+  ui.addChild(workbench)
   persistentLayout.refresh()
-  editor.onNavigateLeft = () => {
+  editor.onNavigatePane = () => {
     persistentLayout.refresh()
     ui.setFocus(persistentLayout.sessionList)
     requestRender()
@@ -1214,11 +1220,14 @@ function createTuiChatInternal(
     // plain idle carries the queue hint or the example-commands hint.
     applyEditorHint()
     channel.setStatus(status)
-    if (status === 'running') {
-      // Show the working line immediately; the spinner tick takes over on its
-      // first frame (≤100 ms later).
-      workingLine.update(true, channel.runningStartedAt(), undefined, undefined)
-    }
+    // Publish the active session's state immediately. This also clears a
+    // running line retained by the previously mounted session.
+    workingLine.update(
+      status === 'running',
+      status === 'running' ? channel.runningStartedAt() : undefined,
+      undefined,
+      undefined,
+    )
     requestRender()
   }
 
@@ -1266,11 +1275,9 @@ function createTuiChatInternal(
     requestRender,
     isDisposed,
     questionMaxHeight: () => {
-      const width = runtime.terminal.columns
-      const editorRows = editor.render(width).length
       return Math.max(1, Math.min(
         resolved.questionDialogMaxHeight,
-        runtime.terminal.rows - editorRows,
+        runtime.terminal.rows,
       ))
     },
   })
@@ -1614,7 +1621,7 @@ function createTuiChatInternal(
       [
         ['Session', displayText(agent.session.id)],
         ['Title', displayText(sessionTitle ?? 'untitled')],
-        ['Directory', displayText(cwd)],
+        ['Directory', displayText(activeCwd())],
         ['Model', `${model} ${palette.dim(`(effort ${effort}; reasoning blocks ${showReasoning ? 'shown' : 'hidden'})`)}`],
       ],
       [
@@ -1691,7 +1698,7 @@ function createTuiChatInternal(
 
   const refreshSkillCommands = (service: SkillRegistry): void => {
     const scan = ++skillCommandScan
-    service.snapshot({ cwd, signal: skillAbort.signal }).then(
+    service.snapshot({ cwd: activeCwd(), signal: skillAbort.signal }).then(
       (snapshot) => {
         if (disposed || scan !== skillCommandScan || !snapshot.complete) return
         const invocable = snapshot.skills.filter(skill => skill.invocation.userInvocable)
@@ -1866,7 +1873,7 @@ function createTuiChatInternal(
           appendNotice('Writing to a chosen path is not supported yet; the export lands in the workspace root.', 'warning')
         }
         try {
-          const path = writeExport(cwd, agent.session)
+          const path = writeExport(activeCwd(), agent.session)
           showTransientNotice(`Exported to ${path}`)
         } catch (error) {
           appendNotice(`Export failed: ${errorChain(error)}`, 'error')
@@ -1895,8 +1902,9 @@ function createTuiChatInternal(
     })
     commandCtx.commands.register({
       name: 'new',
-      description: 'Start a fresh session in this terminal and switch to it',
-      handler: () => { newSession(); return { kind: 'success' } },
+      description: 'Start a fresh session in this or another project and switch to it',
+      input: { hint: '[project path]' },
+      handler: ({ rawInput }) => { newSession(rawInput); return { kind: 'success' } },
     })
     commandCtx.commands.register({
       name: 'assistant',
@@ -1988,7 +1996,7 @@ function createTuiChatInternal(
       appendNotice('Skills are not available in this session.', 'warning')
       return
     }
-    const lookup = { cwd, signal: skillAbort.signal }
+    const lookup = { cwd: activeCwd(), signal: skillAbort.signal }
     const reportFailure = (error: unknown): void => {
       if (disposed) return
       appendNotice(`Skill "${name}" failed to load: ${errorChain(error)}`, 'error')
@@ -2166,6 +2174,17 @@ function createTuiChatInternal(
   const removeInputListener = ui.addInputListener((data) => {
     if (overlayManager.hasActiveOverlay()) return undefined
 
+    if (matchesKey(data, Key.pageUp)) {
+      workbench?.scrollPageUp(runtime.terminal.columns)
+      requestRender()
+      return { consume: true }
+    }
+    if (matchesKey(data, Key.pageDown)) {
+      workbench?.scrollPageDown(runtime.terminal.columns)
+      requestRender()
+      return { consume: true }
+    }
+
     // Empty-input ↑ with queued messages pops the newest queued message back
     // into the editor (Claude Code's queue editing): the next submit REPLACES
     // it through the same armed-edit path the /queue sheet uses. With nothing
@@ -2252,77 +2271,11 @@ function createTuiChatInternal(
     disposeBackgroundSessionEvents()
     disposeBackgroundStatusChanges()
     for (const value of promptValues) value.dispose()
-    stopBannerReveal()
-    stopLogoShimmer()
     // Every live slot tears down together: session listeners, per-slot
     // approvals/docks, agent-scoped model routing and prompt sections.
     registry.disposeAll()
     disposeSchemeListener()
     modelController.detach()
-  }
-
-  // Sweep reveal of the whole banner: the header wipes in left-to-right over
-  // ~BANNER_REVEAL_STEPS frames (started after `ui.start()` succeeds).
-  // Configured subtitles skip it so deployments (and snapshot fixtures) stay
-  // frame-deterministic.
-  let revealTimer: ReturnType<typeof setInterval> | undefined
-  const stopBannerReveal = (): void => {
-    if (revealTimer === undefined) return
-    clearInterval(revealTimer)
-    revealTimer = undefined
-    header.setRevealWidth(undefined)
-  }
-  const startBannerReveal = (): void => {
-    // A configured welcome skips every startup animation (sweep AND shimmer)
-    // so deployments and snapshot fixtures stay frame-deterministic. A session
-    // resuming with history shows the condensed header, which animates nothing.
-    if (config.welcome !== undefined || condensedHeaderInfo() !== undefined) return
-    const total = Math.max(1, runtime.terminal.columns)
-    const step = Math.max(1, Math.ceil(total / BANNER_REVEAL_STEPS))
-    let shown = 0
-    header.setRevealWidth(0)
-    revealTimer = setInterval(() => {
-      shown += step
-      if (shown >= total) {
-        stopBannerReveal()
-        startLogoShimmer()
-      } else {
-        header.setRevealWidth(shown)
-      }
-      requestRender()
-    }, BANNER_REVEAL_INTERVAL_MS)
-  }
-
-  // After the banner settles, a bright shimmer window sweeps across the
-  // block-letter logo twice, then the gradient holds. Self-clearing; the
-  // dispose path and terminal shrinking (logo no longer fits) both stop it.
-  let shimmerTimer: ReturnType<typeof setInterval> | undefined
-  const stopLogoShimmer = (): void => {
-    if (shimmerTimer === undefined) return
-    clearInterval(shimmerTimer)
-    shimmerTimer = undefined
-    header.setShimmerOffset(undefined)
-  }
-  const startLogoShimmer = (): void => {
-    stopLogoShimmer()
-    if (!resolved.theme.color || runtime.terminal.columns < logoSingleWordWidth()) return
-    let offset = -SHIMMER_WIDTH
-    const end = logoFullWidth() + SHIMMER_WIDTH
-    const step = 2
-    let frames = 0
-    const maxFrames = Math.ceil((2 * (end + SHIMMER_WIDTH)) / step)
-    shimmerTimer = setInterval(() => {
-      frames += 1
-      if (frames > maxFrames || disposed) {
-        stopLogoShimmer()
-        requestRender()
-        return
-      }
-      header.setShimmerOffset(offset)
-      offset += step
-      if (offset > end) offset = -SHIMMER_WIDTH
-      requestRender()
-    }, SHIMMER_INTERVAL_MS)
   }
 
   rebuildTranscript(true)
@@ -2358,7 +2311,6 @@ function createTuiChatInternal(
   tuiServiceFiber = ctx.inject([], (serviceCtx) => {
     new TuiExtensionServiceImpl(serviceCtx, agent, overlayManager)
   })
-  startBannerReveal()
 
   // A launcher-seeded first turn (`dsh migrate`/`dsh upgrade`):
   // invoke the named skill exactly as a typed `/skill:<name>` would, once the

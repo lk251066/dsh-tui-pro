@@ -8,6 +8,12 @@ Ship one package: `@lk251066/dsh-tui`. Its package manifest already defines `dsh
 
 All five phases are complete for `1.0.2`. The existing `v1.0.0` tag and repository-root tarball remain invalid release inputs. The published npm package, annotated `v1.0.2` tag, checksummed GitHub Release, and reviewed commit are aligned, and the registry package passes a real-PTY flow against public `@deepseek-ai/dsh@0.1.0-rc.6`.
 
+## Unreleased terminal workbench
+
+The current source uses one full-screen workbench. The transcript, tools, dialogs, and editor occupy the left main area; Workspace, Sessions, Current, and Status stay on the right. The editor stays fixed at the bottom, Page Up and Page Down scroll only the transcript, and inline dialogs temporarily replace the editor. The public `1.0.2` artifact retains its released layout until a later version is published.
+
+The same source also renders user messages before their assistant responses, starts the bundle in the personal assistant session, and supports `/new` plus `/new <path>` across project directories. Type checking, all 441 tests, lint with 38 warnings and no errors, build, artifact packing, Windows and Linux empty-profile loading, and the Linux real PTY flow pass for the `1.1.0` artifact. The source is ready to commit and push; npm publication and a GitHub Release remain separate actions.
+
 ## Version 1.0.2 sidebar release
 
 Version `1.0.2` adds a persistent workspace sidebar. The implementation bottom-aligns the sidebar with the transcript so long conversations do not scroll it out of the terminal viewport, and detached session title, activity, and running-state changes refresh without a switch. Headless-terminal coverage checks queue retention after unrelated durable messages, long transcript growth, terminal height reduction, and queue drain.
@@ -59,7 +65,7 @@ Status: complete in the reviewed `1.0.1` commit. The regression suite includes t
 
 - Establish the shared layout controller before any initial slot can mount or any callback can reach it.
 - Make the active session channel an explicit input to prompt metric refresh; no render path may infer a channel that has not been published.
-- Preserve one mount and unmount owner for the shared split layout so session switches cannot attach duplicate children or detach another slot's UI.
+- Preserve one mount and unmount owner for the shared root layout so session switches cannot attach duplicate children or detach another slot's UI.
 - Verify focus ownership for the editor and session list across left, right, escape, up, down, and enter input.
 - Update unit tests for initial mount, session switching, repeated mount/unmount, disposal, and prompt refresh before a channel is active.
 

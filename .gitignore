@@ -6,7 +6,9 @@ dist/
 coverage/
 .vite/
 *.tsbuildinfo
-.tarballs/current/
-.tarballs-new/
+/.tarballs/
+/.tarballs-new/
+/.patches/
+/*.tgz
 .test-results/
 packages/*.tgz

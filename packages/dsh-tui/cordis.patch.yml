@@ -4,8 +4,8 @@
 - id: agent-loop
   config:
     agents:
-      - id: main
-        sessionId: main
+      - id: assistant
+        sessionId: assistant
         provider: deepseek-official
         model: deepseek-v4-pro
         cwd: !!js process.cwd()
@@ -54,7 +54,7 @@
     - id: tui
       name: '@lk251066/dsh-tui'
       config:
-        sessionId: main
+        sessionId: assistant
         showReasoning: true
         maxToolOutputLines: 6
 

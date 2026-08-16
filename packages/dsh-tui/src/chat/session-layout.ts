@@ -1,12 +1,11 @@
 /**
- * Persistent two-column session layout: a live-session navigator on the left
- * and the active session's chat on the right.
+ * Persistent session sidebar state shared by every live session.
  * @module @deepseek-ai/dsh-tui/chat/session-layout
  */
 
 import { SessionId } from '@deepseek-ai/dsh-session'
+import type { Component } from '@earendil-works/pi-tui'
 import { SessionListComponent, type SessionListItem } from '../components/session-list.ts'
-import { SplitLayoutComponent } from '../components/split-layout.ts'
 import type { Palette } from '../components/theme.ts'
 import { displayText } from '../components/text.ts'
 import {
@@ -16,10 +15,8 @@ import {
 import type { ChannelRegistry } from './channel-registry.ts'
 import type { TuiSessionSlot } from '../index.ts'
 
-/** Controls the persistent live-session sidebar and split container. */
+/** Controls the persistent live-session sidebar. */
 export interface SessionLayoutController {
-  /** The two-column container mounted for every active session. */
-  readonly splitLayout: SplitLayoutComponent
   /** The focusable live-session navigator. */
   readonly sessionList: SessionListComponent
   /** The full persistent workspace, session, and status pane. */
@@ -36,8 +33,10 @@ export interface SessionLayoutDeps {
   readonly registry: ChannelRegistry<TuiSessionSlot>
   /** Current terminal height, used to bound the sidebar rows. */
   terminalRows(): number
-  /** Preferred sidebar width in terminal columns. */
-  sidebarWidth: number
+  /** Current wall-clock time used for session activity labels. */
+  now(): number
+  /** Live active-agent activity rendered in the sidebar. */
+  activity: Component
   /** Return keyboard focus to the chat editor. */
   focusEditor(): void
   /** Request a full repaint after navigation or registry changes. */
@@ -57,13 +56,19 @@ function titleOf(slot: TuiSessionSlot): string {
   return displayText(String(slot.sessionId))
 }
 
+function workspaceOf(slot: TuiSessionSlot): string {
+  const cwd = displayText(slot.agent.session.header.cwd ?? '(unknown)')
+  const normalized = cwd.replaceAll('\\', '/').replace(/\/$/u, '')
+  return normalized.slice(normalized.lastIndexOf('/') + 1) || cwd
+}
+
 function itemOf(slot: TuiSessionSlot, activeId: SessionId, now: number): SessionListItem {
   const events = slot.agent.session.events
   const lastActivityAt = events.at(-1)?.time ?? slot.agent.session.header.createdAt
   return {
     id: String(slot.sessionId),
     title: titleOf(slot),
-    cwd: displayText(slot.agent.session.header.cwd ?? '(unknown)'),
+    workspace: workspaceOf(slot),
     status: slot.agent.status,
     lastActivityAgo: formatAge(Math.max(0, now - lastActivityAt)),
     isActive: slot.sessionId === activeId,
@@ -71,27 +76,29 @@ function itemOf(slot: TuiSessionSlot, activeId: SessionId, now: number): Session
 }
 
 /**
- * Create the persistent two-column session layout.
+ * Create the persistent live-session sidebar.
  * @param deps - Registry, focus, terminal-size, and repaint collaborators.
  * @returns The layout controller mounted by the TUI host.
  */
 export function createSessionLayout(deps: SessionLayoutDeps): SessionLayoutController {
-  const splitLayout = new SplitLayoutComponent(deps.palette, { preferredLeftWidth: deps.sidebarWidth })
   const sessionList = new SessionListComponent(deps.palette, {
     // Workspace and status sections retain their rows; sessions consume the
     // remaining viewport and scroll around the selected item.
-    maxRows: () => Math.max(4, deps.terminalRows() - 22),
+    maxRows: () => Math.max(3, deps.terminalRows() - 19),
     onActivate: (sessionId) => {
       deps.registry.switchTo(SessionId(sessionId))
     },
     onExit: deps.focusEditor,
     onChange: deps.requestRender,
   })
-  const sidebar = new WorkspaceSidebarComponent(deps.palette, sessionList)
+  const sidebar = new WorkspaceSidebarComponent(deps.palette, sessionList, {
+    terminalRows: deps.terminalRows,
+    activity: deps.activity,
+  })
 
   const refresh = (): void => {
     const activeId = deps.registry.activeId()
-    const now = Date.now()
+    const now = deps.now()
     const items = deps.registry.slots()
       .slice()
       .sort((left, right) =>
@@ -101,7 +108,6 @@ export function createSessionLayout(deps: SessionLayoutDeps): SessionLayoutContr
   }
 
   return {
-    splitLayout,
     sessionList,
     sidebar,
     refresh,

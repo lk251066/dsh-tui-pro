@@ -28,32 +28,30 @@ The 2026-08-15 repair checks and 2026-08-16 release verification produced these 
 
 The source checks passed on the reviewed commit, and the final integration checks used the anonymous public registry rather than a workspace link or local tarball.
 
-## Version 1.0.2 sidebar verification
+## Unreleased workbench verification
 
-The `1.0.2` sidebar uses `HeadlessTerminal` snapshots because pi-tui emits incremental ANSI updates rather than a complete screen on every render. The regression covers an unchanged queued message after a durable transcript append, transcript growth beyond the viewport, a resize from 32 to 24 rows, and queue drain to zero.
+The workbench uses `HeadlessTerminal` snapshots because pi-tui emits incremental ANSI updates rather than a complete screen on every render. Coverage includes right-sidebar placement, fixed-bottom input, Page Up and Page Down transcript scrolling, session switching without remounting the workbench, queue retention after unrelated durable messages, and inline-dialog replacement of the editor.
 
 Run the focused evidence with:
 
 ```bash
-pnpm exec vitest run packages/dsh-tui/tests/split-layout.spec.ts packages/dsh-tui/tests/workspace-sidebar.spec.ts packages/dsh-tui/tests/session-switch.spec.ts packages/dsh-tui/tests/tui.spec.ts -t "badges queued steering|keeps queue state visible|refreshes detached session|SplitLayoutComponent|WorkspaceSidebarComponent"
+pnpm exec vitest run packages/dsh-tui/tests/workbench-shell.spec.ts packages/dsh-tui/tests/workspace-sidebar.spec.ts packages/dsh-tui/tests/session-switch.spec.ts packages/dsh-tui/tests/tui.spec.ts -t "badges queued steering|keeps queue state visible|refreshes detached session|WorkbenchShellComponent|WorkspaceSidebarComponent"
 ```
 
 This focused result does not replace the source, artifact, clean-profile, or real-PTY checks required for a new release.
 
-Release evidence:
+Current source evidence:
 
 | Check | Result |
 | --- | --- |
 | `pnpm run typecheck` | Passed |
-| `pnpm run test` | Passed: 35 files, 440 tests |
-| `pnpm run lint` | Passed with 40 warnings and no errors |
+| `pnpm run test` | Passed: 35 files, 441 tests |
+| `pnpm run lint` | Passed with 38 warnings and no errors |
 | `pnpm run build` | Passed |
-| `git diff --check` | Passed |
-| `pnpm run pack:artifact` | Passed: 298 files, including the sidebar JavaScript and declarations |
-| Clean-profile tarball installation | Passed against public `@deepseek-ai/dsh@0.1.0-rc.6` |
-| `why` and `--dump-config` | Passed; all required bundle rows resolve and memory remains absent |
-| Non-interactive launch | Passed module loading and reached only the required TTY error |
-| Current-tree real PTY | Passed from the packed plugin in an empty WSL profile; the replayed 140x32 screen contains Workspace, Sessions, Status, Queue, Perm, and Plan |
+| `pnpm run pack:artifact` | Passed: 298 files, including workbench JavaScript and declarations |
+| `scripts/verify-packed-artifact.sh` | Passed |
+| Empty-profile public host | Passed against public `@deepseek-ai/dsh@0.1.0-rc.6`; `why` and `--dump-config` resolve the packed plugin and every bundle row |
+| Current-tree real PTY | Passed from the `1.1.0` packed plugin in a clean WSL host; the replay verifies the compact title, right sidebar, left editor, session switching, and shutdown |
 
 ## Source checks
 
@@ -115,16 +113,18 @@ Exercise these behaviors through the installed profile:
 2. Workspace shows the active project, full directory, and Git branch without terminal control characters.
 3. Status shows agent state, model, context percentage, input/output tokens, cache hit rate, queue depth, permission preset, and plan mode before and after a model turn.
 4. A second session appears in Sessions and switches without duplicate UI children; detached title and running-state changes update without first switching to that session.
-5. Left focuses session navigation; up and down change selection; enter switches; right and escape return to the editor.
+5. F6 focuses session navigation; up and down change selection; enter switches; left, F6, and escape return to the editor.
 6. Queue depth changes through steering insert, claim, discard, and unrelated durable transcript updates while the queue row remains visible.
 7. Approval, question, tool output, reasoning visibility, and compaction status render correctly.
 8. Resume and active-session title updates appear in the relevant UI.
-9. `sidebarWidth: 36` moves the separator to column 36 on a wide terminal; 64, 26, and 10-column terminals keep the sidebar present and leave at least one chat column.
+9. `sidebarWidth: 36` changes the right-sidebar width on a wide terminal; terminals below 65 columns hide the sidebar and retain the full-width main area.
 10. At 32, 24, and 10 rows, inspect which rows remain in the viewport; use at least 24 rows when verifying that Workspace, Sessions, Status, and the editor are visible together.
-11. Repeated session switching preserves each transcript and input state.
-12. Normal exit disposes listeners and processes without an unhandled rejection.
+11. Page Up and Page Down move only the transcript; the header, editor, dialog area, and sidebar remain fixed, and each session preserves its own scroll position.
+12. `/new` uses the active workspace, `/new <path>` validates and uses another project, and file and skill completion follow the active session's workspace.
+13. Repeated session switching preserves each transcript and input state.
+14. Normal exit disposes listeners and processes without an unhandled rejection.
 
-`scripts/verify-interactive-pty.sh` drives the packed plugin through a Python standard-library PTY. The driver answers terminal capability queries, runs the optional-memory diagnostic, creates and switches sessions, opens the session picker, and performs double-Ctrl+C shutdown. The captured ANSI stream is replayed through `@xterm/headless`, and the check requires Workspace, Sessions, Status, Queue, Perm, and Plan in the resulting 140x32 screen. The repository snapshot suite remains the keyless evidence for stable rendered output.
+`scripts/verify-interactive-pty.sh` drives the packed plugin through a Python standard-library PTY. The driver answers terminal capability queries, runs the optional-memory diagnostic, creates and switches sessions, opens the session picker, and performs double-Ctrl+C shutdown. The captured ANSI stream is replayed through `@xterm/headless`; the check requires the compact title, every sidebar section, Workspace to the right of the separator, and the editor to the left. The repository snapshot suite remains the keyless evidence for stable rendered output.
 
 ## Registry verification
 

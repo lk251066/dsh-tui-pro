@@ -415,6 +415,10 @@ export function createSessionChannel(deps: SessionChannelDeps): SessionChannel {
       mdTheme,
     )
     streaming.markStart(startedAt)
+  }
+
+  const attachStreaming = (): void => {
+    if (streaming === undefined || chat.children.includes(streaming)) return
     registerAssistantStep(streaming)
     chat.addChild(streaming)
   }
@@ -492,6 +496,7 @@ export function createSessionChannel(deps: SessionChannelDeps): SessionChannel {
         if (chunk.type === 'text-delta' || chunk.type === 'reasoning-delta') streamedChars += chunk.text.length
         lastOutputAt = event.time
         if (options.renderChunks && streaming !== undefined) {
+          attachStreaming()
           streaming.update(event.data.chunk)
           // The first streamed text/reasoning may make this step the turn's
           // hidden-mode header owner (or a continuation with a visible body).
@@ -507,6 +512,7 @@ export function createSessionChannel(deps: SessionChannelDeps): SessionChannel {
           startAssistantStep(event.data, event.time)
         }
         if (streaming !== undefined) {
+          attachStreaming()
           streaming.settle(event.data.message.content, event.time)
           applyTurnFolding(streaming.position.turn)
         }

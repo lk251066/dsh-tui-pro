@@ -20,7 +20,7 @@ cd dsh-tui-pro
 pnpm install
 ```
 
-Development dependencies under `@deepseek-ai/dsh-*` currently resolve from `.tarballs/`. These tarballs are development inputs only and do not prove that the published plugin can resolve its runtime dependencies.
+Development dependencies under `@deepseek-ai/dsh-*` resolve from the public npm rc.6 package line recorded in `pnpm-lock.yaml`. Local tarball directories are not part of the build or release process.
 
 ## Local development
 

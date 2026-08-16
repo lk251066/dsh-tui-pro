@@ -314,11 +314,9 @@ export interface CondensedHeaderInfo {
  * DEEPSEEK word alone; narrow falls back to one compact text line. The sweep
  * reveal and the shimmer pass clip/overlay whichever shape is on screen.
  *
- * A session that already carries conversation (Claude Code's CondensedLogo
- * convention) drops the five-row logo for one identity row instead — accent
- * `dsh`, the product name, the version, the model, the cwd, and the session
- * title — static, with no reveal or shimmer animation. Narrow terminals keep
- * the plain text fallback either way.
+ * When condensed identity data is supplied, the component renders the compact
+ * workbench identity at every terminal width. The block logo remains available
+ * to direct consumers that omit condensed identity data.
  */
 export class HeaderComponent implements Component {
   /** Columns of the banner currently revealed; `undefined` renders it whole. */
@@ -358,7 +356,7 @@ export class HeaderComponent implements Component {
   render(width: number): string[] {
     const usable = Math.max(1, width - 2)
     const condensed = this.condensedInfo()
-    if (condensed !== undefined && usable >= logoSingleWordWidth()) return this.renderCondensed(usable, condensed)
+    if (condensed !== undefined) return this.renderCondensed(usable, condensed)
     if (usable >= logoFullWidth()) return this.renderLogo(usable, fullLogoRows())
     if (usable >= logoSingleWordWidth()) return this.renderLogo(usable, singleWordLogoRows())
     return this.renderText(usable)

@@ -1,0 +1,240 @@
+/**
+ * Fixed terminal workbench with an internally scrolling transcript and persistent sidebar.
+ * @module @lk251066/dsh-tui/components/workbench-shell
+ */
+
+import {
+  truncateToWidth,
+  visibleWidth,
+  type Component,
+} from '@earendil-works/pi-tui'
+import type { Palette } from './theme.ts'
+
+const DEFAULT_SIDEBAR_WIDTH = 32
+const MIN_SIDEBAR_WIDTH = 24
+const MIN_MAIN_WIDTH = 40
+
+/** User-configurable sizing for the persistent workspace sidebar. */
+export interface WorkbenchShellOptions {
+  /** Current terminal height in rows. */
+  readonly terminalRows: () => number
+  /** Preferred sidebar width before the main-column minimum forces it smaller. */
+  readonly preferredSidebarWidth?: number
+  /** Header rendered above the active transcript. */
+  readonly header: Component
+  /** Session-owned rows rendered above the fixed input or dialog area. */
+  readonly auxiliary: Component
+  /** Active inline dialog; when non-empty it replaces the editor area. */
+  readonly dialog: Component
+  /** Working state, editor, prompt context, and notices fixed to the bottom. */
+  readonly input: Component
+  /** Persistent workspace, session, and status sidebar. */
+  readonly sidebar: Component
+  /** Initially active session transcript. */
+  readonly transcript: Component
+}
+
+interface ColumnWidths {
+  readonly main: number
+  readonly sidebar: number
+}
+
+interface MainSections {
+  readonly header: string[]
+  readonly auxiliary: string[]
+  readonly input: string[]
+  readonly transcriptRows: number
+}
+
+interface TranscriptViewportState {
+  offset: number
+  unseenRows: number
+  lastLineCount: number
+  lastWidth: number
+}
+
+function padToWidth(value: string, width: number): string {
+  const clipped = truncateToWidth(value, Math.max(0, width), '')
+  return clipped + ' '.repeat(Math.max(0, width - visibleWidth(clipped)))
+}
+
+/** Owns the full terminal viewport and swaps only the active transcript. */
+export class WorkbenchShellComponent implements Component {
+  private transcript: Component
+  private readonly preferredSidebarWidth: number
+  private readonly transcriptStates = new Map<Component, TranscriptViewportState>()
+
+  constructor(
+    private readonly palette: Palette,
+    private readonly options: WorkbenchShellOptions,
+  ) {
+    this.transcript = options.transcript
+    this.preferredSidebarWidth = Math.max(
+      MIN_SIDEBAR_WIDTH,
+      Math.floor(options.preferredSidebarWidth ?? DEFAULT_SIDEBAR_WIDTH),
+    )
+  }
+
+  /** Replace the active session transcript without remounting shared chrome. */
+  setTranscript(component: Component): void {
+    this.transcript = component
+  }
+
+  /** Width available to the main work area for the supplied terminal width. */
+  mainWidth(width: number): number {
+    return this.columnWidths(width).main
+  }
+
+  /** Rows consumed by the fixed input area at the current main width. */
+  inputRows(width: number): number {
+    return this.options.input.render(this.mainWidth(width)).length
+  }
+
+  /** Move the active transcript one viewport toward older rows. */
+  scrollPageUp(width: number): void {
+    const metrics = this.transcriptMetrics(width)
+    metrics.state.offset = Math.min(
+      metrics.maxOffset,
+      metrics.state.offset + Math.max(1, metrics.rows),
+    )
+  }
+
+  /** Move the active transcript one viewport toward its live tail. */
+  scrollPageDown(width: number): void {
+    const metrics = this.transcriptMetrics(width)
+    metrics.state.offset = Math.max(0, metrics.state.offset - Math.max(1, metrics.rows))
+    if (metrics.state.offset === 0) metrics.state.unseenRows = 0
+  }
+
+  /** Resume following the active transcript's newest row. */
+  scrollToBottom(): void {
+    const state = this.transcriptState()
+    state.offset = 0
+    state.unseenRows = 0
+  }
+
+  /** Whether the active transcript follows newly appended rows. */
+  isFollowingTranscript(): boolean {
+    return this.transcriptState().offset === 0
+  }
+
+  invalidate(): void {
+    this.options.header.invalidate()
+    this.transcript.invalidate()
+    this.options.auxiliary.invalidate()
+    this.options.dialog.invalidate()
+    this.options.input.invalidate()
+    this.options.sidebar.invalidate()
+  }
+
+  render(width: number): string[] {
+    const height = Math.max(0, Math.floor(this.options.terminalRows()))
+    if (width <= 0 || height === 0) return []
+
+    const widths = this.columnWidths(width)
+    if (widths.sidebar === 0) {
+      return this.renderMain(widths.main, height).map(line => padToWidth(line, widths.main))
+    }
+
+    const mainLines = this.renderMain(widths.main, height)
+    const rawSidebarLines = this.options.sidebar.render(widths.sidebar)
+    const sidebarLines = rawSidebarLines.slice(0, height)
+    const separator = this.palette.dim('│')
+
+    return Array.from({ length: height }, (_, index) => {
+      const main = padToWidth(mainLines[index] ?? '', widths.main)
+      const sidebar = padToWidth(sidebarLines[index] ?? '', widths.sidebar)
+      return `${main}${separator}${sidebar}`
+    })
+  }
+
+  private columnWidths(width: number): ColumnWidths {
+    if (width < MIN_MAIN_WIDTH + MIN_SIDEBAR_WIDTH + 1) return { main: width, sidebar: 0 }
+    const sidebar = Math.min(
+      this.preferredSidebarWidth,
+      width - MIN_MAIN_WIDTH - 1,
+    )
+    return { main: Math.max(1, width - sidebar - 1), sidebar }
+  }
+
+  private renderMain(width: number, height: number): string[] {
+    const sections = this.mainSections(width, height)
+    const transcript = this.renderTranscript(width, sections.transcriptRows)
+
+    return [
+      ...sections.header,
+      ...transcript,
+      ...sections.auxiliary,
+      ...sections.input,
+    ]
+  }
+
+  private mainSections(width: number, height: number): MainSections {
+    const dialog = this.options.dialog.render(width)
+    const rawInput = dialog.length > 0 ? dialog : this.options.input.render(width)
+    const input = rawInput.slice(Math.max(0, rawInput.length - height))
+    const afterInput = Math.max(0, height - input.length)
+    const rawAuxiliary = this.options.auxiliary.render(width)
+    const auxiliary = rawAuxiliary.slice(Math.max(0, rawAuxiliary.length - afterInput))
+    const afterBottom = Math.max(0, height - input.length - auxiliary.length)
+    const rawHeader = [...this.options.header.render(width), '']
+    const header = rawHeader.slice(0, afterBottom)
+    return {
+      header,
+      auxiliary,
+      input,
+      transcriptRows: Math.max(0, height - header.length - auxiliary.length - input.length),
+    }
+  }
+
+  private transcriptState(): TranscriptViewportState {
+    let state = this.transcriptStates.get(this.transcript)
+    if (state === undefined) {
+      state = { offset: 0, unseenRows: 0, lastLineCount: 0, lastWidth: 0 }
+      this.transcriptStates.set(this.transcript, state)
+    }
+    return state
+  }
+
+  private transcriptMetrics(width: number): {
+    readonly state: TranscriptViewportState
+    readonly rows: number
+    readonly maxOffset: number
+  } {
+    const height = Math.max(0, Math.floor(this.options.terminalRows()))
+    const rows = this.mainSections(this.mainWidth(width), height).transcriptRows
+    const transcriptWidth = this.mainWidth(width)
+    const lineCount = this.transcript.render(transcriptWidth).length
+    const state = this.transcriptState()
+    state.lastLineCount = lineCount
+    state.lastWidth = transcriptWidth
+    return {
+      state,
+      rows,
+      maxOffset: Math.max(0, lineCount - rows),
+    }
+  }
+
+  private renderTranscript(width: number, rows: number): string[] {
+    if (rows <= 0) return []
+    const lines = this.transcript.render(width)
+    const state = this.transcriptState()
+    if (state.lastWidth === width && state.offset > 0 && lines.length > state.lastLineCount) {
+      const appended = lines.length - state.lastLineCount
+      state.offset += appended
+      state.unseenRows += appended
+    }
+    const maxOffset = Math.max(0, lines.length - rows)
+    state.offset = Math.min(state.offset, maxOffset)
+    if (state.offset === 0) state.unseenRows = 0
+    const start = Math.max(0, lines.length - rows - state.offset)
+    const visible = lines.slice(start, start + rows)
+    while (visible.length < rows) visible.push('')
+    if (state.unseenRows > 0 && visible.length > 0) {
+      visible[visible.length - 1] = this.palette.dim(`↓ ${state.unseenRows} new`)
+    }
+    state.lastLineCount = lines.length
+    state.lastWidth = width
+    return visible
+  }
+}

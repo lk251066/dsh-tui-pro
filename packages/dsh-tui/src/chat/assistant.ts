@@ -17,6 +17,8 @@ import type { ChannelRegistry } from './channel-registry.ts'
 import { installAssistantTools } from './assistant-tools.ts'
 import { optionalMemory } from './memories.ts'
 
+const installedAssistantScopes = new WeakMap<Context, WeakSet<object>>()
+
 /** The assistant's fixed session id — stable across processes by design. */
 export const ASSISTANT_SESSION_ID = SessionId('assistant')
 
@@ -50,6 +52,10 @@ export const ASSISTANT_PERSONA_WITH_MEMORY = [
  * @param registry - the multi-session registry for session control tools.
  */
 export function setupAssistant(agentCtx: Context, registry: ChannelRegistry<TuiSessionSlot>): void {
+  const registries = installedAssistantScopes.get(agentCtx) ?? new WeakSet<object>()
+  if (registries.has(registry)) return
+  registries.add(registry)
+  installedAssistantScopes.set(agentCtx, registries)
   agentCtx.inject(['systemPrompt', 'tools'], (promptCtx: Context) => {
     const memory = optionalMemory(promptCtx)
     promptCtx.systemPrompt.section({

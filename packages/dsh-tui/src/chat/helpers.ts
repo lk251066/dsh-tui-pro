@@ -1,8 +1,8 @@
 /**
  * Zero-state helpers for the interactive chat channel: prompt-directory and
  * Git-branch formatting, transcript/tool-call derivations over the session log,
- * session-reference context cards, the placeholder editor, and banner-reveal
- * timing constants. None of these close over channel state.
+ * session-reference context cards, and the placeholder editor. None of these
+ * close over channel state.
  * @module @deepseek-ai/dsh-tui/chat/helpers
  */
 
@@ -28,12 +28,12 @@ export class HintEditor extends Editor {
   hint: string | undefined
   /** Prompt text rendered before the placeholder, matching the live prompt width. */
   hintPrefix = ''
-  /** Called before editor cursor movement when Left enters adjacent navigation. */
-  onNavigateLeft: (() => void) | undefined
+  /** Called when F6 transfers focus to the adjacent workbench pane. */
+  onNavigatePane: (() => void) | undefined
 
   override handleInput(data: string): void {
-    if (matchesKey(data, Key.left) && this.onNavigateLeft !== undefined) {
-      this.onNavigateLeft()
+    if (matchesKey(data, Key.f6) && this.onNavigatePane !== undefined) {
+      this.onNavigatePane()
       return
     }
     super.handleInput(data)
@@ -154,9 +154,3 @@ export function sessionReferenceCard(source: unknown): string[] | undefined {
   }
   return labels
 }
-
-/** Milliseconds between banner sweep-reveal frames (~60 fps). */
-export const BANNER_REVEAL_INTERVAL_MS = 15
-
-/** Number of sweep frames the banner reveal spreads the terminal width over. */
-export const BANNER_REVEAL_STEPS = 24

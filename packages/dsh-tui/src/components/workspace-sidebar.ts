@@ -31,6 +31,14 @@ export interface WorkspaceSidebarState {
   readonly plan: boolean
 }
 
+/** Fixed collaborators used to place live status within the terminal viewport. */
+export interface WorkspaceSidebarOptions {
+  /** Current terminal height in rows. */
+  readonly terminalRows: () => number
+  /** Live activity line shared with the active agent. */
+  readonly activity: Component
+}
+
 function padToWidth(value: string, width: number): string {
   const clipped = truncateToWidth(value, Math.max(0, width), '')
   return clipped + ' '.repeat(Math.max(0, width - visibleWidth(clipped)))
@@ -63,7 +71,7 @@ function contextValue(percent: number | undefined, palette: Palette): string {
   return `${paint('█'.repeat(filled))}${palette.dim('·'.repeat(5 - filled))} ${Math.round(clamped)}%`
 }
 
-/** Renders persistent project, session, and status sections in the left pane. */
+/** Renders persistent project, session, and status sections in the right sidebar. */
 export class WorkspaceSidebarComponent implements Component {
   private state: WorkspaceSidebarState = {
     cwd: '(unknown)',
@@ -82,6 +90,7 @@ export class WorkspaceSidebarComponent implements Component {
   constructor(
     private readonly palette: Palette,
     readonly sessionList: SessionListComponent,
+    private readonly options: WorkspaceSidebarOptions,
   ) {}
 
   /** Replace the active workspace and agent values for the next render. */
@@ -104,25 +113,37 @@ export class WorkspaceSidebarComponent implements Component {
     const cache = state.cacheHitRate === undefined ? palette.dim('unknown') : `${state.cacheHitRate}%`
     const permission = state.permission ?? palette.dim('unavailable')
 
-    return [
+    const workspaceLines = [
       ...sectionTitle('Workspace', width, palette),
-      padToWidth(` ${palette.bold(palette.accent(workspace))}`, width),
+      padToWidth(` ${palette.bold(palette.accent(workspace))}${state.branch === undefined ? '' : palette.dim(` · ${state.branch}`)}`, width),
       padToWidth(palette.dim(` ${cwd}`), width),
-      ...(state.branch === undefined
-        ? []
-        : [padToWidth(`${palette.dim(' branch  ')}${state.branch}`, width)]),
-      '',
-      ...this.sessionList.render(width),
-      '',
+    ]
+    const activity = this.options.activity.render(width)
+    const currentLines = [
+      ...sectionTitle('Current', width, palette),
+      ...(activity.length > 0
+        ? activity.map(line => padToWidth(` ${line}`, width))
+        : [padToWidth(` ${statusGlyph} ${statusLabel}`, width)]),
+    ]
+    const statusLines = [
       ...sectionTitle('Status', width, palette),
-      row('Agent', `${statusGlyph} ${statusLabel}`, width, palette),
       row('Model', state.model, width, palette),
       row('Context', contextValue(state.contextPercent, palette), width, palette),
       row('Tokens', tokenValue, width, palette),
-      row('Cache', cache, width, palette),
+      ...(state.cacheHitRate === undefined ? [] : [row('Cache', cache, width, palette)]),
       row('Queue', String(state.queued), width, palette),
       row('Perm', permission, width, palette),
       row('Plan', state.plan ? palette.accent('on') : palette.dim('off'), width, palette),
-    ].map(line => padToWidth(line, width))
+    ]
+    const topLines = [
+      ...workspaceLines,
+      '',
+      ...this.sessionList.render(width),
+    ]
+    const bottomLines = ['', ...currentLines, '', ...statusLines]
+    const height = Math.max(1, Math.floor(this.options.terminalRows()))
+    const filler = Math.max(0, height - topLines.length - bottomLines.length)
+    const combined = [...topLines, ...Array.from({ length: filler }, () => ''), ...bottomLines]
+    return combined.slice(Math.max(0, combined.length - height)).map(line => padToWidth(line, width))
   }
 }

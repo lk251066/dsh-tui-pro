@@ -1,3 +1,6 @@
+import { mkdir, mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import type { Terminal } from '@earendil-works/pi-tui'
 import { agentEvents, type Agent } from '@deepseek-ai/dsh-agent'
@@ -84,6 +87,7 @@ class RecordingTerminal implements Terminal {
 interface CreatedAgentRecord {
   agent: Agent
   followups: string[]
+  cwd: string | undefined
 }
 
 async function tick(): Promise<void> {
@@ -91,14 +95,14 @@ async function tick(): Promise<void> {
 }
 
 /** Compose the TUI plus a fake creation factory recording every `/new` agent. */
-async function switchHarness(): Promise<{
+async function switchHarness(cwd = '/workspace'): Promise<{
   harness: TuiHarness<RecordingTerminal, (code: number) => void>
   created: CreatedAgentRecord[]
 }> {
   const created: CreatedAgentRecord[] = []
   const terminal = new RecordingTerminal()
   const exit = vi.fn()
-  const harness = await createTuiTestHarness(terminal, exit, {})
+  const harness = await createTuiTestHarness(terminal, exit, { cwd })
   harness.ctx.agents.setFactory({
     async createAgent(_ownerCtx, options) {
       const session = harness.ctx.sessions.create(options.sessionId, { meta: options.meta })
@@ -123,7 +127,7 @@ async function switchHarness(): Promise<{
         whenIdle: () => Promise.resolve(),
       } as unknown as Agent
       harness.ctx.agents.register(agent)
-      created.push({ agent, followups })
+      created.push({ agent, followups, cwd: options.meta?.cwd })
       return { agent, dispose: async () => {} }
     },
     async resume() {
@@ -140,6 +144,37 @@ function submit(harness: TuiHarness<RecordingTerminal, (code: number) => void>, 
 }
 
 describe('multi-session switching (/new, /sessions)', () => {
+  it('/new rejects a requested path that is not a directory', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dsh-tui-project-'))
+    const missing = join(root, 'missing')
+    const { harness, created } = await switchHarness(root)
+    try {
+      submit(harness, `/new ${missing}`)
+      await tick()
+      expect(created).toEqual([])
+      expect(harness.terminal.output).toContain('New session failed:')
+    } finally {
+      await disposeTuiTestHarness(harness)
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it('/new <path> starts the session in the requested project directory', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dsh-tui-project-'))
+    const project = join(root, 'other project')
+    await mkdir(project)
+    const { harness, created } = await switchHarness(root)
+    try {
+      submit(harness, `/new ${project}`)
+      await tick()
+      expect(created).toHaveLength(1)
+      expect(created[0]?.cwd).toBe(project)
+    } finally {
+      await disposeTuiTestHarness(harness)
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   it('/new creates a second session, switches to it, and routes input there', async () => {
     const { harness, created } = await switchHarness()
     try {
@@ -273,6 +308,37 @@ describe('multi-session switching (/new, /sessions)', () => {
       agentEvents(harness.ctx, background!).emit('agent/status', { status: 'running' })
       await tick()
       expect(harness.terminal.output).toContain('● Background work')
+    } finally {
+      await disposeTuiTestHarness(harness)
+    }
+  })
+
+  it('clears the previous session activity when switching to an idle session', async () => {
+    const { harness, created } = await switchHarness()
+    try {
+      submit(harness, '/new')
+      await tick()
+      expect(created).toHaveLength(1)
+
+      submit(harness, '/sessions')
+      await tick()
+      harness.terminal.send('1')
+      await tick()
+
+      harness.agent.status = 'running'
+      harness.terminal.output = ''
+      agentEvents(harness.ctx, harness.agent).emit('agent/status', { status: 'running' })
+      await tick()
+      expect(harness.terminal.output).not.toContain('○ Idle')
+
+      harness.terminal.output = ''
+      submit(harness, '/sessions')
+      await tick()
+      harness.terminal.send('2')
+      await tick()
+
+      expect(harness.terminal.output).toContain('Idle')
+      expect(harness.terminal.output).not.toContain('Thinking')
     } finally {
       await disposeTuiTestHarness(harness)
     }

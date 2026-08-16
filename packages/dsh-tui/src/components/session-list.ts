@@ -1,5 +1,5 @@
 /**
- * Compact, focusable live-session navigator for the persistent left pane.
+ * Compact, focusable live-session navigator for the persistent sidebar.
  * @module @deepseek-ai/dsh-tui/components/session-list
  */
 
@@ -16,7 +16,7 @@ import type { Palette } from './theme.ts'
 export interface SessionListItem {
   readonly id: string
   readonly title: string
-  readonly cwd: string
+  readonly workspace: string
   readonly status: 'idle' | 'running'
   readonly lastActivityAgo: string
   readonly isActive: boolean
@@ -37,12 +37,6 @@ export interface SessionListOptions {
 function padToWidth(value: string, width: number): string {
   const clipped = truncateToWidth(value, Math.max(0, width), '')
   return clipped + ' '.repeat(Math.max(0, width - visibleWidth(clipped)))
-}
-
-function workspaceLabel(cwd: string): string {
-  const normalized = cwd.replaceAll('\\', '/').replace(/\/$/u, '')
-  const leaf = normalized.slice(normalized.lastIndexOf('/') + 1)
-  return leaf || cwd
 }
 
 /** Renders and navigates live sessions without owning registry state. */
@@ -103,7 +97,7 @@ export class SessionListComponent extends Container {
       if (selectedId !== undefined) this.options.onActivate?.(selectedId)
       return
     }
-    if (matchesKey(data, Key.right) || matchesKey(data, Key.escape)) {
+    if (matchesKey(data, Key.left) || matchesKey(data, Key.f6) || matchesKey(data, Key.escape)) {
       this.options.onExit?.()
     }
   }
@@ -119,7 +113,7 @@ export class SessionListComponent extends Container {
       return lines
     }
 
-    const visibleItems = Math.max(1, Math.floor((this.options.maxRows() - lines.length) / 2))
+    const visibleItems = Math.max(1, this.options.maxRows() - lines.length)
     const start = Math.max(0, Math.min(
       this.selectedIndex - Math.floor(visibleItems / 2),
       this.items.length - visibleItems,
@@ -134,19 +128,17 @@ export class SessionListComponent extends Container {
         ? this.palette.accent('●')
         : this.palette.dim('○')
       const active = item.isActive ? this.palette.bold('›') : ' '
-      const titleWidth = Math.max(1, width - 5)
-      const title = truncateToWidth(item.title, titleWidth, '…')
-      const titleLine = padToWidth(` ${active} ${marker} ${title}`, width)
-
-      const workspace = truncateToWidth(workspaceLabel(item.cwd), Math.max(1, width - 8), '…')
       const age = item.lastActivityAgo
-      const gap = ' '.repeat(Math.max(1, width - 3 - visibleWidth(workspace) - visibleWidth(age)))
-      const detailLine = padToWidth(this.palette.dim(`   ${workspace}${gap}${age}`), width)
+      const label = `${item.title} · ${item.workspace}`
+      const titleWidth = Math.max(1, width - 6 - visibleWidth(age))
+      const title = truncateToWidth(label, titleWidth, '…')
+      const gap = ' '.repeat(Math.max(1, width - 5 - visibleWidth(title) - visibleWidth(age)))
+      const titleLine = padToWidth(` ${active} ${marker} ${title}${gap}${this.palette.dim(age)}`, width)
 
       if (selected && this.focused) {
-        lines.push(this.palette.selected(titleLine), this.palette.selected(detailLine))
+        lines.push(this.palette.selected(titleLine))
       } else {
-        lines.push(titleLine, detailLine)
+        lines.push(titleLine)
       }
     }
 

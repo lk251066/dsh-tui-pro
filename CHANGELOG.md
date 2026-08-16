@@ -6,6 +6,26 @@ The `v1.0.0` tag is not an installable public release: no npm package was publis
 
 ## Unreleased
 
+### Changed
+
+- Replace the chat-adjacent left information pane with a full-screen workbench: transcript and input on the left, persistent Workspace, Sessions, Current, and Status sections on the right.
+- Keep the terminal frame fixed while Page Up and Page Down scroll the transcript inside the main area.
+- Use F6 to enter session navigation so ordinary cursor movement remains inside the editor.
+- Let active inline dialogs replace the editor area and restore the draft after the dialog closes.
+- Move model, context, token, cache, queue, permission, and plan values exclusively into the right Status section.
+- Start the bundled profile in the personal assistant session.
+- Let `/new` create a session in the active project and `/new <path>` create one in another project.
+
+### Fixed
+
+- Render each user message before the assistant output produced for that turn.
+- Rebuild file completion and skill discovery when the active session changes projects.
+
+### Removed
+
+- Remove the default block-logo reveal and shimmer animation from application startup.
+- Remove duplicated operational status from the prompt footer.
+
 ## [1.0.2] - 2026-08-16
 
 ### Added

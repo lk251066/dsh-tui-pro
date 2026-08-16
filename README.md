@@ -6,9 +6,11 @@ Community-maintained interactive terminal UI plugin for [DeepSeek Harness](https
 
 Version `1.0.2` is publicly available on [npm](https://www.npmjs.com/package/@lk251066/dsh-tui) and in the [GitHub Release](https://github.com/lk251066/dsh-tui-pro/releases/tag/v1.0.2). The npm package, `v1.0.2` tag, and checksummed Release identify the same reviewed source.
 
-Do not use the existing `v1.0.0` GitHub tag or repository-root `lk251066-dsh-tui-1.0.0.tgz`. They predate the repaired source and bundle metadata. Treat repository-local tarballs as verification inputs; install from npm or the `v1.0.2` Release.
+Do not use the existing `v1.0.0` GitHub tag; it predates the repaired source and bundle metadata. Install from npm or a verified GitHub Release.
 
 The source tree, published package, empty-profile installation, and real-PTY runtime pass against public `@deepseek-ai/dsh@0.1.0-rc.6`. Version `1.0.2` adds the persistent workspace sidebar and fixed operational status display. See [REPAIR_PLAN.md](REPAIR_PLAN.md) for the completed repair record and release evidence.
+
+The current source contains an unreleased full-screen workbench with chat and input on the left and a persistent Workspace, Sessions, Current, and Status sidebar on the right. Use a locally packed artifact to test this layout; npm still serves the released `1.0.2` implementation.
 
 ## Intended installation
 
@@ -23,14 +25,16 @@ The package itself owns the TUI plugin and its `cordis.patch.yml` profile layer.
 ## Intended features
 
 - Full-screen terminal interface
-- Persistent workspace, live-session, and active-agent status sidebar
+- Persistent right-side workspace, live-session, current-activity, and status sidebar
+- Internal transcript paging with fixed input and status areas
 - Multi-session navigation and session resume
-- Personal assistant session with optional memory integration
+- Personal assistant as the default session, with optional memory integration
+- `/new` for the active project and `/new <path>` for another project
 - Fleet monitoring across sessions
 - Syntax highlighting, diff rendering, and Markdown rendering
 - Approval dialogs with risk confirmation
 
-The `1.0.2` feature set passes 440 tests, artifact verification, empty-profile public-host loading, and a real-PTY screen replay that requires every sidebar section.
+The current source passes 441 tests, clean build and packing, empty-profile installation against public dsh rc.6, and a real Linux PTY flow. Version `1.1.0` is prepared in the source manifest but is not published.
 
 ## Development
 

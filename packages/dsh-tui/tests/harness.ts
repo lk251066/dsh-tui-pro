@@ -43,7 +43,7 @@ export interface TuiHarnessOptions {
   config?: Config
   /** Leave the session event log empty instead of seeding one turn and step. */
   omitInitialLifecycle?: boolean
-  /** Omit the harness's default `welcome`, exercising the banner sweep-reveal path. */
+  /** Omit the harness's default fresh-session welcome. */
   omitWelcome?: boolean
   tools?: Record<string, ToolDefinition>
   configureContext?: (ctx: Context) => Promise<void>

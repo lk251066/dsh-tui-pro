@@ -8,7 +8,6 @@ const items: SessionListItem[] = [
   {
     id: 'main',
     title: 'Main session',
-    cwd: 'D:\\work\\deepseekharness',
     status: 'running',
     lastActivityAgo: 'now',
     isActive: true,
@@ -16,7 +15,6 @@ const items: SessionListItem[] = [
   {
     id: 'debug',
     title: 'Debug session',
-    cwd: '/work/api',
     status: 'idle',
     lastActivityAgo: '8m',
     isActive: false,
@@ -39,16 +37,17 @@ describe('SessionListComponent', () => {
     expect(lines.every(line => visibleWidth(line) === 32)).toBe(true)
   })
 
-  it('renders two rows per session with workspace and activity metadata', () => {
+  it('renders one scan-friendly row per session with activity age', () => {
     const list = createList()
     list.setItems(items, 'main')
     const lines = list.render(40)
     const text = lines.join('\n')
 
     expect(text).toContain('Main session')
-    expect(text).toContain('deepseekharness')
     expect(text).toContain('Debug session')
-    expect(text).toContain('api')
+    expect(text).toContain('now')
+    expect(text).toContain('8m')
+    expect(lines).toHaveLength(4)
     expect(lines.every(line => visibleWidth(line) === 40)).toBe(true)
   })
 
@@ -80,14 +79,15 @@ describe('SessionListComponent', () => {
     expect(onActivate).toHaveBeenCalledWith('main')
   })
 
-  it('returns focus on Right or Escape', () => {
+  it('returns focus on Left, F6, or Escape', () => {
     const onExit = vi.fn()
     const list = createList({ onExit })
 
-    list.handleInput('\x1b[C')
+    list.handleInput('\x1b[D')
+    list.handleInput('\x1b[17~')
     list.handleInput('\x1b')
 
-    expect(onExit).toHaveBeenCalledTimes(2)
+    expect(onExit).toHaveBeenCalledTimes(3)
   })
 
   it('uses reverse video only for the focused selection', () => {
@@ -103,7 +103,6 @@ describe('SessionListComponent', () => {
     const many = Array.from({ length: 10 }, (_, index): SessionListItem => ({
       id: `session-${index}`,
       title: `Session ${index}`,
-      cwd: `/work/session-${index}`,
       status: 'idle',
       lastActivityAgo: `${index}m`,
       isActive: index === 8,

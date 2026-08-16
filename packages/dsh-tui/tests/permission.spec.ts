@@ -56,8 +56,8 @@ describe('Shift+Tab permission ring', () => {
       },
     })
     await new Promise(resolve => setTimeout(resolve, 25))
-    // The effective preset shows as a prompt chip.
-    expect(terminal.output).toContain('[workspace-write]')
+    // The effective preset stays visible in the Status section.
+    expect(terminal.output).toMatch(/Perm\s+workspace-write/)
 
     // Shift+Tab from workspace-write targets the danger preset: confirm first.
     // The acknowledgement is the Claude-Code-style warning: an error-toned
@@ -88,7 +88,7 @@ describe('Shift+Tab permission ring', () => {
     terminal.send('\r')
     await new Promise(resolve => setTimeout(resolve, 25))
     expect(applied).toEqual(['danger-full-access'])
-    expect(terminal.output).toContain('[danger-full-access]')
+    expect(terminal.output).toMatch(/Perm\s+danger-full-access/)
 
     // One more cycle wraps to the most restrictive preset without confirming.
     terminal.send('\x1b[Z')

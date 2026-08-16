@@ -94,8 +94,8 @@ const colorSchema = z.boolean().default(true)
 const truecolorSchema = z.boolean()
 // No default: an unset theme name means the adaptive default (`deepseek`).
 const themeNameSchema = z.string()
-const DEFAULT_LEFT_PROMPT = '${cwd}${git/worktree}${model}${permission}${plan}${token_meter/cache_hit_rate}${context}${stats}'
-const DEFAULT_RIGHT_PROMPT = '${queued}'
+const DEFAULT_LEFT_PROMPT = '${cwd}${git/worktree}${stats}'
+const DEFAULT_RIGHT_PROMPT = ''
 const DEFAULT_INPUT_PROMPT = '${symbol} ${indicator}'
 const DEFAULT_INPUT_PLACEHOLDER = 'press enter to steer and esc to cancel'
 const TuiThemeConfigSchema: z<TuiThemeConfig> = z.object({

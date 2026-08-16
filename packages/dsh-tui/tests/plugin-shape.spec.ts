@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
 import * as tui from '../src/index.ts'
@@ -25,5 +26,11 @@ describe('dsh-tui plugin export shape', () => {
     ])
     expect(unwrapped.Config).toBeDefined()
     expect(typeof unwrapped.apply).toBe('function')
+  })
+
+  it('boots the bundle into the personal assistant session', () => {
+    const patch = readFileSync(new URL('../cordis.patch.yml', import.meta.url), 'utf8')
+    expect(patch).toMatch(/- id: assistant\s+sessionId: assistant/u)
+    expect(patch).toMatch(/name: '@lk251066\/dsh-tui'\s+config:\s+sessionId: assistant/u)
   })
 })

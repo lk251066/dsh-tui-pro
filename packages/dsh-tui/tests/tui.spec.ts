@@ -155,12 +155,14 @@ function promptWidth(output: string): number {
   return visibleWidth(row.slice(row.indexOf('dsh'), row.indexOf('dsh') + 6))
 }
 
-async function setup(options: TuiHarnessOptions = {}) {
+async function setup(options: TuiHarnessOptions & { terminalRows?: number } = {}) {
+  const { terminalRows, ...harnessOptions } = options
   const terminal = new FakeTerminal()
+  if (terminalRows !== undefined) terminal.rows = terminalRows
   const exit = vi.fn()
   // Let the harness default cwd ('/workspace') stand for ordinary behavior
   // tests; the wider fake terminal leaves room for the persistent sidebar.
-  const result = await createTuiTestHarness(terminal, exit, options)
+  const result = await createTuiTestHarness(terminal, exit, harnessOptions)
   await tick()
   return result
 }
@@ -214,8 +216,8 @@ describe('TUI config', () => {
         color: true,
         truecolor: false,
         name: 'deepseek',
-        leftPrompt: '${cwd}${git/worktree}${model}${permission}${plan}${token_meter/cache_hit_rate}${context}${stats}',
-        rightPrompt: '${queued}',
+        leftPrompt: '${cwd}${git/worktree}${stats}',
+        rightPrompt: '',
         inputPrompt: '${symbol} ${indicator}',
         inputPlaceholder: 'press enter to steer and esc to cancel',
       },
@@ -263,8 +265,8 @@ describe('TUI config', () => {
         color: false,
         truecolor: true,
         name: 'deepseek',
-        leftPrompt: '${cwd}${git/worktree}${model}${permission}${plan}${token_meter/cache_hit_rate}${context}${stats}',
-        rightPrompt: '${queued}',
+        leftPrompt: '${cwd}${git/worktree}${stats}',
+        rightPrompt: '',
         inputPrompt: '${symbol} ${indicator}',
         inputPlaceholder: 'press enter to steer and esc to cancel',
       },
@@ -272,7 +274,6 @@ describe('TUI config', () => {
     })
   })
 })
-
 describe('goodbye message and /resume', () => {
   const header = (id: string, createdAt: number, cwd: string): SessionHeader =>
     ({ version: 0, id: SessionId(id), createdAt, cwd })
@@ -1554,19 +1555,86 @@ describe('goodbye message and /resume', () => {
     await dispose(result)
   })
 })
-
 describe('pi-tui chat lifecycle and transcript', () => {
+  it('renders a claimed user message before the assistant response for the same step', async () => {
+    const terminal = new HeadlessTerminal(140, 32)
+    const result = await createTuiTestHarness(terminal, vi.fn(), {
+      omitInitialLifecycle: true,
+      omitWelcome: true,
+    })
+    await terminal.waitForFrame(0)
+
+    const before = terminal.frames
+    result.session.append('turn/start', {
+      turn: 1,
+      trigger: { kind: 'message', source: { kind: 'user' } },
+    })
+    result.session.append('step/start', { turn: 1, step: 1 })
+    result.session.append('user/message', createUserMessage({
+      content: [{ type: 'text', text: 'chronology user' }],
+      source: { kind: 'user' },
+    }), { surfaceOp: 'append' })
+    result.session.append('assistant/message', {
+      turn: 1,
+      step: 1,
+      message: createMessage({
+        role: 'assistant',
+        content: [{ type: 'text', text: 'chronology assistant' }],
+        source: { kind: 'model', provider: 'mock', model: 'mock' },
+      }),
+    }, { surfaceOp: 'append' })
+    await terminal.waitForFrame(before)
+
+    const viewport = await terminal.snapshot()
+    expect(viewport.indexOf('chronology user')).toBeGreaterThan(-1)
+    expect(viewport.indexOf('chronology assistant')).toBeGreaterThan(-1)
+    expect(viewport.indexOf('chronology user')).toBeLessThan(viewport.indexOf('chronology assistant'))
+    await disposeTuiTestHarness(result)
+  })
+
+  it('pages through transcript history without moving the workbench chrome', async () => {
+    const terminal = new HeadlessTerminal(100, 24)
+    const result = await createTuiTestHarness(terminal, vi.fn(), {
+      omitInitialLifecycle: true,
+      omitWelcome: true,
+      beforeMount(session) {
+        for (let index = 0; index < 40; index += 1) appendUser(session, `history row ${String(index)}`)
+      },
+    })
+    await terminal.waitForFrame(0)
+
+    const latest = await terminal.snapshot()
+    expect(latest).toContain('history row 39')
+    expect(latest).not.toContain('history row 0')
+    expect(latest).toContain('Workspace')
+    expect(latest).toContain('dsh >')
+
+    const before = terminal.frames
+    terminal.send('\x1b[5~')
+    await terminal.waitForFrame(before)
+    const older = await terminal.snapshot()
+    expect(older).not.toContain('history row 39')
+    expect(older).toContain('Workspace')
+    expect(older).toContain('dsh >')
+
+    const beforeDown = terminal.frames
+    terminal.send('\x1b[6~')
+    await terminal.waitForFrame(beforeDown)
+    expect(await terminal.snapshot()).toContain('history row 39')
+    await disposeTuiTestHarness(result)
+  })
+
   it('moves focus into the persistent session list and back to the editor', async () => {
     const result = await setup({ config: { theme: { color: true } } })
     expect(result.terminal.output).not.toContain('\x1b[7m')
 
     const focusedOutput = result.terminal.output.length
-    result.terminal.send('\x1b[D')
+    result.terminal.send('\x1b[17~')
     await tick()
     expect(result.terminal.output.slice(focusedOutput)).toContain('\x1b[7m')
 
     const editorOutput = result.terminal.output.length
-    result.terminal.send('\x1b[C')
+    result.terminal.send('\x1b[D')
     await tick()
     expect(result.terminal.output.slice(editorOutput)).not.toContain('\x1b[7m')
 
@@ -1668,12 +1736,14 @@ describe('pi-tui chat lifecycle and transcript', () => {
     expect(result.terminal.output).not.toContain('restored thought')
     expect(result.terminal.output).toContain('restored answer')
     expect(result.terminal.output).toContain('write tests')
-    expect(result.terminal.output).toContain('/opt (tui-staging)  deepseek-v4-flash  ↑1.3k ↓42')
+    expect(result.terminal.output).toContain('/opt')
+    expect(result.terminal.output).toMatch(/Model\s+deepseek-v4-flash/)
+    expect(result.terminal.output).toMatch(/Tokens\s+↑1\.3k ↓42/)
     expect(result.terminal.output).toContain('dsh > ')
     expect(result.terminal.output).not.toContain('main-session  deepseek-v4-flash')
     // Context resolution is async (resolveModelContext); settle before reading.
     await tick()
-    expect(result.terminal.output).toContain('42% context')
+    expect(result.terminal.output).toContain('42%')
     expect(result.terminal.output).not.toContain('tools:collapsed')
     // Narrow terminals clip the right-hand context/tools segment first; the
     // model-led left segment stays.
@@ -2020,7 +2090,7 @@ describe('pi-tui chat lifecycle and transcript', () => {
     const result = await setup({ status: 'running', cwd: '/workspace' })
     // Running with nothing queued: the badge is absent and the editor keeps its hint.
     expect(result.terminal.output).toContain('press enter to steer and esc to cancel')
-    expect(result.terminal.output).not.toContain('queued')
+    expect(result.terminal.output).not.toMatch(/Queue\s+[1-9]/)
 
     result.terminal.output = ''
     result.terminal.send('x')
@@ -2060,35 +2130,35 @@ describe('pi-tui chat lifecycle and transcript', () => {
       source: { kind: 'user' },
     }), 'queued') })
     await tick()
-    expect(result.terminal.output).not.toContain('queued')
+    expect(result.terminal.output).not.toMatch(/Queue\s+[1-9]/)
 
     // Two steering messages queue while the turn runs.
     submitSteering('first')
     result.terminal.output = ''
     submitSteering('second')
     await tick()
-    expect(result.terminal.output).toContain('2 queued')
+    expect(result.terminal.output).toMatch(/Queue\s+2/)
 
     // Draining one submitted message decrements the badge.
     result.terminal.output = ''
     drainSteering('first')
     await tick()
-    expect(result.terminal.output).toContain('1 queued')
-    expect(result.terminal.output).not.toContain('2 queued')
+    expect(result.terminal.output).toMatch(/Queue\s+1/)
+    expect(result.terminal.output).not.toMatch(/Queue\s+2/)
 
     // Draining the last queued message returns the plain hint.
     result.terminal.output = ''
     drainSteering('second')
     await tick()
     expect(result.terminal.output).toContain('press enter to steer and esc to cancel')
-    expect(result.terminal.output).not.toContain('queued')
+    expect(result.terminal.output).toMatch(/Queue\s+0/)
 
     // A drain with no matching queued entry is ignored rather than underflowing.
     result.terminal.output = ''
     drainSteering('continuation')
     submitSteering('after')
     await tick()
-    expect(result.terminal.output).toContain('1 queued')
+    expect(result.terminal.output).toMatch(/Queue\s+1/)
 
     // A durable message has no inbox identity and therefore cannot consume a
     // pending slot by itself.
@@ -2116,7 +2186,7 @@ describe('pi-tui chat lifecycle and transcript', () => {
     submitSteering('third')
     submitSteering('fourth')
     await tick()
-    expect(result.terminal.output).toContain('2 queued')
+    expect(result.terminal.output).toMatch(/Queue\s+2/)
     const discarded = result.agent.steeredIds.splice(0).map(id => freezeMessage({
       id,
       role: 'user' as const,
@@ -2149,7 +2219,7 @@ describe('pi-tui chat lifecycle and transcript', () => {
         }), 'steering'),
     })
     await tick()
-    expect(result.terminal.output).toContain('2 queued')
+    expect(result.terminal.output).toMatch(/Queue\s+2/)
     result.terminal.output = ''
     for (const message of discarded) {
       agentEvents(result.ctx, result.agent).emit('agent/inbox/discarded', {
@@ -2157,7 +2227,7 @@ describe('pi-tui chat lifecycle and transcript', () => {
       })
     }
     await tick()
-    expect(result.terminal.output).not.toContain('queued')
+    expect(result.terminal.output).toMatch(/Queue\s+0/)
 
     await dispose(result)
   })
@@ -2731,6 +2801,7 @@ describe('pi-tui chat lifecycle and transcript', () => {
   it('renders the ANSI palette and every markdown/content style', async () => {
     const result = await setup({
       cwd: '/workspace',
+      terminalRows: 80,
       config: { theme: { color: true } },
       beforeMount(session) {
         session.append('user/message', createUserMessage({
@@ -2811,7 +2882,8 @@ describe('pi-tui chat lifecycle and transcript', () => {
       },
     })
     await vi.waitFor(() => {
-      expect(homeResult.terminal.output).toContain('~ (tui-staging)  deepseek-v4-flash  ↑25k ↓10k')
+      expect(homeResult.terminal.output).toContain('~')
+      expect(homeResult.terminal.output).toMatch(/Tokens\s+↑25k ↓10k/)
     })
     await dispose(homeResult)
 
@@ -2868,7 +2940,7 @@ describe('pi-tui chat lifecycle and transcript', () => {
         appendAssistant(session, [{ type: 'text', text: 'cold' }], { inputTokens: 10, outputTokens: 5 })
       },
     })
-    expect(result.terminal.output).toContain('cache 0%')
+    expect(result.terminal.output).toMatch(/Cache\s+0%/)
 
     result.terminal.output = ''
     // Warm call lands live on the next step (same-step usage replaces rather
@@ -2881,8 +2953,8 @@ describe('pi-tui chat lifecycle and transcript', () => {
       cacheWriteTokens: 5,
     }, { turn: 1, step: 2 })
     await tick()
-    expect(result.terminal.output).toContain('cache 60%')
-    expect(result.terminal.output).not.toContain('cache 0%')
+    expect(result.terminal.output).toMatch(/Cache\s+60%/)
+    expect(result.terminal.output).not.toMatch(/Cache\s+0%/)
     await dispose(result)
   })
 
@@ -3108,7 +3180,7 @@ describe('pi-tui chat lifecycle and transcript', () => {
   })
 
   it('sends, steers, handles commands, global keys, and disposed-agent input', async () => {
-    const result = await setup()
+    const result = await setup({ terminalRows: 80 })
 
     result.terminal.send('do the work')
     result.terminal.send('\r')
@@ -3940,7 +4012,7 @@ describe('pi-tui chat lifecycle and transcript', () => {
     agentEvents(result.ctx, result.agent).emit('agent/status', { status: 'idle' })
     await tick()
     expect(result.terminal.output).toContain('b1 max  ')
-    expect(result.terminal.output).toContain('25% context')
+    expect(result.terminal.output).toContain('25%')
     expect(result.terminal.output).not.toContain('tools:collapsed')
     result.terminal.send('/status')
     result.terminal.send('\r')
@@ -4005,7 +4077,8 @@ describe('pi-tui chat lifecycle and transcript', () => {
         })
       },
     })
-    expect(resumedDefault.terminal.output).toContain('default  ↑0 ↓0')
+    expect(resumedDefault.terminal.output).toMatch(/Model\s+default/)
+    expect(resumedDefault.terminal.output).toMatch(/Tokens\s+↑0 ↓0/)
     await dispose(resumedDefault)
 
     const unset = await setup({
@@ -4094,13 +4167,13 @@ describe('pi-tui chat lifecycle and transcript', () => {
     // A topology commit that still lacks the route parks the wait again.
     result.ctx.emit('llm/adapters-updated')
     await tick()
-    expect(result.terminal.output).not.toContain('% context')
+    expect(result.terminal.output).toMatch(/Context\s+.*unknown/)
     expect(result.terminal.output).not.toContain('Could not resolve model context')
 
     adapters.add('openai-codex')
     result.ctx.emit('llm/adapters-updated')
     await vi.waitFor(() => {
-      expect(result.terminal.output).toContain('% context')
+      expect(result.terminal.output).toMatch(/Context\s+.*50%/)
     })
     expect(result.terminal.output).not.toContain('Could not resolve model context')
 
@@ -4400,7 +4473,6 @@ describe('pi-tui chat lifecycle and transcript', () => {
     await dispose(result)
   })
 })
-
 describe('skill slash command', () => {
   const withSkills = async (ctx: Context): Promise<void> => {
     ctx.provide('tools', { get() { return undefined } } as never)
@@ -4959,7 +5031,7 @@ describe('tool cards and surface replay', () => {
   }
 
   it('uses terminal, diff, generic, fallback, and collapsed tool presentations', async () => {
-    const result = await setup({ tools, config: { maxToolOutputLines: 4 } })
+    const result = await setup({ tools, config: { maxToolOutputLines: 4 }, terminalRows: 100 })
     const calls = [
       ['c1', 'bash', '{"command":"printf hello"}'],
       ['c2', 'signal', '{}'],
@@ -5748,7 +5820,7 @@ describe('TUI user-interaction dialogs', () => {
     await dispose(result)
   })
 
-  it('renders a pending question between the transcript and editor', async () => {
+  it('replaces the editor with a pending question and restores the draft afterward', async () => {
     const result = await setup({
       config: { questionDialogWidth: 40, questionDialogMaxHeight: 10 },
     })
@@ -5768,9 +5840,11 @@ describe('TUI user-interaction dialogs', () => {
     const questionIndex = render.indexOf('Pick one')
     const editorIndex = render.indexOf('draft input')
     expect(questionIndex).toBeGreaterThanOrEqual(0)
-    expect(editorIndex).toBeGreaterThan(questionIndex)
+    expect(editorIndex).toBe(-1)
     result.terminal.send('\x03')
     await rejected
+    await tick()
+    expect(result.terminal.output).toContain('draft input')
     await dispose(result)
   })
 
@@ -6073,8 +6147,7 @@ describe('TUI user-interaction dialogs', () => {
     result.terminal.resize(61)
     await tick()
     const validationRender = result.terminal.output.slice(result.terminal.output.lastIndexOf('\x1b[2J'))
-    expect(validationRender).toContain('Tab custom')
-    expect(validationRender).toContain('Space toggle')
+    expect(validationRender).toContain('↑/↓ • Tab custom • Space toggle • Enter • Esc interrupt')
     result.terminal.send('\x03')
     await rejected
     await dispose(result)
@@ -6286,7 +6359,7 @@ describe('TUI user-interaction dialogs', () => {
     await dispose(result)
   })
 
-  it('reports hidden question rows when the viewport leaves one row', async () => {
+  it('keeps the question and answer field visible in a two-row viewport', async () => {
     const result = await setup({
       config: { questionDialogWidth: 60, questionDialogMaxHeight: 6 },
     })
@@ -6296,13 +6369,14 @@ describe('TUI user-interaction dialogs', () => {
     })
     const rejected = expect(answer).rejects.toMatchObject({ code: 'ASK_ABORTED' })
     await tick()
-    expect(result.terminal.output).toContain('lines hidden')
+    expect(result.terminal.output).toContain('Answer this deliberately long')
+    expect(result.terminal.output).toContain('> ')
     result.terminal.send('\x03')
     await rejected
     await dispose(result)
   })
 
-  it('keeps question text when the viewport leaves two question rows', async () => {
+  it('keeps question text and controls visible in a three-row viewport', async () => {
     const result = await setup({
       config: { questionDialogWidth: 60, questionDialogMaxHeight: 6 },
     })
@@ -6312,7 +6386,8 @@ describe('TUI user-interaction dialogs', () => {
     })
     const rejected = expect(answer).rejects.toMatchObject({ code: 'ASK_ABORTED' })
     await tick()
-    expect(result.terminal.output).toContain('long question?')
+    expect(result.terminal.output).toContain('Answer this deliberately long')
+    expect(result.terminal.output).toContain('Enter submit')
     result.terminal.send('\x03')
     await rejected
     await dispose(result)
@@ -6846,7 +6921,7 @@ describe('terminal mounting', () => {
   })
 
   it('prints every palette role through /palette, each painted by the code it reports', async () => {
-    const result = await setup({ config: { theme: { color: true } } })
+    const result = await setup({ config: { theme: { color: true } }, terminalRows: 80 })
     const before = result.terminal.output.length
     result.terminal.send('/palette')
     result.terminal.send('\r')
@@ -6884,7 +6959,7 @@ describe('terminal mounting', () => {
     const result = await setup({ config: { theme: { color: true } } })
     // `dim` is scheme-independent (SGR 2 over the default foreground), so the
     // startup render carries it on both schemes; `code` is the role that varies.
-    expect(result.terminal.output).toContain('\x1b[2;39mdeepseek-v4-flash')
+    expect(result.terminal.output).toContain('\x1b[2;39m· deepseek-v4-flash')
 
     // A report matching the current scheme is a no-op: no palette rebuild or
     // re-render (ESC [?997;1n = dark, the startup default).
@@ -6900,12 +6975,12 @@ describe('terminal mounting', () => {
     await tick()
     // The rebuild re-renders under the light palette, where `code` is ANSI 34
     // (blue) rather than the dark scheme's ANSI 36 (cyan); `dim` is unchanged.
-    expect(result.terminal.output).toContain('\x1b[2;39mdeepseek-v4-flash')
+    expect(result.terminal.output).toContain('\x1b[2;39m· deepseek-v4-flash')
 
     result.terminal.send('\x1b[?997;1n')
     await tick()
     await tick()
-    expect(result.terminal.output).toContain('\x1b[2;39mdeepseek-v4-flash')
+    expect(result.terminal.output).toContain('\x1b[2;39m· deepseek-v4-flash')
     await dispose(result)
   })
 
@@ -7017,91 +7092,4 @@ describe('terminal mounting', () => {
     await dispose(result)
   })
 
-})
-
-describe('banner sweep reveal', () => {
-  /** Strip SGR/OSC escapes so block-letter rows can be measured by width. */
-  const plainFrame = (output: string): string[] => output
-    .split('\n')
-    .map(line => line.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '').replace(/\x1b\][^\x07]*\x07/g, ''))
-
-  it('renders the product name through the brand-gradient path when truecolor is enabled', async () => {
-    // The block-letter logo paints column-by-column through the 24-bit brand
-    // gradient; the default fake width (88) fits the DEEPSEEK word alone.
-    const result = await setup({ config: { theme: { color: true, truecolor: true } } })
-    expect(result.terminal.output).toContain('\x1b[38;2;77;107;254m')
-    expect(result.terminal.output).toContain('\x1b[38;2;36;152;255m')
-    expect(result.terminal.output).toContain('█')
-    // Widening the terminal upgrades to the full two-word logo.
-    result.terminal.resize(140, 40)
-    await tick()
-    const widest = Math.max(...plainFrame(result.terminal.output).map(line => line.length))
-    expect(widest).toBeGreaterThanOrEqual(90)
-    await dispose(result)
-  })
-
-  it('sweeps the whole borderless banner in when no welcome is configured, ending complete', async () => {
-    const intervals = vi.spyOn(globalThis, 'setInterval')
-    const cleared = vi.spyOn(globalThis, 'clearInterval')
-    const result = await setup({ omitWelcome: true })
-    const revealHandle = intervals.mock.results.at(-1)?.value as ReturnType<typeof setInterval>
-    // Run the sweep to natural completion — it clears its own timer at the end.
-    const done = (): boolean => cleared.mock.calls.some(call => call[0] === revealHandle)
-    const deadline = Date.now() + 5000
-    while (!done() && Date.now() < deadline) await tick()
-    intervals.mockRestore()
-    cleared.mockRestore()
-    // The finished banner is the block-letter word plus the default welcome
-    // and tips rows; no session-id row, and no frame around the banner (the
-    // rounded frame below belongs to the input box).
-    expect(result.terminal.output).toContain('█')
-    expect(result.terminal.output).toContain('探索未至之境')
-    const bannerLine = plainFrame(result.terminal.output).find(line => line.includes('█'))
-    expect(bannerLine).toBeDefined()
-    expect(bannerLine).not.toContain('╭')
-    await dispose(result)
-  })
-
-  it('renders a configured welcome verbatim in a complete banner with no sweep', async () => {
-    const result = await setup()
-    await tick()
-    expect(result.terminal.output).toContain('Coding agent ready.')
-    expect(result.terminal.output).toContain('█')
-    const bannerLine = plainFrame(result.terminal.output).find(line => line.includes('█'))
-    expect(bannerLine).not.toContain('╭')
-    // No reveal frames: a configured welcome skips every startup animation.
-    expect(plainFrame(result.terminal.output).some(line => line.includes('DEEPSEEK'))).toBe(false)
-    await dispose(result)
-  })
-
-  it('omits the subtitle line entirely when no welcome is configured', async () => {
-    const result = await setup({ omitWelcome: true })
-    const deadline = Date.now() + 5000
-    while (!result.terminal.output.includes('█') && Date.now() < deadline) await tick()
-    // Without a configured welcome the banner shows the default welcome line,
-    // never the deployment welcome or a session-id row.
-    expect(result.terminal.output).toContain('deepseek-v4-flash')
-    expect(result.terminal.output).not.toContain('Coding agent ready.')
-    expect(result.terminal.output).toContain('main-session')
-    await dispose(result)
-  })
-
-  it('stops a mid-sweep animation on dispose', async () => {
-    // The output-stability probe alone is insensitive to a leaked interval
-    // (pi-tui's stopped guard silences post-stop renders), so capture the
-    // reveal's own interval handle and assert dispose clears exactly it.
-    const intervals = vi.spyOn(globalThis, 'setInterval')
-    const result = await setup({ omitWelcome: true })
-    const revealHandle = intervals.mock.results.at(-1)?.value as ReturnType<typeof setInterval>
-    expect(revealHandle).toBeDefined()
-    const cleared = vi.spyOn(globalThis, 'clearInterval')
-    await dispose(result)
-    expect(cleared.mock.calls.some(call => call[0] === revealHandle)).toBe(true)
-    intervals.mockRestore()
-    cleared.mockRestore()
-    const settled = result.terminal.output.length
-    await tick()
-    await tick()
-    expect(result.terminal.output.length).toBe(settled)
-  })
 })

@@ -1,17 +1,22 @@
-# Persistent Workspace Sidebar
+# Terminal Workbench
 
-The TUI uses one shared two-column layout for every live session. The left pane stays mounted while the right pane switches between session transcripts, so navigation and operational status remain in a stable location.
+The TUI uses one full-screen workbench for every live session. The left main area owns the compact identity header, transcript, tool output, inline dialogs, and editor. The right sidebar stays mounted while the active transcript changes, so navigation and operational state remain visible without duplicating them below the editor.
 
-The sidebar contains three sections:
+The sidebar contains four sections:
 
-- Workspace shows the active project name, working directory, and Git branch.
-- Sessions shows every in-process live session with its title, workspace, activity age, active marker, and running state.
-- Status shows the active agent state, model, context usage, input/output tokens, cache hit rate, queue depth, permission preset, and plan mode.
+- Workspace shows the active project, Git branch, and working directory.
+- Sessions shows every in-process live session in one compact row with its active and running markers.
+- Current shows the active session's live activity or Idle.
+- Status shows model, context usage, input/output tokens, cache hit rate when known, queue depth, permission preset, and plan mode.
 
-The default sidebar width is 32 columns and `sidebarWidth` accepts values from 24 columns upward. At 65 columns or more, the layout can keep both the 24-column sidebar minimum and the 40-column chat minimum. Below that width, the sidebar remains present at 24 columns while the chat uses the remaining columns; below 26 columns both panes shrink to keep the separator and one chat column visible. A terminal height of at least 24 rows is recommended so Workspace, Sessions, Status, and the editor remain visible together.
+The default sidebar width is 32 columns and `sidebarWidth` accepts values from 24 columns upward. At 65 columns or more, the layout keeps both the 24-column sidebar minimum and a usable main area. Below 65 columns, the sidebar hides so the editor and dialogs keep the full terminal width.
 
-Left Arrow moves focus from the editor into Sessions. Up and Down change the selected live session, Enter activates it, and Right Arrow or Escape returns focus to the editor. Background session title, activity, and running-state changes refresh the list without requiring a switch.
+The root component always renders exactly the terminal height. Short transcripts leave flexible space above the editor. Long transcripts scroll inside their own viewport with Page Up and Page Down, while the header, editor, dialogs, and sidebar remain fixed. Each session retains its own transcript position; new rows do not pull an intentionally scrolled viewport back to the live tail.
 
-Required interactive checks are listed in [TESTING.md](TESTING.md).
+F6 moves focus from the editor into Sessions. Up and Down change the selected live session, Enter activates it, and Left Arrow, F6, or Escape returns focus to the editor. Background session title, activity, and running-state changes refresh the list without requiring a switch.
 
-The packed plugin is verified through a real 140x32 PTY. A terminal-response driver completes startup negotiation, exercises session creation and switching, and replays the captured ANSI output to confirm that every sidebar section is present on screen.
+An active inline dialog replaces the editor area. This keeps the question and its controls usable in very short terminals and restores the existing editor draft when the dialog closes.
+
+The bundled profile opens the fixed `assistant` session. `/new` creates a coding session in the active workspace; `/new <path>` validates the requested directory and creates the session there. Session rows include the workspace name, and workspace-scoped file completion and skill discovery follow the active session.
+
+Required source, artifact, clean-profile, and PTY checks are listed in [TESTING.md](TESTING.md).

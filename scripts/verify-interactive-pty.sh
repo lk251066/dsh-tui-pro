@@ -34,9 +34,24 @@ grep -qF 'Status' "$readable"
 grep -qF 'Queue' "$readable"
 grep -qF 'Perm' "$readable"
 grep -qF 'Plan' "$readable"
+python3 - "$readable" <<'PY'
+from pathlib import Path
+import sys
+
+lines = Path(sys.argv[1]).read_text(encoding='utf-8').splitlines()
+title = next((line for line in lines if 'dsh DEEPSEEK HARNESS' in line), None)
+workspace = next((line for line in lines if 'Workspace' in line and '│' in line), None)
+editor = next((line for line in lines if ('dsh >' in line or 'dsh   ' in line) and '│' in line), None)
+if title is None:
+    raise SystemExit('compact workbench title is missing')
+if workspace is None or workspace.index('Workspace') < workspace.rfind('│'):
+    raise SystemExit('Workspace is not rendered in the right sidebar')
+if editor is None or min(index for marker in ('dsh >', 'dsh   ') if (index := editor.find(marker)) >= 0) > editor.rfind('│'):
+    raise SystemExit('editor is not rendered in the left main area')
+PY
 ! grep -aqF 'fatal load failure' "$capture"
 ! grep -aqF 'setPrompt is not a function' "$capture"
 ! grep -aqF 'TUI prompt value' "$capture"
 ! grep -aqF 'ERR_MODULE_NOT_FOUND' "$capture"
 
-echo 'Verified persistent sidebar rendering, commands, session switching, and shutdown through a real PTY.'
+echo 'Verified the terminal workbench, right sidebar, commands, session switching, and shutdown through a real PTY.'
