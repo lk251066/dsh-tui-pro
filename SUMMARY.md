@@ -1,9 +1,7 @@
 # Project Status
 
-[`@lk251066/dsh-tui@1.0.2`](https://www.npmjs.com/package/@lk251066/dsh-tui/v/1.0.2) remains the latest public package. It is independently installable into an empty profile hosted by public `@deepseek-ai/dsh@0.1.0-rc.6`; the annotated tag, npm package, and [GitHub Release](https://github.com/lk251066/dsh-tui-pro/releases/tag/v1.0.2) are aligned.
+[`@lk251066/dsh-tui@1.2.0`](https://www.npmjs.com/package/@lk251066/dsh-tui/v/1.2.0) is the current package version. Its release commit is verified by source, packed-artifact, empty-profile, and real-PTY checks.
 
-The current repository source contains an unreleased terminal workbench. The main transcript, tools, dialogs, and editor render on the left. Workspace, Sessions, Current, and Status remain visible on the right. The Status section is the single home for model, context, token, cache, queue, permission, and plan values.
+Version `1.2.0` keeps the fixed framed workbench and adds durable active workspace sessions. The sidebar shows the assistant plus user-maintained project sessions; `/sessions` owns complete history; current-directory startup resumes an active project session or creates and activates one.
 
-The source passes 35 test files and 441 tests, type checking, lint with 38 warnings and no errors, build, artifact packing, empty-profile public-host loading, and a real PTY replay against the `1.1.0` artifact. No tag, npm publication, or GitHub Release has been created for this workbench change.
-
-[CHANGES.md](CHANGES.md) owns the workbench behavior. [REPAIR_PLAN.md](REPAIR_PLAN.md) records release readiness, and [TESTING.md](TESTING.md) defines the required evidence.
+[CHANGES.md](CHANGES.md) owns current behavior. [REPAIR_PLAN.md](REPAIR_PLAN.md) records release readiness, and [TESTING.md](TESTING.md) defines the required evidence.

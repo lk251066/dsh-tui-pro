@@ -18,6 +18,8 @@ grep -Fx 'package/lib/index.js' "$packed_files"
 grep -Fx 'package/lib/index.d.ts' "$packed_files"
 grep -Fx 'package/lib/invariant.js' "$packed_files"
 grep -Fx 'package/lib/prompt.js' "$packed_files"
+grep -Fx 'package/lib/workspace-agent-loop.js' "$packed_files"
+grep -Fx 'package/lib/workspace-agent-loop.d.ts' "$packed_files"
 grep -Fx 'package/README.md' "$packed_files"
 grep -Fx 'package/LICENSE' "$packed_files"
 grep -Fx 'package/node_modules/@earendil-works/pi-tui/dist/components/editor.js' "$packed_files"
@@ -40,6 +42,7 @@ pi_editor="$extract_dir/package/node_modules/@earendil-works/pi-tui/dist/compone
 
 test "$(node -p "require(process.argv[1]).dsh.bundle.patch" "$manifest")" = './cordis.patch.yml'
 test "$(node -p "require(process.argv[1]).publishConfig.access" "$manifest")" = 'public'
+test "$(node -p "require(process.argv[1]).exports['./workspace-agent-loop'].default" "$manifest")" = './lib/workspace-agent-loop.js'
 test "$(node -p "require(process.argv[1]).version" "$pi_manifest")" = '0.80.7'
 grep -F 'setPrompt(prompt)' "$pi_editor"
 
@@ -51,6 +54,7 @@ bundle_dependencies=(
   '@deepseek-ai/dsh-session-projection-cache'
   '@deepseek-ai/dsh-session-reference'
   '@deepseek-ai/dsh-session-stats'
+  '@deepseek-ai/dsh-workspace'
   '@deepseek-ai/dsh-storage'
   '@deepseek-ai/dsh-storage-domain'
   '@deepseek-ai/dsh-storage-json'

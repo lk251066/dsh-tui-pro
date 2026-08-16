@@ -64,7 +64,7 @@ export async function fleetLines(deps: InsightsDeps, signal?: AbortSignal): Prom
   }
   // A store with conflicting artifacts for one id (two process lifecycles
   // wrote the same session id without a clean handoff) fails the listing
-  // wholesale — the same condition /resume's scan reports. Degrade to an
+  // wholesale — the same condition /sessions reports. Degrade to an
   // in-dialog explanation instead of a failed command.
   let records: Array<{ header: { id: string; createdAt: number; cwd?: string } }>
   try {

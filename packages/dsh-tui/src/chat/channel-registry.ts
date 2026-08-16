@@ -7,7 +7,7 @@
  * TUI component tree (and unit-testable without a terminal).
  *
  * Sessions live with the process by design: nothing here persists or resumes;
- * `/resume` remains the door for logs from previous runs.
+ * `/sessions` remains the door for logs from previous runs.
  * @module @deepseek-ai/dsh-tui/chat/channel-registry
  */
 
@@ -68,7 +68,7 @@ export interface ChannelRegistry<S extends SessionSlot> {
    * Register a freshly created agent as a new slot and switch to it. The
    * idle-only LRU evicts first when the ceiling would be exceeded.
    */
-  adopt(agent: Agent): S
+  adopt(agent: Agent, activate?: boolean): S
   /** Tear down every live slot (shutdown path). */
   disposeAll(): void
 }
@@ -147,13 +147,13 @@ export function createChannelRegistry<S extends SessionSlot>(
     slots: () => [...slots.values()],
     isActive: slot => slot === activeSlot,
     switchTo,
-    adopt(agent: Agent): S {
+    adopt(agent: Agent, activate = true): S {
       const slot = host.buildSlot(agent)
       slots.set(slot.sessionId, slot)
       // Switch first, evict after: the freshly adopted slot is momentarily the
       // newest idle one, and an eviction pass run before the switch would
       // select it as its own victim.
-      switchTo(slot.sessionId)
+      if (activate) switchTo(slot.sessionId)
       evictToCeiling()
       return slot
     },

@@ -75,9 +75,9 @@ export async function forkSession(deps: ForkDeps): Promise<void> {
   }
   if (deps.isDisposed()) return
   deps.appendNotice(`Forked into ${displayTextId(sessionId)} at ${cut} events.`)
-  // Hand off like /resume when a host is mounted; otherwise the fork waits in /resume.
+  // Hand off like /sessions when a host is mounted; otherwise the fork waits in history.
   if (deps.handoffResume !== undefined) deps.handoffResume(sessionId, cwd)
-  else deps.appendNotice('Resume it later from /resume.')
+  else deps.appendNotice('Open it later from /sessions.')
 }
 
 /** Short, terminal-safe id echo for notices. */

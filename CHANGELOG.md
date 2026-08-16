@@ -4,6 +4,24 @@ All notable changes to this project will be documented in this file.
 
 The `v1.0.0` tag is not an installable public release: no npm package was published, and the repository-root tarball does not contain the required dsh bundle metadata. See [REPAIR_PLAN.md](REPAIR_PLAN.md) for the first verified release criteria.
 
+## [1.2.0] - 2026-08-17
+
+### Added
+
+- Persist a manually ordered active project-session list through the official dsh workspace registry.
+- Add assistant tools to list, create, activate, remove, switch, and message workspace sessions without adding session-management prompt rules.
+
+### Changed
+
+- Start in the current directory's active project session, or create and activate one when none exists.
+- Make `/sessions` the single full-history browser; Tab switches to active sessions, Space changes membership, and Enter opens the selected session.
+- Keep the personal assistant as a fixed sidebar entry opened with `/assistant`.
+
+### Removed
+
+- Remove F6 and the interactive sidebar focus mode.
+- Remove the separate `/resume` command and the obsolete live-only numeric session picker.
+
 ## [1.1.0] - 2026-08-16
 
 ### Changed

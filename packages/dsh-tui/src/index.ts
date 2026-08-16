@@ -51,6 +51,7 @@ import { foldSessionTitle } from '@deepseek-ai/dsh-session-title'
 // Type import also declaration-merges the optional `sessionPersistence`
 // service onto `Context` so `ctx.get('sessionPersistence')` is typed.
 import type {} from '@deepseek-ai/dsh-session-persistence'
+import type {} from '@deepseek-ai/dsh-workspace'
 import type { SkillRegistry } from '@deepseek-ai/dsh-skill'
 // Merges the `permissionPresets` service and the `permission/preset` session
 // event onto their ambient declarations; the service itself is optional at runtime.
@@ -116,7 +117,6 @@ import {
   formatDiagnosticTime,
   initialTarget,
   MemoryBrowserDialog,
-  SessionPickerDialog,
   StatusCardComponent,
   PromptContextComponent,
   RenameDialog,
@@ -124,7 +124,6 @@ import {
   ThemeDialog,
   type DetailsSelection,
   type MemoryRowView,
-  type SessionChoice,
   type StatusCardRow,
 } from './components/dialogs.ts'
 import {
@@ -145,6 +144,8 @@ import {
   setupAssistant,
 } from './chat/assistant.ts'
 import { createSessionLayout, type SessionLayoutController } from './chat/session-layout.ts'
+import { createWorkspaceSessions } from './chat/workspace-sessions.ts'
+import { TUI_WORKSPACE_STARTUP_KEY } from './workspace-agent-loop.ts'
 import { MEMORY_UNAVAILABLE_LINES, memoryRows, optionalMemory } from './chat/memories.ts'
 import { fleetLines } from './chat/fleet.ts'
 import {
@@ -296,7 +297,7 @@ export abstract class TuiExtensionService extends Service {
 }
 
 export const name = 'ui-tui'
-export const inject = ['agents', 'sessions', 'commands', 'userQuestions', 'tools', 'llm', 'systemPrompt', 'tokenMeter', 'tuiPrompt']
+export const inject = ['agents', 'sessions', 'commands', 'userQuestions', 'tools', 'llm', 'systemPrompt', 'tokenMeter', 'tuiPrompt', 'workspaceRegistry', TUI_WORKSPACE_STARTUP_KEY]
 
 /** Model guidance for path-only file references selected through the TUI. */
 export const FILE_REFERENCE_PROMPT = 'Paths prefixed with @ are files explicitly referenced by the user. Use the read tool when their contents are needed; do not claim to have inspected a file before reading it.'
@@ -1010,7 +1011,7 @@ function createTuiChatInternal(
 
   // The multi-session registry: one slot per live in-process session, swapped
   // under this shared chrome. Sessions live with the process by design —
-  // `/resume` remains the door for persisted logs from previous runs.
+  // `/sessions` owns live switching and persisted history in one surface.
   const registry: ChannelRegistry<TuiSessionSlot> = createChannelRegistry<TuiSessionSlot>({
     buildSlot,
     mount: mountSlot,
@@ -1051,52 +1052,9 @@ function createTuiChatInternal(
     },
   }, agent)
 
-  if (agent.session.id === ASSISTANT_SESSION_ID) setupAssistant(agent.ctx, registry)
+  const workspaceSessions = createWorkspaceSessions(ctx)
 
-  /** One `/sessions` row over a live slot: title (or id), status, turns. */
-  const describeSlot = (slot: TuiSessionSlot): SessionChoice => {
-    const idText = displayText(String(slot.sessionId))
-    const shortId = idText.length > 24 ? `${idText.slice(0, 12)}…${idText.slice(-6)}` : idText
-    const title = foldSessionTitle(slot.agent.session.events)?.title
-    const turns = slot.agent.session.events.filter(event => event.type === 'turn/end').length
-    return {
-      sessionId: slot.sessionId,
-      label: title ?? shortId,
-      detail: `${title === undefined ? '' : `${shortId} · `}${displayText(slot.agent.session.header.cwd ?? '(unknown)')} · ${slot.agent.status}${turns > 0 ? ` · ${turns} turn${turns === 1 ? '' : 's'}` : ''}`,
-      active: registry.isActive(slot),
-    }
-  }
-
-  let sessionsOverlay: TuiOverlaySession | undefined
-  /** Open the live-session switcher (/sessions). */
-  const showSessions = (): void => {
-    void sessionsOverlay?.close()
-    // Rows keep creation order (the session header's createdAt), so a row's
-    // number stays stable across switches — the LRU order the registry keeps
-    // internally is an eviction concern, not a display one.
-    const rows = registry.slots()
-      .slice()
-      .sort((left, right) =>
-        left.agent.session.header.createdAt - right.agent.session.header.createdAt)
-      .map(describeSlot)
-    const session = overlayManager.open({
-      create: () => new SessionPickerDialog(
-        rows,
-        palette,
-        (choice) => {
-          void session.close()
-          registry.switchTo(choice.sessionId)
-        },
-        () => { void session.close() },
-      ),
-      options: { width: 64, anchor: 'center', margin: 1 },
-    })
-    sessionsOverlay = session
-    void session.closed.then(() => {
-      if (sessionsOverlay === session) sessionsOverlay = undefined
-    })
-    requestRender()
-  }
+  if (agent.session.id === ASSISTANT_SESSION_ID) setupAssistant(agent.ctx, registry, workspaceSessions)
 
   /**
    * Start a fresh in-process session (Ctrl+N, `/new`) and switch to it. The
@@ -1110,6 +1068,8 @@ function createTuiChatInternal(
     const create = async (): Promise<void> => {
       if (disposed) return
       const handle = await ctx.agents.create({ sessionId: freshId, seed: [], meta: { cwd: projectCwd } })
+      if (disposed) return
+      await workspaceSessions.add(handle.agent.session.id)
       if (disposed) return
       registry.adopt(handle.agent)
       showTransientNotice(`New session ${displayText(String(freshId))} in ${displayText(projectCwd)}.`)
@@ -1132,6 +1092,7 @@ function createTuiChatInternal(
   const assistant = createAssistantController({
     ctx,
     registry,
+    workspaceSessions,
     cwd: initialCwd,
     appendNotice,
     showTransientNotice,
@@ -1142,14 +1103,10 @@ function createTuiChatInternal(
   const persistentLayout = createSessionLayout({
     palette,
     registry,
+    workspaceSessions,
     terminalRows: workbenchRows,
     now,
     activity: workingLine,
-    focusEditor: () => {
-      ui.setFocus(editor)
-      requestRender()
-    },
-    requestRender,
   })
   sessionLayout = persistentLayout
   workbench = new WorkbenchShellComponent(palette, {
@@ -1164,12 +1121,6 @@ function createTuiChatInternal(
   })
   ui.addChild(workbench)
   persistentLayout.refresh()
-  editor.onNavigatePane = () => {
-    persistentLayout.refresh()
-    ui.setFocus(persistentLayout.sessionList)
-    requestRender()
-  }
-
   // Mounted channels already request renders for their own events. Background
   // channels are detached, so wake the shared chrome when one of their rows
   // changes; updatePromptValues() then rebuilds the full live-session list.
@@ -1180,6 +1131,9 @@ function createTuiChatInternal(
   const disposeBackgroundStatusChanges = ctx.on('agent/status', ({ agent: source }) => {
     const slot = registry.slots().find(candidate => candidate.agent === source)
     if (slot !== undefined && !registry.isActive(slot)) requestRender()
+  })
+  const disposeWorkspaceChanges = ctx.on('domain/changed', (change) => {
+    if (change.domain === 'workspace') requestRender()
   })
 
   updatePromptValues()
@@ -1289,7 +1243,7 @@ function createTuiChatInternal(
 
   const resume = createResumeController({
     ctx,
-    // Getter: /resume preflights the mounted session, not the initial one.
+    // Getter: /sessions preflights the mounted session, not the initial one.
     get agent(): Agent { return agent },
     runtime,
     resolved,
@@ -1302,6 +1256,15 @@ function createTuiChatInternal(
       const implementation = ctx.reflect._getImpl('sessionQuery', false)
       if (implementation === undefined || implementation.fiber.state >= FIBER_FAILED) return undefined
       return ctx.get('sessionQuery', false)
+    },
+    workspaceSessions,
+    openLive(sessionId): boolean {
+      const slot = registry.get(sessionId)
+      if (slot !== undefined) return registry.switchTo(sessionId)
+      const live = ctx.agents.get(sessionId)
+      if (live === undefined) return false
+      registry.adopt(live)
+      return true
     },
     ui,
     editor,
@@ -1785,11 +1748,6 @@ function createTuiChatInternal(
       handler: () => { runReload(); return { kind: 'success' } },
     })
     commandCtx.commands.register({
-      name: 'resume',
-      description: 'List this workspace\'s resumable sessions',
-      handler: () => { resume.showResume(); return { kind: 'success' } },
-    })
-    commandCtx.commands.register({
       name: 'queue',
       description: 'Review queued steering messages (edit or remove)',
       handler: () => { queueDock.showSheet(); return { kind: 'success' } },
@@ -1899,8 +1857,8 @@ function createTuiChatInternal(
     })
     commandCtx.commands.register({
       name: 'sessions',
-      description: 'List this terminal\'s live sessions and switch between them',
-      handler: () => { showSessions(); return { kind: 'success' } },
+      description: 'Browse active workspace sessions and complete history',
+      handler: () => { resume.showSessions(); return { kind: 'success' } },
     })
     commandCtx.commands.register({
       name: 'new',
@@ -2272,6 +2230,7 @@ function createTuiChatInternal(
     disposePromptChanges()
     disposeBackgroundSessionEvents()
     disposeBackgroundStatusChanges()
+    disposeWorkspaceChanges()
     for (const value of promptValues) value.dispose()
     // Every live slot tears down together: session listeners, per-slot
     // approvals/docks, agent-scoped model routing and prompt sections.
@@ -2423,9 +2382,11 @@ export function apply(ctx: Context, config: Config): void {
   // The launcher seeds a guided fresh session's first turn through this key; a
   // config value still wins. Consumed in createTuiChat via config.initialSkill.
   const initialSkill = config.initialSkill ?? ctx.get('tuiInitialSkill')
+  const startup = ctx.tuiWorkspaceStartup
   mountTui(ctx, Object.assign(
     {},
     config,
+    { sessionId: String(startup.sessionId) },
     { theme: Object.assign({}, config.theme, { truecolor }) },
     initialSkill === undefined ? {} : { initialSkill },
   ), {

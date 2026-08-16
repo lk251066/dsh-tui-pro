@@ -262,7 +262,8 @@ describe('/assistant', () => {
       await tick()
       submit(harness, '/sessions')
       await tick()
-      harness.terminal.send('1')
+      harness.terminal.send('main-session')
+      harness.terminal.send('\r')
       await tick()
       submit(harness, '/assistant')
       await tick()
@@ -320,7 +321,9 @@ describe('setupAssistant', () => {
       scope = createScope(pluginCtx, agentKey)
     })
     await scope.ctx.fiber.await()
-    setupAssistant(scope.ctx, { slots: () => [] } as never)
+    setupAssistant(scope.ctx, { slots: () => [] } as never, {
+      list: () => [], has: () => false, add: vi.fn(), remove: vi.fn(),
+    })
     // The setup drives an inject fiber; wait for its observable registration.
     await vi.waitFor(() => { expect(memory.installTools).toHaveBeenCalledTimes(1) })
     expect(memory.installTools).toHaveBeenCalledTimes(1)
@@ -343,7 +346,9 @@ describe('setupAssistant', () => {
       scope = createScope(pluginCtx, agentKey)
     })
     await scope.ctx.fiber.await()
-    setupAssistant(scope.ctx, { slots: () => [] } as never)
+    setupAssistant(scope.ctx, { slots: () => [] } as never, {
+      list: () => [], has: () => false, add: vi.fn(), remove: vi.fn(),
+    })
     await vi.waitFor(async () => {
       const assembly = await ctx.systemPrompt.assemble({ scope: agentKey })
       const section = assembly.sections.find(candidate => candidate.name === 'deployment:persona')

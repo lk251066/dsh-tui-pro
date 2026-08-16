@@ -188,6 +188,47 @@ export async function createTuiTestHarness<TerminalType extends Terminal, Exit e
     sessionId,
     options.cwd === null ? undefined : { meta: { cwd: options.cwd ?? '/workspace' } },
   )
+  if (ctx.get('workspaceRegistry') === undefined) {
+    const workspaces: Array<{
+      id: string
+      path: string
+      title: string
+      createdAt: string
+      updatedAt: string
+      sessionIds: ReturnType<typeof SessionId>[]
+      attachSession(id: ReturnType<typeof SessionId>): Promise<void>
+      detachSession(id: ReturnType<typeof SessionId>): Promise<void>
+    }> = []
+    const createWorkspace = (path: string) => {
+      const existing = workspaces.find(workspace => workspace.path === path)
+      if (existing !== undefined) return existing
+      const workspace = {
+        id: `workspace-${workspaces.length + 1}`,
+        path,
+        title: path.replaceAll('\\', '/').split('/').at(-1) || path,
+        createdAt: new Date(0).toISOString(),
+        updatedAt: new Date(0).toISOString(),
+        sessionIds: [] as ReturnType<typeof SessionId>[],
+        async attachSession(id: ReturnType<typeof SessionId>): Promise<void> {
+          if (!this.sessionIds.includes(id)) this.sessionIds.unshift(id)
+        },
+        async detachSession(id: ReturnType<typeof SessionId>): Promise<void> {
+          const index = this.sessionIds.indexOf(id)
+          if (index >= 0) this.sessionIds.splice(index, 1)
+        },
+      }
+      workspaces.push(workspace)
+      return workspace
+    }
+    if (session.header.cwd !== undefined) {
+      createWorkspace(session.header.cwd).sessionIds.push(session.id)
+    }
+    ctx.provide('workspaceRegistry', {
+      list: () => [...workspaces],
+      resolveByPath: (path: string) => Promise.resolve(workspaces.find(workspace => workspace.path === path)),
+      create: (path: string) => Promise.resolve(createWorkspace(path)),
+    } as never)
+  }
   if (options.omitInitialLifecycle !== true) {
     session.append('turn/start', {
       turn: 1,

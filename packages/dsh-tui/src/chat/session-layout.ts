@@ -14,6 +14,8 @@ import {
 } from '../components/workspace-sidebar.ts'
 import type { ChannelRegistry } from './channel-registry.ts'
 import type { TuiSessionSlot } from '../index.ts'
+import { ASSISTANT_SESSION_ID } from './assistant.ts'
+import type { WorkspaceSessions } from './workspace-sessions.ts'
 
 /** Controls the persistent live-session sidebar. */
 export interface SessionLayoutController {
@@ -31,16 +33,13 @@ export interface SessionLayoutController {
 export interface SessionLayoutDeps {
   readonly palette: Palette
   readonly registry: ChannelRegistry<TuiSessionSlot>
+  readonly workspaceSessions: WorkspaceSessions
   /** Current terminal height, used to bound the sidebar rows. */
   terminalRows(): number
   /** Current wall-clock time used for session activity labels. */
   now(): number
   /** Live active-agent activity rendered in the sidebar. */
   activity: Component
-  /** Return keyboard focus to the chat editor. */
-  focusEditor(): void
-  /** Request a full repaint after navigation or registry changes. */
-  requestRender(): void
 }
 
 function formatAge(ageMs: number): string {
@@ -85,11 +84,6 @@ export function createSessionLayout(deps: SessionLayoutDeps): SessionLayoutContr
     // Workspace and status sections retain their rows; sessions consume the
     // remaining viewport and scroll around the selected item.
     maxRows: () => Math.max(3, deps.terminalRows() - 19),
-    onActivate: (sessionId) => {
-      deps.registry.switchTo(SessionId(sessionId))
-    },
-    onExit: deps.focusEditor,
-    onChange: deps.requestRender,
   })
   const sidebar = new WorkspaceSidebarComponent(deps.palette, sessionList, {
     terminalRows: deps.terminalRows,
@@ -99,12 +93,17 @@ export function createSessionLayout(deps: SessionLayoutDeps): SessionLayoutContr
   const refresh = (): void => {
     const activeId = deps.registry.activeId()
     const now = deps.now()
-    const items = deps.registry.slots()
-      .slice()
-      .sort((left, right) =>
-        left.agent.session.header.createdAt - right.agent.session.header.createdAt)
-      .map(slot => itemOf(slot, activeId, now))
-    sessionList.setItems(items, sessionList.focused ? undefined : String(activeId))
+    const assistantSlot = deps.registry.get(ASSISTANT_SESSION_ID)
+    const assistant = assistantSlot === undefined
+      ? stoppedItem(ASSISTANT_SESSION_ID, 'personal', activeId)
+      : itemOf(assistantSlot, activeId, now)
+    const projects = deps.workspaceSessions.list().map(({ sessionId, workspace }) => {
+      const slot = deps.registry.get(sessionId)
+      return slot === undefined
+        ? stoppedItem(sessionId, workspace.title, activeId)
+        : itemOf(slot, activeId, now)
+    })
+    sessionList.setItems([assistant, ...projects])
   }
 
   return {
@@ -114,5 +113,16 @@ export function createSessionLayout(deps: SessionLayoutDeps): SessionLayoutContr
     updateStatus(state): void {
       sidebar.update(state)
     },
+  }
+}
+
+function stoppedItem(sessionId: SessionId, workspace: string, activeId: SessionId): SessionListItem {
+  return {
+    id: String(sessionId),
+    title: displayText(String(sessionId)),
+    workspace: displayText(workspace),
+    status: 'stopped',
+    lastActivityAgo: '',
+    isActive: sessionId === activeId,
   }
 }

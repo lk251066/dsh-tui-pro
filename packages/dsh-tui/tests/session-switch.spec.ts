@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { Terminal } from '@earendil-works/pi-tui'
 import { agentEvents, type Agent } from '@deepseek-ai/dsh-agent'
 import type { UserMessage } from '@deepseek-ai/dsh-llm'
+import { SessionId } from '@deepseek-ai/dsh-session'
 import {
   appendUser,
   createTuiTestHarness,
@@ -143,6 +144,18 @@ function submit(harness: TuiHarness<RecordingTerminal, (code: number) => void>, 
   harness.terminal.send('\r')
 }
 
+/** Open the unified session picker, search one exact id, and activate it. */
+async function switchTo(
+  harness: TuiHarness<RecordingTerminal, (code: number) => void>,
+  sessionId: string,
+): Promise<void> {
+  submit(harness, '/sessions')
+  await tick()
+  harness.terminal.send(sessionId)
+  harness.terminal.send('\r')
+  await tick()
+}
+
 describe('multi-session switching (/new, /sessions)', () => {
   it('/new rejects a requested path that is not a directory', async () => {
     const root = await mkdtemp(join(tmpdir(), 'dsh-tui-project-'))
@@ -195,7 +208,7 @@ describe('multi-session switching (/new, /sessions)', () => {
     }
   })
 
-  it('/sessions lists every live session and a digit switches back', async () => {
+  it('/sessions lists active sessions and search switches back', async () => {
     const { harness, created } = await switchHarness()
     try {
       submit(harness, 'first message')
@@ -213,10 +226,10 @@ describe('multi-session switching (/new, /sessions)', () => {
       const pickerRender = harness.terminal.output
       expect(pickerRender).toContain('Sessions')
       expect(pickerRender).toContain('main-session')
-      expect(pickerRender).toContain('●')
+      expect(pickerRender).toContain('all history (2)')
 
-      // Row 1 is the initial session; the digit chooses it.
-      harness.terminal.send('1')
+      harness.terminal.send('main-session')
+      harness.terminal.send('\r')
       await tick()
       // Input now routes back to the FIRST agent.
       submit(harness, 'back to first')
@@ -249,6 +262,29 @@ describe('multi-session switching (/new, /sessions)', () => {
     }
   })
 
+  it('Space removes a session from the workspace while all history still lists it', async () => {
+    const { harness, created } = await switchHarness()
+    try {
+      submit(harness, '/new')
+      await tick()
+      const createdId = String(created[0]!.agent.session.id)
+
+      submit(harness, '/sessions')
+      await tick()
+      harness.terminal.send(createdId)
+      harness.terminal.send(' ')
+      await tick()
+      expect(harness.ctx.workspaceRegistry.list().flatMap(workspace => workspace.sessionIds))
+        .not.toContain(SessionId(createdId))
+
+      const history = harness.terminal.output.slice(harness.terminal.output.lastIndexOf('Sessions'))
+      expect(history).toContain(createdId)
+      expect(history).toContain('history · live')
+    } finally {
+      await disposeTuiTestHarness(harness)
+    }
+  })
+
   it('a switch re-derives the transcript from the session log (detached events replay)', async () => {
     const { harness, created } = await switchHarness()
     try {
@@ -257,20 +293,14 @@ describe('multi-session switching (/new, /sessions)', () => {
       const secondSession = created[0]?.agent.session
       expect(secondSession).toBeDefined()
       // Switch back to the initial session; the second channel detaches.
-      submit(harness, '/sessions')
-      await tick()
-      harness.terminal.send('1')
-      await tick()
+      await switchTo(harness, 'main-session')
       const before = harness.terminal.output.length
       // A turn lands in the second session's log while its channel is detached.
       appendUser(secondSession!, 'logged while away')
       await tick()
       expect(harness.terminal.output.slice(before)).not.toContain('logged while away')
       // Remounting the second slot replays the whole log from the session.
-      submit(harness, '/sessions')
-      await tick()
-      harness.terminal.send('2')
-      await tick()
+      await switchTo(harness, String(secondSession!.id))
       expect(harness.terminal.output).toContain('> logged while away')
       // The remounted slot owns input routing again.
       submit(harness, 'after remount')
@@ -289,10 +319,7 @@ describe('multi-session switching (/new, /sessions)', () => {
       const background = created[0]?.agent
       expect(background).toBeDefined()
 
-      submit(harness, '/sessions')
-      await tick()
-      harness.terminal.send('1')
-      await tick()
+      await switchTo(harness, 'main-session')
 
       harness.terminal.output = ''
       background!.session.append('session/title', {
@@ -320,10 +347,7 @@ describe('multi-session switching (/new, /sessions)', () => {
       await tick()
       expect(created).toHaveLength(1)
 
-      submit(harness, '/sessions')
-      await tick()
-      harness.terminal.send('1')
-      await tick()
+      await switchTo(harness, 'main-session')
 
       harness.agent.status = 'running'
       harness.terminal.output = ''
@@ -332,10 +356,7 @@ describe('multi-session switching (/new, /sessions)', () => {
       expect(harness.terminal.output).not.toContain('○ Idle')
 
       harness.terminal.output = ''
-      submit(harness, '/sessions')
-      await tick()
-      harness.terminal.send('2')
-      await tick()
+      await switchTo(harness, String(created[0]!.agent.session.id))
 
       expect(harness.terminal.output).toContain('Idle')
       expect(harness.terminal.output).not.toContain('Thinking')

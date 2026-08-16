@@ -10,7 +10,7 @@ Do not use the existing `v1.0.0` GitHub tag; it predates the repaired source and
 
 The source tree, published package, empty-profile installation, and real-PTY runtime pass against public `@deepseek-ai/dsh@0.1.0-rc.6`. Version `1.0.2` adds the persistent workspace sidebar and fixed operational status display. See [REPAIR_PLAN.md](REPAIR_PLAN.md) for the completed repair record and release evidence.
 
-Version `1.1.0` is published on [npm](https://www.npmjs.com/package/@lk251066/dsh-tui/v/1.1.0) and mirrored by the checksummed [GitHub Release](https://github.com/lk251066/dsh-tui-pro/releases/tag/v1.1.0). It uses the terminal alternate screen, so the invoking shell remains unchanged after exit; chat history scrolls only inside the framed left pane while the right sidebar and input remain fixed.
+Version `1.2.0` adds durable active workspace sessions and unified history management while retaining the framed terminal workbench from `1.1.0`.
 
 ## Intended installation
 
@@ -25,16 +25,16 @@ The package itself owns the TUI plugin and its `cordis.patch.yml` profile layer.
 ## Intended features
 
 - Alternate-screen terminal interface with a full outer frame
-- Persistent right-side workspace, live-session, current-activity, and status sidebar
+- Persistent right-side active workspace sessions, current activity, and status sidebar
 - Internal transcript paging with fixed input and status areas
-- Multi-session navigation and session resume
-- Personal assistant as the default session, with optional memory integration
+- `/sessions` search across complete history, with direct activate, remove, and open actions
+- A fixed personal assistant entry with optional memory integration
 - `/new` for the active project and `/new <path>` for another project
 - Fleet monitoring across sessions
 - Syntax highlighting, diff rendering, and Markdown rendering
 - Approval dialogs with risk confirmation
 
-The current source passes 442 tests, clean build and packing, empty-profile installation against public dsh rc.6, and a real Linux PTY flow. Version `1.1.0` is prepared in the source manifest but is not published.
+Launching in a directory resumes its first manually ordered active project session. If that directory has no active session, dsh creates one and adds it to the workspace. Removing a session from the workspace retains its history.
 
 ## Development
 

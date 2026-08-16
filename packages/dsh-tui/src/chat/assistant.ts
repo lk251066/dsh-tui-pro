@@ -16,6 +16,7 @@ import type { TuiSessionSlot } from '../index.ts'
 import type { ChannelRegistry } from './channel-registry.ts'
 import { installAssistantTools } from './assistant-tools.ts'
 import { optionalMemory } from './memories.ts'
+import type { WorkspaceSessions } from './workspace-sessions.ts'
 
 const installedAssistantScopes = new WeakMap<Context, WeakSet<object>>()
 
@@ -29,8 +30,6 @@ export const ASSISTANT_SESSION_ID = SessionId('assistant')
  */
 export const ASSISTANT_PERSONA = [
   '你是这个用户的个人助手,由 {{model}} 模型驱动。',
-  '你可以监控和协助其他会话:用 list_sessions 查看所有活跃会话的状态,用 send_message_to_session 给指定会话发送消息。',
-  '当用户要求"监控某会话"或"盯着XX会话"时,定期调用 list_sessions 检查状态,发现问题主动汇报或协助。',
   '回答简洁。技术或编程请求照常处理,可以使用常规工具;但不要默认进入大型编码流程,先弄清用户想要什么。',
 ].join('')
 
@@ -39,8 +38,6 @@ export const ASSISTANT_PERSONA_WITH_MEMORY = [
   '你是这个用户的个人助手,由 {{model}} 模型驱动。',
   '你有跨对话的持久记忆:回答任何关于用户偏好、背景或过往约定的问题之前,先用 memory_search 检索;',
   '当用户陈述值得长期记住的事实或偏好时,主动调用 memory_save 保存——一条记忆只写一件独立的事,已列出的不重复保存。',
-  '你可以监控和协助其他会话:用 list_sessions 查看所有活跃会话的状态,用 send_message_to_session 给指定会话发送消息。',
-  '当用户要求"监控某会话"或"盯着XX会话"时,定期调用 list_sessions 检查状态,发现问题主动汇报或协助。',
   '回答简洁。技术或编程请求照常处理,可以使用常规工具;但不要默认进入大型编码流程,先弄清用户想要什么。',
 ].join('')
 
@@ -51,7 +48,11 @@ export const ASSISTANT_PERSONA_WITH_MEMORY = [
  * @param agentCtx - the agent scope `setup` receives.
  * @param registry - the multi-session registry for session control tools.
  */
-export function setupAssistant(agentCtx: Context, registry: ChannelRegistry<TuiSessionSlot>): void {
+export function setupAssistant(
+  agentCtx: Context,
+  registry: ChannelRegistry<TuiSessionSlot>,
+  workspaceSessions: WorkspaceSessions,
+): void {
   const registries = installedAssistantScopes.get(agentCtx) ?? new WeakSet<object>()
   if (registries.has(registry)) return
   registries.add(registry)
@@ -67,7 +68,7 @@ export function setupAssistant(agentCtx: Context, registry: ChannelRegistry<TuiS
     // persona-shifted session, never a broken one.
     memory?.installTools(promptCtx)
     // Install assistant-specific session control tools
-    installAssistantTools(promptCtx, registry)
+    installAssistantTools(promptCtx, registry, workspaceSessions)
   })
 }
 
@@ -76,6 +77,8 @@ export interface AssistantControllerDeps {
   readonly ctx: Context
   /** The multi-session registry the assistant slot adopts into. */
   readonly registry: ChannelRegistry<TuiSessionSlot>
+  /** Durable project sessions the assistant tools may manage. */
+  readonly workspaceSessions: WorkspaceSessions
   /** Workspace recorded on a freshly created assistant session. */
   readonly cwd: string
   /** Durable transcript notice. */
@@ -132,7 +135,7 @@ export function createAssistantController(deps: AssistantControllerDeps): { open
       try {
         const handle = await ctx.agents.resume({
           resumeSessionId: ASSISTANT_SESSION_ID,
-          setup: agentCtx => setupAssistant(agentCtx, registry),
+          setup: agentCtx => setupAssistant(agentCtx, registry, deps.workspaceSessions),
         })
         if (deps.isDisposed()) return
         adopt(handle.agent, 'Assistant session resumed.')
@@ -151,7 +154,7 @@ export function createAssistantController(deps: AssistantControllerDeps): { open
         sessionId: ASSISTANT_SESSION_ID,
         seed: [],
         meta: { cwd: deps.cwd },
-        setup: agentCtx => setupAssistant(agentCtx, registry),
+        setup: agentCtx => setupAssistant(agentCtx, registry, deps.workspaceSessions),
       })
       if (deps.isDisposed()) return
       adopt(handle.agent, 'Assistant session created.')

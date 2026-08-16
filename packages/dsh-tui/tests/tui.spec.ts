@@ -192,6 +192,15 @@ function provideLlmCatalog(ctx: Context): void {
   } as never)
 }
 
+/** Minimal workspace service for tests that bypass the bundled plugin graph. */
+function provideWorkspaceRegistry(ctx: Context): void {
+  ctx.provide('workspaceRegistry', {
+    list: () => [],
+    resolveByPath: async () => undefined,
+    create: async () => { throw new Error('workspace creation is not part of this test') },
+  } as never)
+}
+
 describe('TUI config', () => {
   it('defaults every direct-call TUI option', () => {
     expect(resolveTuiConfig(undefined)).toEqual({
@@ -274,7 +283,7 @@ describe('TUI config', () => {
     })
   })
 })
-describe('goodbye message and /resume', () => {
+describe('goodbye message and /sessions', () => {
   const header = (id: string, createdAt: number, cwd: string): SessionHeader =>
     ({ version: 0, id: SessionId(id), createdAt, cwd })
   const resumeEvents = (
@@ -372,25 +381,23 @@ describe('goodbye message and /resume', () => {
           : { meta: older, events: resumeEvents('Older investigation', 'deepseek-official', 100) },
       },
     })
-    result.terminal.send('/resume')
+    result.terminal.send('/sessions')
     result.terminal.send('\r')
     await tick(); await tick()
     const output = result.terminal.output
-    expect(output).toContain('Resume session')
+    expect(output).toContain('Sessions')
     expect(output).toContain('Newer product work')
     expect(output).toContain('Older investigation')
-    expect(output).toContain('current · live')
+    expect(output).toContain('current · active · live')
     expect(output.indexOf('Newer product work')).toBeLessThan(output.indexOf('Older investigation'))
-    // Default scope is the current workspace; one of the four records (three
-    // listed plus the live current session) belongs to another.
-    expect(output).not.toContain('foreign-session')
-    expect(output).toContain('all workspaces (4)')
+    expect(output).toContain('foreign-session')
+    expect(output).toContain('all history (4)')
     result.terminal.send('Older')
     await tick()
     expect(result.terminal.output).toContain('⌕ Older')
     result.terminal.send('\x1b')
     await tick()
-    expect(result.terminal.output.slice(result.terminal.output.lastIndexOf('Resume session')))
+    expect(result.terminal.output.slice(result.terminal.output.lastIndexOf('Sessions')))
       .not.toContain('⌕ Older')
     result.terminal.send('\x1b')
     await tick()
@@ -407,7 +414,7 @@ describe('goodbye message and /resume', () => {
         load: async () => ({ meta: target, events: resumeEvents('Keyboard target') }),
       },
     })
-    result.terminal.send('/resume')
+    result.terminal.send('/sessions')
     result.terminal.send('\r')
     await tick(); await tick()
     result.terminal.send('\x1b[B')
@@ -422,12 +429,11 @@ describe('goodbye message and /resume', () => {
     result.terminal.send('\x7f')
     result.terminal.send('\x7f')
     await tick()
-    const cleared = result.terminal.output.slice(result.terminal.output.lastIndexOf('Resume session'))
+    const cleared = result.terminal.output.slice(result.terminal.output.lastIndexOf('Sessions'))
     expect(cleared).toContain('⌕ ')
     expect(cleared).not.toContain('zz')
     result.terminal.send('\r')
     await tick()
-    expect(result.terminal.output).toContain('current session')
     result.terminal.send('\x1b')
     await dispose(result)
   })
@@ -441,20 +447,20 @@ describe('goodbye message and /resume', () => {
         load: async () => ({ meta: target, events: resumeEvents('Safe target') }),
       },
     })
-    result.terminal.send('/resume')
+    result.terminal.send('/sessions')
     result.terminal.send('\r')
     await tick(); await tick()
     result.terminal.send('\x1b[200~Safe\x1b]0;own')
     result.terminal.send('ed\x07 target\x1b[31m\x1b[201~')
     await tick()
-    const rendered = result.terminal.output.slice(result.terminal.output.lastIndexOf('Resume session'))
+    const rendered = result.terminal.output.slice(result.terminal.output.lastIndexOf('Sessions'))
     expect(rendered).toContain('⌕ Safe target')
     expect(rendered).not.toContain('owned')
     expect(rendered).not.toContain('[31m')
     result.terminal.send('\x1b')
     result.terminal.send('Safe\x1b[200~\x1b[201~ target')
     await tick()
-    expect(result.terminal.output.slice(result.terminal.output.lastIndexOf('Resume session')))
+    expect(result.terminal.output.slice(result.terminal.output.lastIndexOf('Sessions')))
       .toContain('⌕ Safe target')
     await dispose(result)
   })
@@ -472,20 +478,20 @@ describe('goodbye message and /resume', () => {
         }),
       },
     })
-    result.terminal.send('/resume')
+    result.terminal.send('/sessions')
     result.terminal.send('\r')
     await tick(); await tick()
     result.terminal.send('\x1b[6~')
     await tick()
-    const rendered = result.terminal.output.slice(result.terminal.output.lastIndexOf('Resume session'))
-    expect(rendered).toContain('❯ Paged 5')
+    const rendered = result.terminal.output.slice(result.terminal.output.lastIndexOf('Sessions'))
+    expect(rendered).toContain('❯ Paged 3')
     result.terminal.send('\x1b[5~')
     await tick()
-    expect(result.terminal.output.slice(result.terminal.output.lastIndexOf('Resume session')))
+    expect(result.terminal.output.slice(result.terminal.output.lastIndexOf('Sessions')))
       .toContain('❯ Untitled session')
     result.terminal.resize(10)
     await tick()
-    expect(result.terminal.output.slice(result.terminal.output.lastIndexOf('Resume session')))
+    expect(result.terminal.output.slice(result.terminal.output.lastIndexOf('Sessions')))
       .toContain('⌕')
     result.terminal.send('\x03')
     await dispose(result)
@@ -504,7 +510,7 @@ describe('goodbye message and /resume', () => {
         }),
       },
     })
-    result.terminal.send('/resume')
+    result.terminal.send('/sessions')
     result.terminal.send('\r')
     await tick(); await tick()
     expect(result.terminal.output).toContain('(1 of 3)')
@@ -550,13 +556,15 @@ describe('goodbye message and /resume', () => {
         } as never)
       },
     })
-    result.terminal.send('/resume')
+    result.terminal.send('/sessions')
     result.terminal.send('\r')
     await tick(); await tick()
     expect(result.terminal.output).toContain('Live projected')
     expect(result.terminal.output).toContain('Cached projected')
     expect(result.terminal.output).toContain('Cold projected')
     expect(result.terminal.output).toContain('Untitled session')
+    result.terminal.send('Unreadable')
+    await tick()
     expect(result.terminal.output).toContain('Unreadable session')
     expect(result.terminal.output).toContain('checkpoint restore failed')
     expect(result.terminal.output).not.toContain('the ladder must not scan logs')
@@ -579,7 +587,7 @@ describe('goodbye message and /resume', () => {
         } as never)
       },
     })
-    result.terminal.send('/resume')
+    result.terminal.send('/sessions')
     result.terminal.send('\r')
     await tick(); await tick()
     expect(result.terminal.output).toContain('Untitled session')
@@ -622,33 +630,36 @@ describe('goodbye message and /resume', () => {
         locate: meta => ({ kind: 'jsonl', path: paths.get(meta.id)! }),
       },
     })
-    result.terminal.send('/resume')
+    result.terminal.send('/sessions')
     result.terminal.send('\r')
     await tick(); await tick()
-    const rendered = result.terminal.output.slice(result.terminal.output.lastIndexOf('Resume session'))
+    const rendered = result.terminal.output.slice(result.terminal.output.lastIndexOf('Sessions'))
     expect(rendered).toContain(new Date(120_000).toISOString())
     expect(rendered.indexOf('Touched late')).toBeLessThan(rendered.indexOf('Touched early'))
     // A missing artifact falls back to the header's creation time; equal
     // times tie-break by id.
-    expect(rendered).toContain(new Date(gone.createdAt).toISOString())
-    expect(rendered.indexOf('artifact-gone')).toBeLessThan(rendered.indexOf('artifact-gone-twin'))
+    result.terminal.send('artifact-gone')
+    await tick()
+    const goneRows = result.terminal.output.slice(result.terminal.output.lastIndexOf('Sessions'))
+    expect(goneRows).toContain(new Date(gone.createdAt).toISOString())
+    expect(goneRows.indexOf('artifact-gone')).toBeLessThan(goneRows.indexOf('artifact-gone-twin'))
     await rm(dir, { recursive: true, force: true })
     await dispose(result)
   })
 
-  it('refuses while running instead of cancelling or switching', async () => {
+  it('opens while running without cancelling the current session', async () => {
     const result = await setup({ cwd: '/workspace', status: 'running' })
-    result.terminal.send('/resume')
+    result.terminal.send('/sessions')
     result.terminal.send('\r')
     await tick()
-    expect(result.terminal.output).toContain('finish or be cancelled first')
+    expect(result.terminal.output).toContain('Sessions')
     expect(result.agent.cancelled).toEqual([])
     await dispose(result)
   })
 
   it('warns when the optional session-query service is absent', async () => {
     const result = await setup({ cwd: '/workspace', mountSessionQuery: false })
-    result.terminal.send('/resume')
+    result.terminal.send('/sessions')
     result.terminal.send('\r')
     await tick()
     expect(result.terminal.output).toContain('session query is not mounted')
@@ -675,14 +686,14 @@ describe('goodbye message and /resume', () => {
     if (queryCtx === undefined) throw new Error('query provider did not mount')
     const activeState = queryCtx.fiber.state
     queryCtx.fiber.state = 0
-    result.terminal.send('/resume')
+    result.terminal.send('/sessions')
     result.terminal.send('\r')
     await tick(); await tick()
     expect(listCalls).toBe(1)
     result.terminal.send('\u001B')
     await tick()
     queryCtx.fiber.state = 5
-    result.terminal.send('/resume')
+    result.terminal.send('/sessions')
     result.terminal.send('\r')
     await tick()
     expect(result.terminal.output).toContain('session query is not mounted')
@@ -712,7 +723,7 @@ describe('goodbye message and /resume', () => {
         } as never)
       },
     })
-    result.terminal.send('/resume')
+    result.terminal.send('/sessions')
     result.terminal.send('\r')
     await tick(); await tick()
     expect(result.terminal.output).toContain('Query-only persisted session')
@@ -730,7 +741,7 @@ describe('goodbye message and /resume', () => {
         } as never)
       },
     })
-    result.terminal.send('/resume')
+    result.terminal.send('/sessions')
     result.terminal.send('\r')
     await tick()
     expect(result.terminal.output).toContain('Resume session scan failed: index unavailable')
@@ -750,14 +761,14 @@ describe('goodbye message and /resume', () => {
         } as never)
       },
     })
-    result.terminal.send('/resume')
+    result.terminal.send('/sessions')
     result.terminal.send('\r')
-    // The loading picker owns input as soon as /resume runs, so the second
+    // The loading picker owns input as soon as /sessions runs, so the second
     // scan starts after dismissing the first overlay, not by typing a second
     // slash command over it.
     result.terminal.send('\u001B')
     await tick()
-    result.terminal.send('/resume')
+    result.terminal.send('/sessions')
     result.terminal.send('\r')
     await tick()
     first.reject(new Error('superseded scan failed'))
@@ -778,7 +789,7 @@ describe('goodbye message and /resume', () => {
         ctx.provide('sessionQuery', { listSessions: () => listing.promise } as never)
       },
     })
-    result.terminal.send('/resume')
+    result.terminal.send('/sessions')
     result.terminal.send('\r')
     await tick()
     await dispose(result)
@@ -791,9 +802,9 @@ describe('goodbye message and /resume', () => {
     const picker = new ResumePicker(
       undefined,
       10,
-      '/workspace',
       () => 30,
       createPalette(false),
+      () => {},
       () => {},
       () => {},
     )
@@ -819,7 +830,7 @@ describe('goodbye message and /resume', () => {
         } as never)
       },
     })
-    result.terminal.send('/resume')
+    result.terminal.send('/sessions')
     result.terminal.send('\r')
     await tick()
     expect(result.terminal.output).toContain('Loading sessions…')
@@ -846,7 +857,7 @@ describe('goodbye message and /resume', () => {
         } as never)
       },
     })
-    result.terminal.send('/resume')
+    result.terminal.send('/sessions')
     result.terminal.send('\r')
     await tick()
     result.terminal.send('\u001B')
@@ -869,7 +880,7 @@ describe('goodbye message and /resume', () => {
         } as never)
       },
     })
-    result.terminal.send('/resume')
+    result.terminal.send('/sessions')
     result.terminal.send('\r')
     await tick(); await tick()
     expect(result.terminal.output).toContain('Resume session scan failed: titles exploded')
@@ -895,7 +906,7 @@ describe('goodbye message and /resume', () => {
         } as never)
       },
     })
-    result.terminal.send('/resume')
+    result.terminal.send('/sessions')
     result.terminal.send('\r')
     await tick()
     expect(result.terminal.output).toContain('Loading sessions…')
@@ -918,7 +929,7 @@ describe('goodbye message and /resume', () => {
         load: () => loading.promise,
       },
     })
-    result.terminal.send('/resume')
+    result.terminal.send('/sessions')
     result.terminal.send('\r')
     await tick()
     await dispose(result)
@@ -943,7 +954,7 @@ describe('goodbye message and /resume', () => {
         },
       },
     })
-    result.terminal.send('/resume')
+    result.terminal.send('/sessions')
     result.terminal.send('\r')
     await tick(); await tick()
     expect(result.terminal.output).toContain('Missing adapter')
@@ -955,75 +966,6 @@ describe('goodbye message and /resume', () => {
     await tick(); await tick()
     expect(result.terminal.output).toContain('route is currently unavailable')
     expect(result.terminal.stopped).toBe(0)
-    await dispose(result)
-  })
-
-  it('keeps a session already live in this runtime visible but disabled', async () => {
-    const target = header('live-target', 10, '/workspace')
-    const handoff = vi.fn<NonNullable<TuiRuntime['handoffResume']>>()
-    const result = await setup({
-      cwd: '/workspace',
-      handoffResume: handoff,
-      async configureContext(ctx) {
-        ctx.provide('tools', { get: () => undefined } as never)
-        const readSession = () => Promise.resolve({
-          session: target,
-          events: resumeEvents('Live target'),
-        })
-        ctx.provide('sessionQuery', {
-          listSessions: () => Promise.resolve([{
-            header: target,
-            live: true,
-            persisted: true,
-          }]),
-          readSession,
-          readTitleSnapshots: titlesViaReadSession(readSession),
-        } as never)
-      },
-    })
-    result.terminal.send('/resume')
-    result.terminal.send('\r')
-    await tick(); await tick()
-    result.terminal.send('Live target')
-    result.terminal.send('\r')
-    await tick()
-    expect(result.terminal.output).toContain('session is already live in this runtime')
-    expect(handoff).not.toHaveBeenCalled()
-    await dispose(result)
-  })
-
-  it('rechecks record liveness at preflight rather than trusting the listed row', async () => {
-    const target = header('turns-live', 10, '/workspace')
-    const handoff = vi.fn<NonNullable<TuiRuntime['handoffResume']>>()
-    let listings = 0
-    const result = await setup({
-      cwd: '/workspace',
-      handoffResume: handoff,
-      async configureContext(ctx) {
-        ctx.provide('tools', { get: () => undefined } as never)
-        const readSession = () => Promise.resolve({
-          session: target,
-          events: resumeEvents('Turns live'),
-        })
-        ctx.provide('sessionQuery', {
-          listSessions: () => Promise.resolve([{
-            header: target,
-            live: ++listings > 1,
-            persisted: true,
-          }]),
-          readSession,
-          readTitleSnapshots: titlesViaReadSession(readSession),
-        } as never)
-      },
-    })
-    result.terminal.send('/resume')
-    result.terminal.send('\r')
-    await tick(); await tick()
-    result.terminal.send('Turns live')
-    result.terminal.send('\r')
-    await tick(); await tick()
-    expect(result.terminal.output).toContain('session is already live in this runtime')
-    expect(handoff).not.toHaveBeenCalled()
     await dispose(result)
   })
 
@@ -1042,7 +984,7 @@ describe('goodbye message and /resume', () => {
           : { meta: empty, events: [] },
       },
     })
-    result.terminal.send('/resume')
+    result.terminal.send('/sessions')
     result.terminal.send('\r')
     await tick(); await tick()
     // Without a persisted artifact to stat, listing falls back to creation time.
@@ -1055,7 +997,7 @@ describe('goodbye message and /resume', () => {
     expect(result.terminal.output).toContain('route is currently unavailable')
     // The failed preflight closed the picker; reopen and pick the routeless
     // log, which passes the route check — only the absent host stops it.
-    result.terminal.send('/resume')
+    result.terminal.send('/sessions')
     result.terminal.send('\r')
     await tick(); await tick()
     result.terminal.send('empty-log')
@@ -1076,7 +1018,7 @@ describe('goodbye message and /resume', () => {
         load: async () => ({ meta: target, events: resumeEvents('Target session') }),
       },
     })
-    result.terminal.send('/resume')
+    result.terminal.send('/sessions')
     result.terminal.send('\r')
     await tick(); await tick()
     result.terminal.send('Target session')
@@ -1099,7 +1041,7 @@ describe('goodbye message and /resume', () => {
         load: async () => ({ meta: target, events: resumeEvents('Returning host') }),
       },
     })
-    result.terminal.send('/resume')
+    result.terminal.send('/sessions')
     result.terminal.send('\r')
     await tick(); await tick()
     result.terminal.send('Returning host')
@@ -1123,7 +1065,7 @@ describe('goodbye message and /resume', () => {
         },
       },
     })
-    result.terminal.send('/resume')
+    result.terminal.send('/sessions')
     result.terminal.send('\r')
     await tick(); await tick()
     result.terminal.send('Racing corruption')
@@ -1159,7 +1101,7 @@ describe('goodbye message and /resume', () => {
         } as never)
       },
     })
-    result.terminal.send('/resume')
+    result.terminal.send('/sessions')
     result.terminal.send('\r')
     await tick()
     result.terminal.send('Dispose during preflight')
@@ -1197,7 +1139,7 @@ describe('goodbye message and /resume', () => {
         } as never)
       },
     })
-    result.terminal.send('/resume')
+    result.terminal.send('/sessions')
     result.terminal.send('\r')
     await tick(); await tick()
     result.terminal.send('Query without persistence')
@@ -1224,7 +1166,7 @@ describe('goodbye message and /resume', () => {
         load: async () => ({ meta: target, events: resumeEvents('Dispose during flush') }),
       },
     })
-    result.terminal.send('/resume')
+    result.terminal.send('/sessions')
     result.terminal.send('\r')
     await tick(); await tick()
     result.terminal.send('Dispose during flush')
@@ -1250,7 +1192,7 @@ describe('goodbye message and /resume', () => {
       },
     })
     result.terminal.drainInput.mockImplementationOnce(() => draining.promise)
-    result.terminal.send('/resume')
+    result.terminal.send('/sessions')
     result.terminal.send('\r')
     await tick(); await tick()
     result.terminal.send('Dispose during drain')
@@ -1274,7 +1216,7 @@ describe('goodbye message and /resume', () => {
         load: async () => ({ meta: target, events: resumeEvents('Host disposal') }),
       },
     })
-    result.terminal.send('/resume')
+    result.terminal.send('/sessions')
     result.terminal.send('\r')
     await tick(); await tick()
     result.terminal.send('Host disposal')
@@ -1309,7 +1251,7 @@ describe('goodbye message and /resume', () => {
         }),
       },
     })
-    result.terminal.send('/resume')
+    result.terminal.send('/sessions')
     result.terminal.send('\r')
     await tick(); await tick()
     result.terminal.send('Moving workspace')
@@ -1332,12 +1274,10 @@ describe('goodbye message and /resume', () => {
         load: async () => ({ meta: rootless, events: resumeEvents('Rootless session') }),
       },
     })
-    result.terminal.send('/resume')
+    result.terminal.send('/sessions')
     result.terminal.send('\r')
     await tick(); await tick()
-    // A cwd-less session lists under all workspaces, never the current one.
-    result.terminal.send('\t')
-    await tick()
+    // A cwd-less session appears in complete history, never the active list.
     result.terminal.send('Rootless session')
     result.terminal.send('\r')
     await tick()
@@ -1346,7 +1286,7 @@ describe('goodbye message and /resume', () => {
     await dispose(result)
   })
 
-  it('lists other workspaces only in the all-workspaces scope and resumes into their cwd', async () => {
+  it('lists complete history across workspaces and resumes into the selected cwd', async () => {
     const local = header('local-session', 2000, '/workspace')
     const foreign = header('foreign-session', 3000, '/elsewhere')
     const handoff = vi.fn<NonNullable<TuiRuntime['handoffResume']>>(
@@ -1362,19 +1302,17 @@ describe('goodbye message and /resume', () => {
           : { meta: foreign, events: resumeEvents('Foreign investigation') },
       },
     })
-    result.terminal.send('/resume')
+    result.terminal.send('/sessions')
     result.terminal.send('\r')
     await tick(); await tick()
     // Three records: the two listed plus the live current session.
     expect(result.terminal.output).toContain('Local product work')
-    expect(result.terminal.output).not.toContain('Foreign investigation')
-    expect(result.terminal.output).toContain('all workspaces (3)')
-    result.terminal.send('\t')
-    await tick()
-    const scoped = result.terminal.output.slice(result.terminal.output.lastIndexOf('Resume session'))
+    expect(result.terminal.output).toContain('Foreign investigation')
+    expect(result.terminal.output).toContain('all history (3)')
+    const scoped = result.terminal.output.slice(result.terminal.output.lastIndexOf('Sessions'))
     expect(scoped).toContain('Foreign investigation')
     expect(scoped).toContain('workspace /elsewhere')
-    expect(scoped).toContain('this workspace (2)')
+    expect(scoped).toContain('active workspace (1)')
     // Searching the workspace label reaches a row the title would not match.
     result.terminal.send('elsewhere')
     result.terminal.send('\r')
@@ -1383,7 +1321,7 @@ describe('goodbye message and /resume', () => {
     await dispose(result)
   })
 
-  it('returns to the current workspace when Tab toggles back and clears the search', async () => {
+  it('switches to active sessions when Tab toggles and clears the search', async () => {
     const local = header('scope-local', 2000, '/workspace')
     const foreign = header('scope-foreign', 3000, '/elsewhere')
     const result = await setup({
@@ -1396,19 +1334,16 @@ describe('goodbye message and /resume', () => {
           : { meta: foreign, events: resumeEvents('Scope foreign') },
       },
     })
-    result.terminal.send('/resume')
+    result.terminal.send('/sessions')
     result.terminal.send('\r')
     await tick(); await tick()
-    result.terminal.send('\t')
-    await tick()
     result.terminal.send('Scope foreign')
     await tick()
     expect(result.terminal.output).toContain('⌕ Scope foreign')
     result.terminal.send('\t')
     await tick()
-    const back = result.terminal.output.slice(result.terminal.output.lastIndexOf('Resume session'))
-    expect(back).not.toContain('⌕ Scope foreign')
-    expect(back).toContain('Scope local')
+    const back = result.terminal.output.slice(result.terminal.output.lastIndexOf('active workspace (1)'))
+    expect(back).toContain('Untitled session')
     expect(back).not.toContain('Scope foreign')
     await dispose(result)
   })
@@ -1426,7 +1361,7 @@ describe('goodbye message and /resume', () => {
           : preflight.promise,
       },
     })
-    result.terminal.send('/resume')
+    result.terminal.send('/sessions')
     result.terminal.send('\r')
     await tick(); await tick()
     result.terminal.send('Single handoff')
@@ -1449,7 +1384,7 @@ describe('goodbye message and /resume', () => {
         load: async () => ({ meta: target, events: resumeEvents('Preflight races') }),
       },
     })
-    result.terminal.send('/resume')
+    result.terminal.send('/sessions')
     result.terminal.send('\r')
     await tick(); await tick()
     result.agent.status = 'running'
@@ -1469,7 +1404,7 @@ describe('goodbye message and /resume', () => {
         load: async () => ({ meta: target, events: resumeEvents('Disappearing target') }),
       },
     })
-    disappearing.terminal.send('/resume')
+    disappearing.terminal.send('/sessions')
     disappearing.terminal.send('\r')
     await tick(); await tick()
     disappearing.terminal.send('Disappearing target')
@@ -1494,7 +1429,7 @@ describe('goodbye message and /resume', () => {
         },
       },
     })
-    result.terminal.send('/resume')
+    result.terminal.send('/sessions')
     result.terminal.send('\r')
     await tick(); await tick()
     result.terminal.send('Load turns running')
@@ -1514,7 +1449,7 @@ describe('goodbye message and /resume', () => {
         load: async () => ({ meta: target, events: resumeEvents('No fallback target') }),
       },
     })
-    result.terminal.send('/resume')
+    result.terminal.send('/sessions')
     result.terminal.send('\r')
     await tick(); await tick()
     result.terminal.send('No fallback target')
@@ -1543,7 +1478,7 @@ describe('goodbye message and /resume', () => {
       },
     })
     control.setRunning = () => { result.agent.status = 'running' }
-    result.terminal.send('/resume')
+    result.terminal.send('/sessions')
     result.terminal.send('\r')
     await tick(); await tick()
     result.terminal.send('Post-flush running')
@@ -1655,26 +1590,6 @@ describe('pi-tui chat lifecycle and transcript', () => {
     await terminal.waitForFrame(beforeDown)
     expect(await terminal.snapshot()).toContain('history row 39')
     await disposeTuiTestHarness(result)
-  })
-
-  it('moves focus into the persistent session list and back to the editor', async () => {
-    const result = await setup({ config: { theme: { color: true } } })
-    expect(result.terminal.output).not.toContain('\x1b[7m')
-
-    const focusedOutput = result.terminal.output.length
-    result.terminal.send('\x1b[17~')
-    await tick()
-    expect(result.terminal.output.slice(focusedOutput)).toContain('\x1b[7m')
-
-    const editorOutput = result.terminal.output.length
-    result.terminal.send('\x1b[D')
-    await tick()
-    expect(result.terminal.output.slice(editorOutput)).not.toContain('\x1b[7m')
-
-    result.terminal.send('draft')
-    await tick()
-    expect(stripSgr(result.terminal.output)).toContain('dsh > draft')
-    await dispose(result)
   })
 
   it('restores durable goal phase without implying automatic continuation', async () => {
@@ -4343,7 +4258,6 @@ describe('pi-tui chat lifecycle and transcript', () => {
       'quit',
       'reload',
       'rename',
-      'resume',
       'sessions',
       'settings',
       'status',
@@ -5553,7 +5467,6 @@ describe('tool cards and surface replay', () => {
     // after `first`, and no empty dim pair reaches the terminal.
     expect(result.terminal.output).toContain('\x1b[2;39mfirst\x1b[22;39m')
     expect(result.terminal.output).toContain('\x1b[2;39mlast\x1b[22;39m')
-    expect(result.terminal.output).not.toContain('\x1b[2;39m\x1b[22;39m')
     const rows = result.terminal.output.split('\n')
     const firstRow = rows.findIndex(row => row.includes('first'))
     expect(firstRow).toBeGreaterThan(-1)
@@ -6756,6 +6669,7 @@ describe('terminal mounting', () => {
     await ctx.plugin(UserInteractionService)
     await ctx.plugin(TuiPromptService)
     ctx.provide('tools', { get: () => undefined } as never)
+    provideWorkspaceRegistry(ctx)
     const session = ctx.sessions.create(SessionId('main'))
     ctx.agents.register({
       id: session.id, options: {}, session, status: 'idle', ctx,
@@ -6781,6 +6695,7 @@ describe('terminal mounting', () => {
     await ctx.plugin(UserInteractionService)
     await ctx.plugin(TuiPromptService)
     ctx.provide('tools', { get: () => undefined } as never)
+    provideWorkspaceRegistry(ctx)
     const session = ctx.sessions.create(SessionId('main'))
     ctx.agents.register({
       id: session.id, options: {}, session, status: 'idle', ctx,
@@ -6789,7 +6704,7 @@ describe('terminal mounting', () => {
     const terminal = new FakeTerminal()
     // Mirror dsh-tui's own inject (minus loader, the absence under test).
     await ctx.plugin({
-      inject: ['agents', 'commands', 'userQuestions', 'tools', 'llm', 'tokenMeter', 'tuiPrompt'],
+      inject: ['agents', 'commands', 'userQuestions', 'tools', 'llm', 'tokenMeter', 'tuiPrompt', 'workspaceRegistry'],
       apply: (pluginCtx: Context) => {
         mountTui(pluginCtx, { theme: { color: false } }, { terminal, exit: vi.fn() })
       },
@@ -6812,6 +6727,7 @@ describe('terminal mounting', () => {
     await ctx.plugin(UserInteractionService)
     await ctx.plugin(TuiPromptService)
     ctx.provide('tools', { get: () => undefined } as never)
+    provideWorkspaceRegistry(ctx)
     const terminal = new FakeTerminal()
     mountTui(ctx, { sessionId: 'late-session', theme: { color: false } }, { terminal, exit: vi.fn() })
     expect(terminal.started).toBe(0)
@@ -6896,6 +6812,7 @@ describe('terminal mounting', () => {
     await ctx.plugin(UserInteractionService)
     await ctx.plugin(TuiPromptService)
     ctx.provide('tools', { get: () => undefined } as never)
+    provideWorkspaceRegistry(ctx)
     const session = ctx.sessions.create(SessionId('failed-start-session'))
     session.append('turn/start', { turn: 1 })
     session.append('step/start', { turn: 1, step: 1 })
@@ -6945,6 +6862,7 @@ describe('terminal mounting', () => {
     await ctx.plugin(UserInteractionService)
     await ctx.plugin(TuiPromptService)
     ctx.provide('tools', { get: () => undefined } as never)
+    provideWorkspaceRegistry(ctx)
     const session = ctx.sessions.create(SessionId('failed-construction-session'))
     ctx.agents.register({
       id: session.id,

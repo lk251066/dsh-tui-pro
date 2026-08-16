@@ -6,7 +6,7 @@ Interactive terminal UI plugin and profile bundle for [DeepSeek Harness](https:/
 
 Version `1.0.2` is published on [npm](https://www.npmjs.com/package/@lk251066/dsh-tui) with provenance and is mirrored by the checksummed [GitHub Release](https://github.com/lk251066/dsh-tui-pro/releases/tag/v1.0.2). The registry package passes empty-profile installation and real-PTY interaction against the public dsh rc.6 host.
 
-Version `1.1.0` is published on [npm](https://www.npmjs.com/package/@lk251066/dsh-tui/v/1.1.0) and mirrored by the checksummed [GitHub Release](https://github.com/lk251066/dsh-tui-pro/releases/tag/v1.1.0). It contains the framed terminal workbench layout.
+Version `1.2.0` adds durable active workspace sessions and unified history management while retaining the framed terminal workbench from `1.1.0`.
 
 ## Installation
 
@@ -42,9 +42,9 @@ After successful installation and profile validation:
 dsh --profile tui
 ```
 
-The bundled profile opens the personal assistant session. The TUI enters the terminal alternate screen and renders a full outer frame. Transcript, tool output, dialogs, and editor occupy the left inner area; a right sidebar keeps Workspace, Sessions, Current, and Status fixed while Page Up and Page Down scroll only the active transcript. An active inline dialog temporarily replaces the editor and restores its draft when the dialog closes. Stopping the TUI restores the invoking terminal and its scrollback.
+The bundled profile opens the active project session for the current directory. If the directory has no active session, it creates one and adds it to the workspace. The TUI enters the terminal alternate screen and renders a full outer frame. Transcript, tool output, dialogs, and editor occupy the left inner area; a right sidebar keeps Workspace, Active, Current, and Status fixed while Page Up and Page Down scroll only the active transcript. Stopping the TUI restores the invoking terminal and its scrollback.
 
-Press F6 from the editor to focus Sessions. Use Up and Down to select, Enter to switch, and Left Arrow, F6, or Escape to return to the editor. Persisted sessions from previous processes remain available through `/resume`; the sidebar lists only sessions live in the current process.
+Use `/sessions` to search complete history. Up and Down select a row, Enter opens it, Tab switches between complete history and the active list, and Space adds or removes a project session from the active workspace list. Removing membership never deletes the session log. Use `/assistant` for the fixed personal assistant session.
 
 Use `/new` for another session in the active project. Use the whole command remainder as a project path, including spaces:
 
@@ -60,7 +60,6 @@ The bundled `cordis.patch.yml` installs the TUI with these defaults:
 - id: tui
   name: '@lk251066/dsh-tui'
   config:
-    sessionId: assistant
     sidebarWidth: 32
     showReasoning: true
     maxToolOutputLines: 6

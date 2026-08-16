@@ -2,13 +2,7 @@
 # This file makes @lk251066/dsh-tui usable as a bundle in profile package.json
 
 - id: agent-loop
-  config:
-    agents:
-      - id: assistant
-        sessionId: assistant
-        provider: deepseek-official
-        model: deepseek-v4-pro
-        cwd: !!js process.cwd()
+  disabled: true
 
 - id: system-prompt
   config:
@@ -48,13 +42,24 @@
       config:
         backend: json
 
+    - id: workspace
+      name: '@deepseek-ai/dsh-workspace'
+
+    - id: workspace-agent-loop
+      name: '@lk251066/dsh-tui/workspace-agent-loop'
+      config:
+        agents:
+          - id: main
+            provider: deepseek-official
+            model: deepseek-v4-pro
+            cwd: !!js process.cwd()
+
     - id: tui-prompt
       name: '@lk251066/dsh-tui/prompt'
 
     - id: tui
       name: '@lk251066/dsh-tui'
       config:
-        sessionId: assistant
         showReasoning: true
         maxToolOutputLines: 6
 

@@ -599,82 +599,6 @@ export class DetailsDialog implements Component {
   }
 }
 
-/** One `/sessions` picker row: one live in-process session. */
-export interface SessionChoice {
-  /** The session the row switches to when chosen. */
-  sessionId: SessionId
-  /** Row label: the session's title, or its id when untitled. */
-  label: string
-  /** Secondary detail: the id when titled, plus agent status and turn count. */
-  detail: string
-  /** Whether this row is the currently mounted session. */
-  active: boolean
-}
-
-/**
- * Keyboard switcher over the live in-process sessions: ↑/↓ move, Enter or a
- * digit 1-9 picks a rendered row and switches the mounted channel, Esc or
- * Ctrl+C closes without switching. The active row stays selectable but a
- * no-op (the requested state already holds).
- */
-export class SessionPickerDialog implements Component {
-  private selectedIndex = 0
-
-  constructor(
-    private readonly choices: readonly SessionChoice[],
-    private readonly palette: Palette,
-    private readonly choose: (choice: SessionChoice) => void,
-    private readonly close: () => void,
-  ) {}
-
-  invalidate(): void {}
-
-  handleInput(data: string): void {
-    if (matchesKey(data, Key.escape) || matchesKey(data, Key.ctrl('c'))) {
-      this.close()
-      return
-    }
-    if (this.choices.length === 0) return
-    const digit = digitIndex(data)
-    if (digit !== undefined && digit < this.choices.length) {
-      this.choose(this.choices[digit] as SessionChoice)
-      return
-    }
-    if (matchesKey(data, Key.up)) {
-      this.selectedIndex = this.selectedIndex === 0 ? this.choices.length - 1 : this.selectedIndex - 1
-    } else if (matchesKey(data, Key.down)) {
-      this.selectedIndex = this.selectedIndex === this.choices.length - 1 ? 0 : this.selectedIndex + 1
-    } else if (matchesKey(data, Key.return)) {
-      this.choose(this.choices[this.selectedIndex] as SessionChoice)
-    }
-  }
-
-  render(width: number): string[] {
-    const innerWidth = Math.max(1, width - 4)
-    if (this.choices.length === 0) {
-      return renderDialog('Sessions', [
-        this.palette.dim('No live sessions besides this one.'),
-        '',
-        this.palette.dim('Ctrl+N or /new starts one.'),
-      ], width, this.palette, { frame: 'topline' })
-    }
-    const rows = this.choices.map((choice, index) => {
-      const number = this.palette.dim(`${index + 1}.`)
-      const marker = choice.active ? this.palette.accent('●') : ' '
-      const label = choice.active ? this.palette.accent(choice.label) : choice.label
-      // The highlight is a glyph prefix, not an SGR wrap: escape sequences
-      // cannot nest, so bolding a styled row would reset its inner colors.
-      const caret = index === this.selectedIndex ? this.palette.accent('❯') : ' '
-      return `${caret}${truncateToWidth(`${number} ${marker} ${label} ${this.palette.dim(choice.detail)}`, Math.max(1, innerWidth - 1), '')}`
-    })
-    return renderDialog('Sessions', [
-      ...rows,
-      '',
-      this.palette.dim('↑/↓ move • Enter or 1-9 switch • Esc close'),
-    ], width, this.palette, { frame: 'topline' })
-  }
-}
-
 /** One `/memories` browser row: one durable memory, host-formatted. */
 export interface MemoryRowView {
   /** Opaque id handed back to the remove callback. */
@@ -1143,6 +1067,12 @@ export interface ResumeCandidate {
   currentWorkspace: boolean
   /** The session's own workspace as a prompt-style label; the all-workspaces scope shows it per row. */
   workspaceLabel: string
+  /** Whether the user deliberately retains this project session in the active workspace list. */
+  activeWorkspace: boolean
+  /** The personal assistant is always available and cannot be removed from the active list. */
+  assistant: boolean
+  /** Whether this row is the session currently displayed by the terminal. */
+  current: boolean
   disabledReason?: string
 }
 
@@ -1169,31 +1099,33 @@ export function summarizeResumeCandidate(
   currentId: SessionId,
   cwd: string | undefined,
   formatWorkspace: (cwd: string | undefined) => string,
+  activeWorkspace = false,
+  assistant = false,
 ): ResumeCandidate {
   let disabledReason: string | undefined
-  if (record.header.id === currentId) disabledReason = 'current session'
-  else if (record.live) disabledReason = 'session is already live in this runtime'
-  else if (record.header.cwd === undefined) disabledReason = 'session has no recorded workspace'
+  if (record.header.cwd === undefined) disabledReason = 'session has no recorded workspace'
   return {
     record,
     title: title ?? 'Untitled session',
     lastActivityAt: lastActivityAt ?? record.header.createdAt,
     currentWorkspace: record.header.cwd === cwd,
     workspaceLabel: formatWorkspace(record.header.cwd),
+    activeWorkspace,
+    assistant,
+    current: record.header.id === currentId,
     ...disabledReason === undefined ? {} : { disabledReason },
   }
 }
 
 /** Which workspaces the resume picker currently lists. */
-export type ResumeScope = 'workspace' | 'all'
+export type ResumeScope = 'active' | 'all'
 
 /**
  * Full-viewport keyboard selector over detached, preflighted resume summaries.
  *
- * Two scopes over one candidate set: `workspace` (the default) lists only the
- * current session's workspace, `all` lists every workspace and labels each row
- * with its own. Tab toggles between them; the search query and selection reset
- * on a scope change so the highlighted row always belongs to the visible list.
+ * Two scopes over one candidate set: `all` (the default) lists complete
+ * history; `active` lists the personal assistant and user-maintained workspace
+ * sessions. Tab toggles scopes, Space changes project membership, and Enter opens.
  *
  * The picker opens before the session scan settles: an `undefined` candidate
  * set renders a loading placeholder that keeps input away from the editor,
@@ -1204,17 +1136,17 @@ export class ResumePicker implements Component, Focusable {
   private pasteBuffer: string | undefined
   private selectedIndex = 0
   private error = ''
-  private scope: ResumeScope = 'workspace'
+  private scope: ResumeScope = 'all'
   private candidates: readonly ResumeCandidate[] | undefined
   focused = false
 
   constructor(
     candidates: readonly ResumeCandidate[] | undefined,
     private readonly maxVisible: number,
-    private readonly workspaceLabel: string,
     private readonly viewportRows: () => number,
     private readonly palette: Palette,
     private readonly done: (candidate: ResumeCandidate) => void,
+    private readonly toggleActive: (candidate: ResumeCandidate) => void,
     private readonly cancel: () => void,
   ) {
     this.candidates = candidates
@@ -1229,8 +1161,12 @@ export class ResumePicker implements Component, Focusable {
    * @param candidates - the summarized rows the finished scan produced.
    */
   setCandidates(candidates: readonly ResumeCandidate[]): void {
+    const selectedId = this.filtered()[this.selectedIndex]?.record.header.id
     this.candidates = candidates
-    this.selectedIndex = 0
+    const selectedIndex = selectedId === undefined
+      ? -1
+      : this.filtered().findIndex(candidate => candidate.record.header.id === selectedId)
+    this.selectedIndex = selectedIndex < 0 ? 0 : selectedIndex
     // A still-loading error is false the moment rows exist.
     this.error = ''
     this.invalidate()
@@ -1241,7 +1177,7 @@ export class ResumePicker implements Component, Focusable {
     const candidates = this.candidates ?? []
     return this.scope === 'all'
       ? [...candidates]
-      : candidates.filter(candidate => candidate.currentWorkspace)
+      : candidates.filter(candidate => candidate.activeWorkspace || candidate.assistant)
   }
 
   private filtered(): ResumeCandidate[] {
@@ -1317,10 +1253,17 @@ export class ResumePicker implements Component, Focusable {
         this.selectedIndex + this.visibleCandidateCount(),
       )
     } else if (matchesKey(data, Key.tab)) {
-      this.scope = this.scope === 'workspace' ? 'all' : 'workspace'
+      this.scope = this.scope === 'active' ? 'all' : 'active'
       this.search.setValue('')
       this.selectedIndex = 0
       this.error = ''
+    } else if (matchesKey(data, Key.space)) {
+      const selected = filtered[this.selectedIndex]
+      if (this.candidates === undefined) this.error = 'Sessions are still loading.'
+      else if (selected === undefined) this.error = 'No session matches this search.'
+      else if (selected.assistant) this.error = 'The assistant is always active.'
+      else if (selected.disabledReason !== undefined) this.error = selected.disabledReason
+      else this.toggleActive(selected)
     } else if (matchesKey(data, Key.enter)) {
       const selected = filtered[this.selectedIndex]
       if (this.candidates === undefined) this.error = 'Sessions are still loading.'
@@ -1345,13 +1288,13 @@ export class ResumePicker implements Component, Focusable {
    */
   private renderScopeLine(): string {
     const candidates = this.candidates ?? []
-    const inWorkspace = candidates.filter(candidate => candidate.currentWorkspace).length
-    const active = this.scope === 'workspace'
-      ? `this workspace ${displayText(this.workspaceLabel)}`
-      : `all workspaces (${candidates.length})`
-    const other = this.scope === 'workspace'
-      ? `all workspaces (${candidates.length})`
-      : `this workspace (${inWorkspace})`
+    const activeCount = candidates.filter(candidate => candidate.activeWorkspace || candidate.assistant).length
+    const active = this.scope === 'active'
+      ? `active workspace (${activeCount})`
+      : `all history (${candidates.length})`
+    const other = this.scope === 'active'
+      ? `all history (${candidates.length})`
+      : `active workspace (${activeCount})`
     return `${this.palette.accent(active)}${this.palette.dim(`  ⇥ ${other}`)}`
   }
 
@@ -1366,8 +1309,8 @@ export class ResumePicker implements Component, Focusable {
     const selected = filtered[this.selectedIndex]
     const position = selected === undefined ? 0 : this.selectedIndex + 1
     const title = this.candidates === undefined
-      ? 'Resume session'
-      : `Resume session (${position} of ${filtered.length})`
+      ? 'Sessions'
+      : `Sessions (${position} of ${filtered.length})`
     const lines: string[] = [
       '',
       `${indent}${this.palette.bold(this.palette.accent(title))}`,
@@ -1399,7 +1342,8 @@ export class ResumePicker implements Component, Focusable {
       const candidate = filtered[index] as ResumeCandidate
       const active = index === this.selectedIndex
       const status = [
-        candidate.disabledReason === 'current session' ? 'current' : undefined,
+        candidate.current ? 'current' : undefined,
+        candidate.assistant ? 'assistant' : candidate.activeWorkspace ? 'active' : 'history',
         candidate.record.live ? 'live' : undefined,
         candidate.record.persisted ? 'persisted' : undefined,
       ].filter((value): value is string => value !== undefined).join(' · ')
@@ -1422,7 +1366,7 @@ export class ResumePicker implements Component, Focusable {
       push(this.palette.error(displayText(this.error)))
     }
 
-    const footer = `${indent}${this.palette.dim('Type to search  •  ↑/↓ navigate  •  Tab scope  •  Enter resume  •  Esc clear/cancel')}`
+    const footer = `${indent}${this.palette.dim('Type to search  •  ↑/↓ navigate  •  Tab scope  •  Space activate/remove  •  Enter open  •  Esc cancel')}`
     while (lines.length < height - 2) lines.push('')
     lines.push(footer, '')
     return lines.slice(0, height)

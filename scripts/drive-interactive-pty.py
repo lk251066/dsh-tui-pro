@@ -17,9 +17,10 @@ import time
 from pathlib import Path
 
 
-FRAME_MARKERS = (b"Workspace", b"Sessions", b"Status", b"Queue", b"Perm", b"Plan")
+FRAME_MARKERS = (b"Workspace", b"Active", b"Status", b"Queue", b"Perm", b"Plan")
 FORBIDDEN_MARKERS = (
     b"fatal load failure",
+    b"plugin tree failed to load",
     b"setPrompt is not a function",
     b"TUI prompt value",
     b"ERR_MODULE_NOT_FOUND",

@@ -12,8 +12,6 @@ import { isAbsolute, relative, resolve, sep } from 'node:path'
 import {
   CURSOR_MARKER,
   Editor,
-  Key,
-  matchesKey,
   truncateToWidth,
   visibleWidth,
 } from '@earendil-works/pi-tui'
@@ -28,17 +26,6 @@ export class HintEditor extends Editor {
   hint: string | undefined
   /** Prompt text rendered before the placeholder, matching the live prompt width. */
   hintPrefix = ''
-  /** Called when F6 transfers focus to the adjacent workbench pane. */
-  onNavigatePane: (() => void) | undefined
-
-  override handleInput(data: string): void {
-    if (matchesKey(data, Key.f6) && this.onNavigatePane !== undefined) {
-      this.onNavigatePane()
-      return
-    }
-    super.handleInput(data)
-  }
-
   override render(width: number): string[] {
     const lines = super.render(width)
     if (this.hint === undefined || this.getText() !== '') return lines

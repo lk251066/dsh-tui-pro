@@ -24,7 +24,7 @@ The completed repair and acceptance evidence are tracked in [REPAIR_PLAN.md](REP
 
 ## Intended description
 
-Community-maintained alternate-screen terminal UI plugin for DeepSeek Harness. It provides a fixed framed workbench with transcript-only scrolling, multi-session navigation, a personal assistant session, fleet monitoring, syntax highlighting, diff rendering, and approval workflows.
+Community-maintained alternate-screen terminal UI plugin for DeepSeek Harness. It provides a fixed framed workbench with transcript-only scrolling, durable active workspace sessions, searchable complete history, a personal assistant session, syntax highlighting, diff rendering, and approval workflows.
 
 Feature wording must be checked against the packed-artifact smoke test before submission. Do not publish test counts, compatibility claims, screenshots, or commands that were verified only through a workspace link.
 

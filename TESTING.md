@@ -45,13 +45,13 @@ Current source evidence:
 | Check | Result |
 | --- | --- |
 | `pnpm run typecheck` | Passed |
-| `pnpm run test` | Passed: 35 files, 442 tests |
+| `pnpm run test` | Passed: 37 files, 432 tests |
 | `pnpm run lint` | Passed with 38 warnings and no errors |
 | `pnpm run build` | Passed |
-| `pnpm run pack:artifact` | Passed: 298 files, including workbench JavaScript and declarations |
+| `pnpm run pack:artifact` | Passed: 307 files, including the workspace launcher, workbench JavaScript, and declarations |
 | `scripts/verify-packed-artifact.sh` | Passed |
 | Empty-profile public host | Passed against public `@deepseek-ai/dsh@0.1.0-rc.6`; `why` and `--dump-config` resolve the packed plugin and every bundle row |
-| Current-tree real PTY | Passed from the `1.1.0` packed plugin in a clean WSL host; the replay verifies the compact title, right sidebar, left editor, session switching, and shutdown |
+| Current-tree real PTY | Passed from the `1.2.0` packed plugin in a clean Linux WSL host; the replay verifies the compact title, fixed Active sidebar, left editor, session switching, and shutdown |
 
 ## Source checks
 
@@ -79,12 +79,14 @@ Verify the new tarball contains:
 
 - `package/lib/index.js`
 - declaration files at every path named by `exports`
+- `package/lib/workspace-agent-loop.js` and its declaration, used by the durable workspace startup layer
 - `package/cordis.patch.yml`
 - `package/README.md`
 - `package/LICENSE`
 - `package/package.json` with `dsh.bundle.patch: ./cordis.patch.yml`
 - `package/node_modules/@earendil-works/pi-tui` with the patched `setPrompt()` editor API
 - bundled `get-east-asian-width` and `marked` runtime dependencies
+- the declared `@deepseek-ai/dsh-workspace` dependency and its bundle row
 
 Reject an artifact that contains stale build output, a parent-directory archive member, or omits any required file.
 
@@ -112,16 +114,16 @@ Exercise these behaviors through the installed profile:
 1. Initial render reaches an editable prompt without an exception.
 2. Workspace shows the active project, full directory, and Git branch without terminal control characters.
 3. Status shows agent state, model, context percentage, input/output tokens, cache hit rate, queue depth, permission preset, and plan mode before and after a model turn.
-4. A second session appears in Sessions and switches without duplicate UI children; detached title and running-state changes update without first switching to that session.
-5. F6 focuses session navigation; up and down change selection; enter switches; left, F6, and escape return to the editor.
+4. A second session created with `/new` appears under Active and switches without duplicate UI children; detached title and running-state changes update without first switching to that session.
+5. `/sessions` opens complete history; search, Up, Down, Enter, Tab, Space, and Escape perform their documented actions without sending text to the model.
 6. Queue depth changes through steering insert, claim, discard, and unrelated durable transcript updates while the queue row remains visible.
 7. Approval, question, tool output, reasoning visibility, and compaction status render correctly.
-8. Resume and active-session title updates appear in the relevant UI.
+8. Removing an active session retains it in complete history, and adding it restores its sidebar entry without changing the log.
 9. `sidebarWidth: 36` changes the right-sidebar width on a wide terminal; terminals below 65 columns hide the sidebar and retain the full-width main area.
-10. At 32, 24, and 10 rows, inspect which rows remain in the viewport; use at least 24 rows when verifying that Workspace, Sessions, Status, and the editor are visible together.
+10. At 32, 24, and 10 rows, inspect which rows remain in the viewport; use at least 24 rows when verifying that Workspace, Active, Status, and the editor are visible together.
 11. The launch enters the alternate screen and the exit restores the shell without adding TUI history to normal scrollback.
 12. Page Up and Page Down move only the transcript; the header, editor, dialog area, outer frame, and sidebar remain fixed, and each session preserves its own scroll position.
-13. `/new` uses the active workspace, `/new <path>` validates and uses another project, and file and skill completion follow the active session's workspace.
+13. `/new` uses the active workspace, `/new <path>` validates and uses another project, `/assistant` opens the fixed assistant, and file and skill completion follow the active session's workspace.
 14. Repeated session switching preserves each transcript and input state.
 15. Normal exit disposes listeners and processes without an unhandled rejection.
 

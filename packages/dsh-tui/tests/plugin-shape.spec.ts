@@ -23,14 +23,18 @@ describe('dsh-tui plugin export shape', () => {
       'systemPrompt',
       'tokenMeter',
       'tuiPrompt',
+      'workspaceRegistry',
+      'tuiWorkspaceStartup',
     ])
     expect(unwrapped.Config).toBeDefined()
     expect(typeof unwrapped.apply).toBe('function')
   })
 
-  it('boots the bundle into the personal assistant session', () => {
+  it('boots the bundle through the workspace-aware project launcher', () => {
     const patch = readFileSync(new URL('../cordis.patch.yml', import.meta.url), 'utf8')
-    expect(patch).toMatch(/- id: assistant\s+sessionId: assistant/u)
-    expect(patch).toMatch(/name: '@lk251066\/dsh-tui'\s+config:\s+sessionId: assistant/u)
+    expect(patch).toMatch(/- id: agent-loop\s+disabled: true/u)
+    expect(patch).toMatch(/- id: workspace-agent-loop\s+name: '@lk251066\/dsh-tui\/workspace-agent-loop'/u)
+    expect(patch).toMatch(/- id: workspace\s+name: '@deepseek-ai\/dsh-workspace'/u)
+    expect(patch).not.toMatch(/sessionId: assistant/u)
   })
 })

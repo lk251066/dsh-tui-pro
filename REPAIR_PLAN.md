@@ -14,6 +14,12 @@ The current source uses one full-screen workbench. The transcript, tools, dialog
 
 The same source also renders user messages before their assistant responses, starts the bundle in the personal assistant session, and supports `/new` plus `/new <path>` across project directories. The `1.1.0` workbench enters the terminal alternate screen, reserves an outer frame, and keeps transcript scrolling inside its inner viewport. Type checking, all 442 tests, lint with 38 warnings and no errors, build, artifact packing, Windows and Linux empty-profile loading, and the Linux real PTY flow pass for the `1.1.0` artifact. The release workflow repeated those checks, published npm `1.1.0`, and created the checksummed GitHub Release from commit `81b72c8`.
 
+## Version 1.2.0 workspace sessions
+
+The current source uses the official dsh workspace registry as the durable active-session index. Current-directory startup resumes the first active project session or creates and attaches one. The sidebar shows active membership rather than recent history; `/sessions` searches complete history and changes membership without deleting logs; `/assistant` remains a fixed entry. The assistant receives only the six direct session tools and no additional management prompt rules.
+
+Type checking, all 432 tests, lint with 38 warnings and no errors, build, the 307-file artifact audit, empty-profile installation against public dsh rc.6, and the clean Linux real-PTY flow pass for the `1.2.0` tarball. The artifact audit checks the workspace launcher export and dependency, and the public-host check confirms both workspace bundle rows are active.
+
 ## Version 1.0.2 sidebar release
 
 Version `1.0.2` adds a persistent workspace sidebar. The implementation bottom-aligns the sidebar with the transcript so long conversations do not scroll it out of the terminal viewport, and detached session title, activity, and running-state changes refresh without a switch. Headless-terminal coverage checks queue retention after unrelated durable messages, long transcript growth, terminal height reduction, and queue drain.

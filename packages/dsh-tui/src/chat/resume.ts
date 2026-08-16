@@ -1,7 +1,6 @@
 /**
- * Session-resume sub-controller for the interactive chat channel: the
- * `/resume` selector, one metadata-plus-title scan that tolerates a corrupt
- * neighbor, the pre-handoff preflight, and the terminal handoff itself.
+ * Unified session selector for the interactive chat channel: active-session
+ * switching, workspace membership, persisted history, and resume handoff.
  * @module @deepseek-ai/dsh-tui/chat/resume
  */
 
@@ -22,6 +21,8 @@ import type { HintEditor } from './helpers.ts'
 import { formatCwd } from './helpers.ts'
 import type { TuiOverlaySession } from '../extension/types.ts'
 import type { TuiRuntime } from '../runtime.ts'
+import { ASSISTANT_SESSION_ID } from './assistant.ts'
+import type { WorkspaceSessions } from './workspace-sessions.ts'
 import {
   ResumePicker,
   summarizeResumeCandidate,
@@ -42,25 +43,29 @@ export interface ResumeControllerDeps extends ChatChannelDeps, ChannelNotice {
   readonly sessionQuery: (this: void) => SessionQueryEngine | undefined
   readonly ui: TUI
   readonly editor: HintEditor
+  /** Durable active-workspace membership. */
+  readonly workspaceSessions: WorkspaceSessions
+  /** Switch or adopt a session already live in this process. */
+  openLive(sessionId: SessionId): boolean
   /** Current agent status, re-read at each resume precondition point. */
   agentStatus(): AgentStatus
 }
 
 /** Session-resume controller for one chat channel. */
 export interface ResumeController {
-  /** Open the searchable session selector, scoped to this workspace until the user widens it. */
-  showResume(): void
+  /** Open the unified searchable active-workspace and history selector. */
+  showSessions(): void
 }
 
 /**
  * Build the session-resume controller for one chat channel.
  * @param deps - channel collaborators, terminal handles, and optional services.
- * @returns the controller wired to the `/resume` command.
+ * @returns the controller wired to the `/sessions` command.
  */
 export function createResumeController(deps: ResumeControllerDeps): ResumeController {
   const {
     ctx, runtime, resolved, palette, overlayManager,
-    sessionQuery, ui, editor,
+    sessionQuery, ui, editor, workspaceSessions,
   } = deps
   /**
    * The agent resume preflights against, re-read per use: a multi-session
@@ -89,6 +94,8 @@ export function createResumeController(deps: ResumeControllerDeps): ResumeContro
     agent().session.id,
     agent().session.header.cwd,
     workspaceLabel,
+    workspaceSessions.has(record.header.id),
+    record.header.id === ASSISTANT_SESSION_ID,
   )
 
   /** The disabled fallback row for a session whose title read failed. */
@@ -102,6 +109,9 @@ export function createResumeController(deps: ResumeControllerDeps): ResumeContro
     lastActivityAt: lastActivityAt ?? record.header.createdAt,
     currentWorkspace: record.header.cwd === agent().session.header.cwd,
     workspaceLabel: workspaceLabel(record.header.cwd),
+    activeWorkspace: workspaceSessions.has(record.header.id),
+    assistant: record.header.id === ASSISTANT_SESSION_ID,
+    current: record.header.id === agent().session.id,
     disabledReason: `session cannot be loaded: ${errorChain(error)}`,
   })
 
@@ -286,12 +296,20 @@ export function createResumeController(deps: ResumeControllerDeps): ResumeContro
     }
   }
 
+  const openSession = (candidate: ResumeCandidate, overlay: TuiOverlaySession): void => {
+    if (candidate.current) {
+      void overlay.close()
+      return
+    }
+    if (candidate.record.live && deps.openLive(candidate.record.header.id)) {
+      void overlay.close()
+      return
+    }
+    void handoffResume(candidate, overlay)
+  }
+
   return {
-    showResume(): void {
-      if (agent().status !== 'idle') {
-        deps.appendNotice('Resume requires the current turn to finish or be cancelled first.', 'warning')
-        return
-      }
+    showSessions(): void {
       const listQuery = sessionQuery()
       if (listQuery === undefined) {
         deps.appendNotice('Resume is not available: session query is not mounted.', 'warning')
@@ -310,10 +328,25 @@ export function createResumeController(deps: ResumeControllerDeps): ResumeContro
           picker = new ResumePicker(
             scanned,
             resolved.maxResumeOptions,
-            workspaceLabel(agent().session.header.cwd),
             () => host.viewport.rows,
             palette,
-            (candidate) => { void handoffResume(candidate, session) },
+            (candidate) => { openSession(candidate, session) },
+            (candidate) => {
+              const toggle = async (): Promise<void> => {
+                if (candidate.activeWorkspace) await workspaceSessions.remove(candidate.record.header.id)
+                else await workspaceSessions.add(candidate.record.header.id)
+                if (scanned !== undefined) {
+                  scanned = scanned.map(item => item.record.header.id === candidate.record.header.id
+                    ? { ...item, activeWorkspace: !candidate.activeWorkspace }
+                    : item)
+                  picker?.setCandidates(scanned)
+                }
+                deps.requestRender()
+              }
+              void toggle().catch((error: unknown) => {
+                deps.appendNotice(`Workspace update failed: ${errorChain(error)}`, 'error')
+              })
+            },
             () => { void session.close() },
           )
           return picker

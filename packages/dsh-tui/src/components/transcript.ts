@@ -417,7 +417,7 @@ export class HeaderComponent implements Component {
 /** Welcome line under the logo when no title/welcome is configured. */
 const DEFAULT_WELCOME = '探索未至之境 — coding agent ready'
 /** Shortcut tips row under the welcome line. */
-const LOGO_TIPS = '/ commands · @ files · /resume sessions · Ctrl+O cards · Shift+Tab mode'
+const LOGO_TIPS = '/ commands · @ files · /sessions history · Ctrl+O cards · Shift+Tab mode'
 
 /**
  * One image content block, rendered through pi-tui's `Image` once the

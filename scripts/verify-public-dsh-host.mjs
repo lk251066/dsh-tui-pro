@@ -74,6 +74,8 @@ const bundledPlugins = [
   '@deepseek-ai/dsh-storage-domain',
   '@deepseek-ai/dsh-storage-json',
   '@deepseek-ai/dsh-tool-ask-user',
+  '@deepseek-ai/dsh-workspace',
+  '@lk251066/dsh-tui/workspace-agent-loop',
   '@lk251066/dsh-tui/prompt',
   '@lk251066/dsh-tui',
 ]
