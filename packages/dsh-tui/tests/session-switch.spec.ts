@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { Terminal } from '@earendil-works/pi-tui'
-import type { Agent } from '@deepseek-ai/dsh-agent'
+import { agentEvents, type Agent } from '@deepseek-ai/dsh-agent'
 import type { UserMessage } from '@deepseek-ai/dsh-llm'
 import {
   appendUser,
@@ -241,6 +241,38 @@ describe('multi-session switching (/new, /sessions)', () => {
       submit(harness, 'after remount')
       await tick()
       expect(created[0]?.followups).toEqual(['after remount'])
+    } finally {
+      await disposeTuiTestHarness(harness)
+    }
+  })
+
+  it('refreshes detached session titles and running state in the persistent sidebar', async () => {
+    const { harness, created } = await switchHarness()
+    try {
+      submit(harness, '/new')
+      await tick()
+      const background = created[0]?.agent
+      expect(background).toBeDefined()
+
+      submit(harness, '/sessions')
+      await tick()
+      harness.terminal.send('1')
+      await tick()
+
+      harness.terminal.output = ''
+      background!.session.append('session/title', {
+        title: 'Background work',
+        messageSeqs: [],
+        source: { kind: 'fallback' },
+      })
+      await tick()
+      expect(harness.terminal.output).toContain('Background work')
+
+      harness.terminal.output = ''
+      background!.status = 'running'
+      agentEvents(harness.ctx, background!).emit('agent/status', { status: 'running' })
+      await tick()
+      expect(harness.terminal.output).toContain('● Background work')
     } finally {
       await disposeTuiTestHarness(harness)
     }

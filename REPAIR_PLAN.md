@@ -8,6 +8,12 @@ Ship one package: `@lk251066/dsh-tui`. Its package manifest already defines `dsh
 
 All five phases are complete for `1.0.1`. The existing `v1.0.0` tag and repository-root tarball remain invalid release inputs. The published npm package, annotated `v1.0.1` tag, checksummed GitHub Release, and merged commit are aligned, and the registry package passes a real-PTY flow against public `@deepseek-ai/dsh@0.1.0-rc.6`.
 
+## Current unreleased work
+
+The working tree adds a persistent workspace sidebar. The implementation bottom-aligns the sidebar with the transcript so long conversations do not scroll it out of the terminal viewport, and detached session title, activity, and running-state changes refresh without a switch. Headless-terminal coverage checks queue retention after unrelated durable messages, long transcript growth, terminal height reduction, and queue drain.
+
+This work is locally implemented but is not part of `1.0.1` and has not been submitted as a new GitHub or npm release. The current tree passes type checking, all 440 tests, lint with warnings only, build, artifact packing, clean-profile public-host loading, and a real-PTY run from the packed plugin. The replayed terminal screen contains the persistent Workspace, Sessions, Status, Queue, Perm, and Plan rows. The package version must advance beyond the already published `1.0.1` before a new release.
+
 ## Resolved defects
 
 1. Session mounting now creates the shared layout before any slot can use it.
@@ -30,7 +36,7 @@ All five phases are complete for `1.0.1`. The existing `v1.0.0` tag and reposito
 
 ## Phase 1: Restore a valid source tree
 
-Status: complete in the current working tree.
+Status: complete in the reviewed `1.0.1` commit.
 
 - Remove the nonexistent `packages/dsh-tui-bundle` TypeScript project reference.
 - Remove obsolete `@lk251066/dsh-tui-bundle` references from maintained documentation and release metadata.
@@ -47,7 +53,7 @@ The command exits successfully without relying on files outside the repository.
 
 ## Phase 2: Repair TUI lifecycle and session behavior
 
-Status: complete in the current working tree. The regression suite includes the construction-rollback race that previously escaped as an unhandled rejection.
+Status: complete in the reviewed `1.0.1` commit. The regression suite includes the construction-rollback race that previously escaped as an unhandled rejection.
 
 - Establish the shared layout controller before any initial slot can mount or any callback can reach it.
 - Make the active session channel an explicit input to prompt metric refresh; no render path may infer a channel that has not been published.
@@ -87,7 +93,7 @@ The dry run contains the built entry points, matching declarations, `cordis.patc
 
 ## Phase 4: Prove the real dsh entry path
 
-Status: complete in the current working tree. Installation, `why`, profile composition, module loading, keyless snapshots, and the real-PTY workflow pass against public `@deepseek-ai/dsh@0.1.0-rc.6`.
+Status: complete in the reviewed `1.0.1` commit. Installation, `why`, profile composition, module loading, keyless snapshots, and the real-PTY workflow pass against public `@deepseek-ai/dsh@0.1.0-rc.6`.
 
 - Install the generated tarball with `dsh plugin --profile tui-smoke add <absolute-tarball-path>` while `DSH_HOME` points to an empty temporary directory.
 - Confirm the profile records `@lk251066/dsh-tui` as both a dependency and a bundle layer.
@@ -123,7 +129,7 @@ All commands operate from public artifacts and the GitHub commit, npm package, a
 ## Required evidence before declaring completion
 
 - [x] No tracked changes at the reviewed commit
-- [x] Successful type check, tests, lint, build, and `git diff --check` in the current working tree
+- [x] Successful type check, tests, lint, build, and `git diff --check` at the reviewed `1.0.1` commit
 - [x] `npm pack` file list reviewed
 - [x] Clean-profile tarball installation and repaired runtime transcript
 - [x] Clean-profile registry installation transcript

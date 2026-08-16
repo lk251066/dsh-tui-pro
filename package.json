@@ -19,6 +19,7 @@
   "devDependencies": {
     "@earendil-works/pi-tui": "0.80.7",
     "@types/node": "^22.10.5",
+    "@xterm/headless": "^5.5.0",
     "get-east-asian-width": "1.6.0",
     "marked": "18.0.5",
     "oxlint": "^0.18.0",

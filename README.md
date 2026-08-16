@@ -10,6 +10,8 @@ Do not use the existing `v1.0.0` GitHub tag or repository-root `lk251066-dsh-tui
 
 The source tree, published package, empty-profile installation, and real-PTY runtime pass against public `@deepseek-ai/dsh@0.1.0-rc.6`. See [REPAIR_PLAN.md](REPAIR_PLAN.md) for the completed repair record and release evidence.
 
+The current working tree also contains an unreleased persistent workspace sidebar. It is not part of `1.0.1` until a new reviewed commit, package version, tag, and Release are published together.
+
 ## Intended installation
 
 Install the released package with:
@@ -23,13 +25,14 @@ The package itself owns the TUI plugin and its `cordis.patch.yml` profile layer.
 ## Intended features
 
 - Full-screen terminal interface
+- Persistent workspace, live-session, and active-agent status sidebar
 - Multi-session navigation and session resume
 - Personal assistant session with optional memory integration
 - Fleet monitoring across sessions
 - Syntax highlighting, diff rendering, and Markdown rendering
 - Approval dialogs with risk confirmation
 
-These features pass the published-package PTY smoke and repository snapshot suite. The registry package was installed into a new public dsh host and an empty `DSH_HOME` before the release was declared complete.
+The `1.0.1` feature set passes the published-package PTY smoke and repository snapshot suite. The unreleased sidebar passes source checks, 440 tests, artifact packing, and clean-profile public-host loading. It still requires a new real-PTY verification and a version bump before the next release.
 
 ## Development
 

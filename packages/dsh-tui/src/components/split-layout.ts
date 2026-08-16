@@ -11,9 +11,15 @@ import {
 } from '@earendil-works/pi-tui'
 import type { Palette } from './theme.ts'
 
-const PREFERRED_LEFT_WIDTH = 40
+const DEFAULT_LEFT_WIDTH = 32
 const MIN_LEFT_WIDTH = 24
 const MIN_RIGHT_WIDTH = 40
+
+/** User-configurable sizing for the persistent navigation pane. */
+export interface SplitLayoutOptions {
+  /** Preferred left-pane width before the chat minimum forces it smaller. */
+  readonly preferredLeftWidth?: number
+}
 
 function padToWidth(value: string, width: number): string {
   const clipped = truncateToWidth(value, Math.max(0, width), '')
@@ -26,8 +32,11 @@ export class SplitLayoutComponent extends Container {
   private rightPane: Component | undefined
   private leftWidth = 0
 
-  constructor(private readonly palette: Palette) {
+  private readonly preferredLeftWidth: number
+
+  constructor(private readonly palette: Palette, options: SplitLayoutOptions = {}) {
     super()
+    this.preferredLeftWidth = Math.max(MIN_LEFT_WIDTH, Math.floor(options.preferredLeftWidth ?? DEFAULT_LEFT_WIDTH))
   }
 
   /** Replace the navigation pane. */
@@ -47,7 +56,7 @@ export class SplitLayoutComponent extends Container {
   override render(width: number): string[] {
     if (this.leftPane === undefined || this.rightPane === undefined || width < 3) return []
     this.leftWidth = Math.max(1, Math.min(
-      PREFERRED_LEFT_WIDTH,
+      this.preferredLeftWidth,
       Math.max(MIN_LEFT_WIDTH, width - MIN_RIGHT_WIDTH - 1),
       width - 2,
     ))
@@ -55,10 +64,11 @@ export class SplitLayoutComponent extends Container {
     const leftLines = this.leftPane.render(this.leftWidth)
     const rightLines = this.rightPane.render(rightWidth)
     const rowCount = Math.max(leftLines.length, rightLines.length)
+    const leftStart = rowCount - leftLines.length
     const separator = this.palette.dim('│')
 
     return Array.from({ length: rowCount }, (_, index) => {
-      const left = padToWidth(leftLines[index] ?? '', this.leftWidth)
+      const left = padToWidth(leftLines[index - leftStart] ?? '', this.leftWidth)
       const right = truncateToWidth(rightLines[index] ?? '', rightWidth, '')
       return `${left}${separator}${right}`
     })

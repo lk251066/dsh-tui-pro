@@ -193,6 +193,7 @@ function provideLlmCatalog(ctx: Context): void {
 describe('TUI config', () => {
   it('defaults every direct-call TUI option', () => {
     expect(resolveTuiConfig(undefined)).toEqual({
+      sidebarWidth: 32,
       showReasoning: false,
       maxToolOutputLines: 6,
       maxDiffEditLength: 1000,
@@ -221,6 +222,7 @@ describe('TUI config', () => {
       title: 'DeepSeek Harness',
     })
     expect(resolveTuiConfig({
+      sidebarWidth: 36,
       showReasoning: false,
       maxToolOutputLines: 2,
       maxDiffEditLength: 12,
@@ -240,6 +242,7 @@ describe('TUI config', () => {
       theme: { color: false, truecolor: true },
       title: 'DSH',
     })).toEqual({
+      sidebarWidth: 36,
       showReasoning: false,
       maxToolOutputLines: 2,
       maxDiffEditLength: 12,
@@ -2095,7 +2098,6 @@ describe('pi-tui chat lifecycle and transcript', () => {
       source: { kind: 'plugin', plugin: 'hooks' },
     }), { surfaceOp: 'append' })
     await tick()
-    expect(result.terminal.output).toContain('1 queued')
     result.terminal.output = ''
     drainSteering('after')
     await tick()
@@ -2158,6 +2160,67 @@ describe('pi-tui chat lifecycle and transcript', () => {
     expect(result.terminal.output).not.toContain('queued')
 
     await dispose(result)
+  })
+
+  it('keeps queue state visible in the terminal viewport while unrelated transcript rows append', async () => {
+    const terminal = new HeadlessTerminal(140, 32)
+    const result = await createTuiTestHarness(terminal, vi.fn(), {
+      status: 'running',
+      cwd: '/workspace',
+    })
+    await terminal.waitForFrame(0)
+
+    const beforeQueue = terminal.frames
+    terminal.send('queued work')
+    terminal.send('\r')
+    await terminal.waitForFrame(beforeQueue)
+    await expect(terminal.snapshot()).resolves.toMatch(/Queue\s+1/u)
+
+    const beforeDurableMessage = terminal.frames
+    result.session.append('user/message', createUserMessage({
+      content: [{ type: 'text', text: 'unrelated context' }],
+      source: { kind: 'plugin', plugin: 'hooks' },
+    }), { surfaceOp: 'append' })
+    await terminal.waitForFrame(beforeDurableMessage)
+    await expect(terminal.snapshot()).resolves.toMatch(/Queue\s+1/u)
+
+    const beforeLongTranscript = terminal.frames
+    for (let index = 0; index < 40; index++) {
+      result.session.append('user/message', createUserMessage({
+        content: [{ type: 'text', text: `transcript row ${String(index)}` }],
+        source: { kind: 'plugin', plugin: 'hooks' },
+      }), { surfaceOp: 'append' })
+    }
+    await terminal.waitForFrame(beforeLongTranscript)
+    const longTranscript = await terminal.snapshot()
+    expect(longTranscript).toContain('Workspace')
+    expect(longTranscript).toContain('Status')
+    expect(longTranscript).toMatch(/Queue\s+1/u)
+
+    const beforeResize = terminal.frames
+    terminal.resize(140, 24)
+    await terminal.waitForFrame(beforeResize)
+    const resized = await terminal.snapshot()
+    expect(resized).toContain('Status')
+    expect(resized).toMatch(/Queue\s+1/u)
+
+    const queuedId = result.agent.steeredIds.shift()
+    if (queuedId === undefined) throw new Error('expected queued steering id')
+    const beforeDrain = terminal.frames
+    agentEvents(result.ctx, result.agent).emit('agent/inbox/claimed', {
+      message: inboxItem(freezeMessage({
+        id: queuedId,
+        role: 'user',
+        content: [{ type: 'text', text: 'queued work' }],
+        source: { kind: 'user' },
+      }), 'steering'),
+      turn: 1,
+    })
+    await terminal.waitForFrame(beforeDrain)
+    await expect(terminal.snapshot()).resolves.toMatch(/Queue\s+0/u)
+
+    await disposeTuiTestHarness(result)
+    await terminal.dispose()
   })
 
   it('shows idle example and queue placeholder hints and pops queued messages into the editor with ↑', async () => {

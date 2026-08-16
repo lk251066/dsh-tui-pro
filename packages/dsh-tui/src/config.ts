@@ -32,6 +32,8 @@ export interface TuiThemeConfig {
 
 /** Interaction and presentation settings for the pi-tui terminal mode. */
 export interface TuiConfig {
+  /** Preferred width of the persistent workspace sidebar in terminal columns. */
+  sidebarWidth?: number
   /** Expand settled model reasoning blocks (default folds them to one line). */
   showReasoning?: boolean
   /** Maximum tool-card body lines retained in its collapsed head/tail preview. */
@@ -71,6 +73,7 @@ export interface TuiConfig {
 }
 
 const showReasoningSchema = z.boolean().default(false)
+const sidebarWidthSchema = z.number().step(1).min(24).default(32)
 const maxToolOutputLinesSchema = z.number().step(1).min(1).default(6)
 const maxDiffEditLengthSchema = z.number().step(1).min(1).default(1000)
 const maxQuestionOptionsSchema = z.number().step(1).min(1).default(8)
@@ -107,6 +110,7 @@ const TuiThemeConfigSchema: z<TuiThemeConfig> = z.object({
 const titleSchema = z.string().default('DeepSeek Harness')
 
 const tuiConfigSchemaFields = {
+  sidebarWidth: sidebarWidthSchema,
   showReasoning: showReasoningSchema,
   maxToolOutputLines: maxToolOutputLinesSchema,
   maxDiffEditLength: maxDiffEditLengthSchema,
@@ -150,6 +154,7 @@ export const Config: z<Config> = z.object({
   welcome: z.string(),
   sessionId: z.string().default('main'),
   initialSkill: z.string(),
+  sidebarWidth: tuiConfigSchemaFields.sidebarWidth,
   showReasoning: tuiConfigSchemaFields.showReasoning,
   maxToolOutputLines: tuiConfigSchemaFields.maxToolOutputLines,
   maxDiffEditLength: tuiConfigSchemaFields.maxDiffEditLength,
@@ -183,6 +188,7 @@ export interface ResolvedTuiThemeConfig {
 
 /** Fully defaulted TUI presentation settings. */
 export interface ResolvedTuiConfig {
+  sidebarWidth: number
   showReasoning: boolean
   maxToolOutputLines: number
   maxDiffEditLength: number
@@ -211,6 +217,7 @@ export interface ResolvedTuiConfig {
  */
 export function resolveTuiConfig(config: TuiConfig | undefined): ResolvedTuiConfig {
   return {
+    sidebarWidth: config?.sidebarWidth ?? 32,
     showReasoning: config?.showReasoning ?? false,
     maxToolOutputLines: config?.maxToolOutputLines ?? 6,
     maxDiffEditLength: config?.maxDiffEditLength ?? 1000,

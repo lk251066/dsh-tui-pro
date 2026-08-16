@@ -480,6 +480,7 @@ function createTuiChatInternal(
   let channel!: SessionChannel
   let goalBar!: GoalBarController
   let queueDock!: QueueDockController
+  let sessionLayout: SessionLayoutController | undefined
   const now = (): number => runtime.now?.() ?? Date.now()
   const agentStatus = (): AgentStatus => agent.status
   const isDisposed = (): boolean =>
@@ -488,7 +489,7 @@ function createTuiChatInternal(
   // A configured subtitle renders as a banner line; when absent, the banner has
   // no subtitle. The banner itself sweeps in on start (see startBannerReveal).
   let sessionTitle = foldSessionTitle(agent.session.events)?.title
-  const formattedCwd = displayText(runtime.formatCwd?.(agent.session.header.cwd) ?? formatCwd(agent.session.header.cwd))
+  let formattedCwd = displayText(runtime.formatCwd?.(agent.session.header.cwd) ?? formatCwd(agent.session.header.cwd))
   /**
    * Condensed identity segments for a session that already carries
    * conversation (Claude Code's CondensedLogo convention): the five-row
@@ -512,7 +513,7 @@ function createTuiChatInternal(
     resolved.theme.color && resolved.theme.truecolor,
     condensedHeaderInfo,
   )
-  const branch = runtime.gitBranch?.(cwd) ?? gitBranch(cwd)
+  let branch = runtime.gitBranch?.(cwd) ?? gitBranch(cwd)
   const promptValues: TuiPromptValueHandle[] = [
     ctx.tuiPrompt.register('cwd', palette.bold(palette.accent(formattedCwd))),
     ctx.tuiPrompt.register('git/worktree', branch === undefined ? undefined : palette.dim(` (${displayText(branch)})`)),
@@ -559,6 +560,7 @@ function createTuiChatInternal(
 
   const updatePromptValues = (): void => {
     const renderTime = now()
+    sessionLayout?.refresh()
     const tokens = channel.tokens()
     cwdValue.set(palette.bold(palette.accent(formattedCwd)))
     gitValue.set(branch === undefined ? undefined : palette.dim(` (${displayText(branch)})`))
@@ -593,11 +595,27 @@ function createTuiChatInternal(
     // Shift+Tab's preset ring and the plan-mode chip; absent services render nothing.
     const preset = permissionController.chip()
     permissionValue.set(preset === undefined || preset === 'custom' ? undefined : palette.dim(` [${preset}]`))
-    planValue.set(foldPlanMode(agent.session.events)
+    const planActive = foldPlanMode(agent.session.events)
+    planValue.set(planActive
       ? palette.bold(palette.accent(' ⎇ plan'))
       : undefined)
     const stats = statsStrip(insights)
     statsValue.set(stats === undefined ? undefined : palette.dim(`  ${stats}`))
+    sessionLayout?.updateStatus({
+      cwd: displayText(agent.session.header.cwd ?? cwd),
+      branch: branch === undefined ? undefined : displayText(branch),
+      status: agent.status,
+      model: displayText(target.current === undefined ? 'model unset' : compactTargetLabel(target.current)),
+      contextPercent: occupancy,
+      inputTokens: tokens.input,
+      outputTokens: tokens.output,
+      cacheHitRate: rate,
+      // The channel tracks newly submitted steering until the inbox projection
+      // catches up. Both counts can describe the same messages, so never sum.
+      queued: Math.max(queueDock.pendingCount(), channel.pendingSteeringCount()),
+      permission: preset,
+      plan: planActive,
+    })
     symbolValue.set(palette.bold(palette.accent('dsh')))
     compactionStatusLine.setText(channel.isCompacting()
       ? palette.dim(`Context being compacted ${formatStatusDuration(renderTime - (channel.compactingStartedAt() ?? renderTime))}`)
@@ -951,8 +969,6 @@ function createTuiChatInternal(
   // The registry mounts its initial slot before returning. That first mount
   // uses the chat directly; once the registry exists, startup replaces it
   // synchronously with the persistent split layout before the terminal starts.
-  let sessionLayout: SessionLayoutController | undefined
-
   /** Wire one slot's components into the shared chrome and start its listeners. */
   const mountSlot = (slot: TuiSessionSlot): void => {
     // Publish the mounted slot before attach: listener callbacks and repaint
@@ -964,7 +980,7 @@ function createTuiChatInternal(
     if (sessionLayout === undefined) {
       ui.children.splice(1, 0, slot.channel.chat)
     } else {
-      sessionLayout.splitLayout.setLeftPane(sessionLayout.sessionList)
+      sessionLayout.splitLayout.setLeftPane(sessionLayout.sidebar)
       sessionLayout.splitLayout.setRightPane(slot.channel.chat)
       ui.children.splice(1, 0, sessionLayout.splitLayout)
     }
@@ -1024,6 +1040,9 @@ function createTuiChatInternal(
       // its transcript from the log so events it missed render now.
       next.channel.rebuildTranscript(false)
       void ctx.sessions.flush(previous.agent.session).catch(() => {})
+      const nextCwd = next.agent.session.header.cwd ?? cwd
+      formattedCwd = displayText(runtime.formatCwd?.(nextCwd) ?? formatCwd(nextCwd))
+      branch = runtime.gitBranch?.(nextCwd) ?? gitBranch(nextCwd)
       sessionTitle = foldSessionTitle(next.agent.session.events)?.title
       header.invalidate()
       updateTerminalTitle()
@@ -1123,6 +1142,7 @@ function createTuiChatInternal(
     palette,
     registry,
     terminalRows: () => runtime.terminal.rows,
+    sidebarWidth: resolved.sidebarWidth,
     focusEditor: () => {
       ui.setFocus(editor)
       requestRender()
@@ -1130,7 +1150,7 @@ function createTuiChatInternal(
     requestRender,
   })
   sessionLayout = persistentLayout
-  persistentLayout.splitLayout.setLeftPane(persistentLayout.sessionList)
+  persistentLayout.splitLayout.setLeftPane(persistentLayout.sidebar)
   persistentLayout.splitLayout.setRightPane(registry.active().channel.chat)
   const initialChatIndex = ui.children.indexOf(registry.active().channel.chat)
   if (initialChatIndex < 0) throw new Error('ui-tui: initial session chat is not mounted')
@@ -1141,6 +1161,18 @@ function createTuiChatInternal(
     ui.setFocus(persistentLayout.sessionList)
     requestRender()
   }
+
+  // Mounted channels already request renders for their own events. Background
+  // channels are detached, so wake the shared chrome when one of their rows
+  // changes; updatePromptValues() then rebuilds the full live-session list.
+  const disposeBackgroundSessionEvents = ctx.on('session/event', (sourceSession) => {
+    const slot = registry.slots().find(candidate => candidate.agent.session === sourceSession)
+    if (slot !== undefined && !registry.isActive(slot)) requestRender()
+  })
+  const disposeBackgroundStatusChanges = ctx.on('agent/status', ({ agent: source }) => {
+    const slot = registry.slots().find(candidate => candidate.agent === source)
+    if (slot !== undefined && !registry.isActive(slot)) requestRender()
+  })
 
   updatePromptValues()
 
@@ -2217,6 +2249,8 @@ function createTuiChatInternal(
     disposeCommandChanges()
     disposeSkillChanges()
     disposePromptChanges()
+    disposeBackgroundSessionEvents()
+    disposeBackgroundStatusChanges()
     for (const value of promptValues) value.dispose()
     stopBannerReveal()
     stopLogoShimmer()

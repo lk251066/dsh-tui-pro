@@ -17,6 +17,9 @@ importers:
       '@types/node':
         specifier: ^22.10.5
         version: 22.20.1
+      '@xterm/headless':
+        specifier: ^5.5.0
+        version: 5.5.0
       get-east-asian-width:
         specifier: 1.6.0
         version: 1.6.0

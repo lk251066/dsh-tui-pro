@@ -4,6 +4,22 @@ All notable changes to this project will be documented in this file.
 
 The `v1.0.0` tag is not an installable public release: no npm package was published, and the repository-root tarball does not contain the required dsh bundle metadata. See [REPAIR_PLAN.md](REPAIR_PLAN.md) for the first verified release criteria.
 
+## Unreleased
+
+### Added
+
+- Add a configurable persistent workspace sidebar with live sessions, agent status, model, context, token, queue, permission, and plan values.
+
+### Changed
+
+- Keep detached session titles, activity, and running state current without requiring the user to switch sessions.
+- Preserve the sidebar on narrow terminals; below the combined pane minimum, the chat uses the remaining columns instead of hiding the workspace panel.
+
+### Fixed
+
+- Keep the sidebar aligned with the visible end of long transcripts and after terminal height changes.
+- Verify queue state through the complete terminal viewport instead of treating incremental ANSI writes as a complete screen.
+
 ## [1.0.1] - 2026-08-16
 
 ### Fixed

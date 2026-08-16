@@ -8,6 +8,11 @@ import { SessionId } from '@deepseek-ai/dsh-session'
 import { SessionListComponent, type SessionListItem } from '../components/session-list.ts'
 import { SplitLayoutComponent } from '../components/split-layout.ts'
 import type { Palette } from '../components/theme.ts'
+import { displayText } from '../components/text.ts'
+import {
+  WorkspaceSidebarComponent,
+  type WorkspaceSidebarState,
+} from '../components/workspace-sidebar.ts'
 import type { ChannelRegistry } from './channel-registry.ts'
 import type { TuiSessionSlot } from '../index.ts'
 
@@ -17,8 +22,12 @@ export interface SessionLayoutController {
   readonly splitLayout: SplitLayoutComponent
   /** The focusable live-session navigator. */
   readonly sessionList: SessionListComponent
-  /** Rebuild the sidebar rows from current registry state. */
+  /** The full persistent workspace, session, and status pane. */
+  readonly sidebar: WorkspaceSidebarComponent
+  /** Rebuild the sidebar rows from current registry state for the next render. */
   refresh(): void
+  /** Update active-session operational values without rebuilding navigation. */
+  updateStatus(state: WorkspaceSidebarState): void
 }
 
 /** Collaborators required by the persistent session layout. */
@@ -27,6 +36,8 @@ export interface SessionLayoutDeps {
   readonly registry: ChannelRegistry<TuiSessionSlot>
   /** Current terminal height, used to bound the sidebar rows. */
   terminalRows(): number
+  /** Preferred sidebar width in terminal columns. */
+  sidebarWidth: number
   /** Return keyboard focus to the chat editor. */
   focusEditor(): void
   /** Request a full repaint after navigation or registry changes. */
@@ -42,8 +53,8 @@ function formatAge(ageMs: number): string {
 
 function titleOf(slot: TuiSessionSlot): string {
   const titleEvent = slot.agent.session.events.findLast(event => event.type === 'session/title')
-  if (titleEvent?.type === 'session/title') return titleEvent.data.title
-  return String(slot.sessionId)
+  if (titleEvent?.type === 'session/title') return displayText(titleEvent.data.title)
+  return displayText(String(slot.sessionId))
 }
 
 function itemOf(slot: TuiSessionSlot, activeId: SessionId, now: number): SessionListItem {
@@ -52,7 +63,7 @@ function itemOf(slot: TuiSessionSlot, activeId: SessionId, now: number): Session
   return {
     id: String(slot.sessionId),
     title: titleOf(slot),
-    cwd: slot.agent.session.header.cwd ?? '(unknown)',
+    cwd: displayText(slot.agent.session.header.cwd ?? '(unknown)'),
     status: slot.agent.status,
     lastActivityAgo: formatAge(Math.max(0, now - lastActivityAt)),
     isActive: slot.sessionId === activeId,
@@ -65,15 +76,18 @@ function itemOf(slot: TuiSessionSlot, activeId: SessionId, now: number): Session
  * @returns The layout controller mounted by the TUI host.
  */
 export function createSessionLayout(deps: SessionLayoutDeps): SessionLayoutController {
-  const splitLayout = new SplitLayoutComponent(deps.palette)
+  const splitLayout = new SplitLayoutComponent(deps.palette, { preferredLeftWidth: deps.sidebarWidth })
   const sessionList = new SessionListComponent(deps.palette, {
-    maxRows: () => Math.max(4, deps.terminalRows() - 8),
+    // Workspace and status sections retain their rows; sessions consume the
+    // remaining viewport and scroll around the selected item.
+    maxRows: () => Math.max(4, deps.terminalRows() - 22),
     onActivate: (sessionId) => {
       deps.registry.switchTo(SessionId(sessionId))
     },
     onExit: deps.focusEditor,
     onChange: deps.requestRender,
   })
+  const sidebar = new WorkspaceSidebarComponent(deps.palette, sessionList)
 
   const refresh = (): void => {
     const activeId = deps.registry.activeId()
@@ -84,8 +98,15 @@ export function createSessionLayout(deps: SessionLayoutDeps): SessionLayoutContr
         left.agent.session.header.createdAt - right.agent.session.header.createdAt)
       .map(slot => itemOf(slot, activeId, now))
     sessionList.setItems(items, sessionList.focused ? undefined : String(activeId))
-    deps.requestRender()
   }
 
-  return { splitLayout, sessionList, refresh }
+  return {
+    splitLayout,
+    sessionList,
+    sidebar,
+    refresh,
+    updateStatus(state): void {
+      sidebar.update(state)
+    },
+  }
 }

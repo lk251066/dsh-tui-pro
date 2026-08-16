@@ -4,6 +4,8 @@
 
 The registry package passes a real PTY flow covering startup, optional-memory diagnostics, new sessions, the assistant session, the session picker, keyboard switching, and clean shutdown. [Pull request #1](https://github.com/lk251066/dsh-tui-pro/pull/1), commit [`e521522`](https://github.com/lk251066/dsh-tui-pro/commit/e521522cf969a916193cd646fa204d156b9facc8), the annotated `v1.0.1` tag, npm package, and [GitHub Release](https://github.com/lk251066/dsh-tui-pro/releases/tag/v1.0.1) are aligned.
 
+The current working tree contains unreleased persistent-sidebar changes. They keep workspace, session, status, and queue information visible beside long transcripts and after terminal resizing, and keep detached session titles and running state current. The packed plugin passes empty-profile loading and a real-PTY screen replay that contains every sidebar section. These changes require a new reviewed release before they can be described as available from npm or GitHub Releases.
+
 [REPAIR_PLAN.md](REPAIR_PLAN.md) is the authoritative repair plan and progress document. [TESTING.md](TESTING.md) records the audit baseline and the evidence required before release.
 
 The public release is complete. Catalog submission can use [PLUGIN_SUBMISSION.md](PLUGIN_SUBMISSION.md); publication to npm and GitHub does not itself add the plugin to an external catalog.

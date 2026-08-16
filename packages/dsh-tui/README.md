@@ -26,6 +26,10 @@ After successful installation and profile validation:
 dsh --profile tui
 ```
 
+The TUI keeps a left workspace sidebar mounted beside the active chat. Workspace shows the active directory and branch, Sessions lists the live sessions in the current process, and Status shows the active agent, model, context, token, cache, queue, permission, and plan values. The fixed prompt context remains below the editor.
+
+Press Left Arrow from the editor to focus Sessions. Use Up and Down to select, Enter to switch, and Right Arrow or Escape to return to the editor. Persisted sessions from previous processes remain available through `/resume`; the sidebar lists only sessions live in the current process.
+
 ## Configuration
 
 The bundled `cordis.patch.yml` installs the TUI with these defaults:
@@ -35,9 +39,12 @@ The bundled `cordis.patch.yml` installs the TUI with these defaults:
   name: '@lk251066/dsh-tui'
   config:
     sessionId: main
+    sidebarWidth: 32
     showReasoning: true
     maxToolOutputLines: 6
 ```
+
+`sidebarWidth` sets the preferred workspace sidebar width in terminal columns, defaults to 32, and accepts values of 24 or greater. The sidebar never auto-hides. Below 65 total columns it keeps its 24-column minimum and the chat uses the remaining space; below 26 columns both panes shrink. A height of at least 24 rows is recommended to keep Workspace, Sessions, Status, and the editor visible together. The sidebar stays aligned with the visible end of long transcripts.
 
 The package also exports `@lk251066/dsh-tui/prompt` and `@lk251066/dsh-tui/invariant` for its bundle composition. Treat the bundled patch as the supported entry path; direct manual profile composition must provide every service injected by the TUI. Long-term memory is optional and is not mounted by the default bundle because no compatible public `@deepseek-ai/dsh-memory` package is available.
 

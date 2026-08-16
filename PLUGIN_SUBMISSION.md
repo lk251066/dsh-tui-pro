@@ -35,7 +35,7 @@ dsh plugin --profile tui add @lk251066/dsh-tui
 
 ## Submission checklist
 
-- [x] Source type check, tests, lint, and build pass in the current working tree.
+- [x] Source type check, tests, lint, and build pass at the reviewed `1.0.1` commit.
 - [x] The local npm tarball contains all exports and `cordis.patch.yml`.
 - [x] Every runtime package referenced by the rebuilt bundle resolves from a clean dsh profile.
 - [x] Rebuilt tarball installation activates the package as a profile bundle.

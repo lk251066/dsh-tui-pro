@@ -4,7 +4,7 @@ This guide covers local development and release verification for `@lk251066/dsh-
 
 ## Current status
 
-The current working tree passes the source, packed-artifact, public-host, and real-PTY checks. It is not releasable until the review, npm, tag, and GitHub Release steps in [REPAIR_PLAN.md](REPAIR_PLAN.md) are complete.
+The published `1.0.1` commit passes the source, packed-artifact, public-host, and real-PTY checks. Unreleased working-tree changes must repeat the relevant checks before they are submitted or published; see [REPAIR_PLAN.md](REPAIR_PLAN.md).
 
 ## Prerequisites
 
