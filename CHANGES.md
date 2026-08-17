@@ -1,5 +1,9 @@
 # Terminal Workbench
 
+## 1.6.3 changes
+
+Click a project session in the right sidebar, then press `Delete` from an empty input to remove it from `Active sessions`. The current conversation remains open and usable, and its complete history remains available through `/sessions`. The assistant cannot be removed. A non-empty input keeps normal editor `Delete` behavior.
+
 ## 1.6.2 changes
 
 Stopped active sessions now keep their display title when the session-query service finishes mounting shortly after the TUI. Resuming a stopped session releases the newly created agent if workspace attachment or UI adoption fails, so the same session can be opened again instead of remaining blocked by an invisible live agent.

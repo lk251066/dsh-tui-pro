@@ -518,6 +518,72 @@ describe('multi-session switching (/new, /sessions)', () => {
     }
   })
 
+  it('removes the clicked current project session from Active with Delete while preserving history and use', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dsh-tui-sidebar-remove-'))
+    const { harness, created } = await switchHarness(root)
+    try {
+      submit(harness, '/new')
+      await tick()
+      expect(created).toHaveLength(1)
+
+      // Select the original session in the sidebar, then remove that current
+      // session from the active workspace list with two immediate key presses.
+      harness.terminal.send('\x1b[<0;60;11M')
+      await tick()
+      const workspace = harness.ctx.workspaceRegistry.list()[0]!
+      const detach = vi.spyOn(workspace, 'detachSession')
+      harness.terminal.send('\x1b[3~')
+      harness.terminal.send('\x1b[3~')
+      await tick()
+
+      expect(detach).toHaveBeenCalledTimes(1)
+      expect(detach).toHaveBeenCalledWith(SessionId('main-session'))
+      expect(workspace.sessionIds).not.toContain(SessionId('main-session'))
+      expect(harness.terminal.output).toContain('Removed from active sessions. History preserved.')
+
+      submit(harness, 'still using removed session')
+      await tick()
+      expect(harness.agent.sentMessages.at(-1)?.content).toEqual([
+        { type: 'text', text: 'still using removed session' },
+      ])
+
+      submit(harness, '/sessions')
+      await tick()
+      const history = harness.terminal.output.slice(harness.terminal.output.lastIndexOf('Sessions'))
+      expect(history).toContain('all history (2)')
+      expect(history).toContain('current · history')
+    } finally {
+      await disposeTuiTestHarness(harness)
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it('keeps Delete as editor input when a draft exists and never removes the assistant', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dsh-tui-delete-guard-'))
+    const { harness } = await switchHarness(root)
+    try {
+      const workspace = harness.ctx.workspaceRegistry.list()[0]!
+      harness.terminal.send('draftx')
+      harness.terminal.send('\x1b[D')
+      harness.terminal.send('\x1b[3~')
+      harness.terminal.send('\r')
+      await tick()
+      expect(harness.agent.sentMessages.at(-1)?.content).toEqual([{ type: 'text', text: 'draft' }])
+      expect(workspace.sessionIds).toContain(SessionId('main-session'))
+
+      submit(harness, '/assistant')
+      await tick()
+      const before = [...workspace.sessionIds]
+      harness.terminal.send('\x1b[3~')
+      await tick()
+      expect(workspace.sessionIds).toEqual(before)
+      expect(harness.terminal.output).toContain('The assistant is always active.')
+    } finally {
+      await disposeTuiTestHarness(harness)
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   it('keeps model and reasoning effort independent across live sessions', async () => {
     const { harness, created } = await switchHarness()
     try {

@@ -28,6 +28,26 @@ The 2026-08-15 repair checks and 2026-08-16 release verification produced these 
 
 The source checks passed on the reviewed commit, and the final integration checks used the anonymous public registry rather than a workspace link or local tarball.
 
+## 1.6.3 release verification
+
+The `1.6.3` checks cover selecting a project session through the right sidebar and removing it from Active with empty-input `Delete`. They also prove that duplicate key presses start one removal, the current conversation remains usable, `/sessions` retains its history, editor `Delete` still edits a draft, and the assistant cannot be removed.
+
+Current source evidence:
+
+| Check | Result |
+| --- | --- |
+| Focused session-switch tests | Passed: 1 file, 27 tests |
+| `pnpm run typecheck` | Passed |
+| `pnpm run test` | Passed: 39 files, 463 tests |
+| `pnpm run lint` | Passed with 39 warnings and no errors |
+| `pnpm run build` | Passed |
+| `git diff --check` | Passed |
+| `pnpm run pack:artifact` | Passed: 316 files in the `1.6.3` artifact |
+| Packed-artifact audit | Passed for exports, bundle metadata, patched editor, and runtime dependencies |
+| Windows empty-profile installation | Passed against public dsh rc.6 using the packed tarball; `why` and `--dump-config` resolved `1.6.3` |
+| Linux empty-profile installation | Passed against public dsh rc.6 using the packed tarball; `why` and `--dump-config` resolved `1.6.3` |
+| Linux real PTY | Passed command paths, mouse reporting, session switching, export, frame/sidebar rendering, and shutdown |
+
 ## 1.6.2 release verification
 
 The `1.6.2` checks add failed workspace-attachment and UI-adoption rollback with a successful retry, delayed stopped-session title lookup with disposal cancellation, and strict PNG/JPEG attachment-store reads that require the complete durable reference. The existing text clipboard, session switching, public-host, and real-PTY paths remain part of release verification. Clipboard image capture is not implemented.

@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 The `v1.0.0` tag is not an installable public release: no npm package was published, and the repository-root tarball does not contain the required dsh bundle metadata. See [REPAIR_PLAN.md](REPAIR_PLAN.md) for the first verified release criteria.
 
+## [1.6.3] - 2026-08-17
+
+### Added
+
+- Remove the current project session from the active workspace list with `Delete` after selecting it in the sidebar.
+
+### Fixed
+
+- Keep `Delete` available for normal text editing whenever the input contains a draft.
+- Prevent repeated key presses from starting duplicate removal operations, and keep the assistant permanently active.
+
 ## [1.6.2] - 2026-08-17
 
 ### Fixed

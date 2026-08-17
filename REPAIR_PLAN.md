@@ -6,9 +6,13 @@ This document is the source of truth for making `@lk251066/dsh-tui` independentl
 
 Ship one package: `@lk251066/dsh-tui`. Its package manifest already defines `dsh.bundle.patch`, so the repository will not create or publish a separate `@lk251066/dsh-tui-bundle` compatibility package.
 
-The published `1.5.0` package, annotated tag, checksummed GitHub Release, source version, and lockfile identify release commit `9d201d2`. Version `1.6.2` is the current release against public `@deepseek-ai/dsh@0.1.0-rc.6`.
+The published `1.5.0` package, annotated tag, checksummed GitHub Release, source version, and lockfile identify release commit `9d201d2`. Version `1.6.3` is the current release against public `@deepseek-ai/dsh@0.1.0-rc.6`.
 
-The `1.6.0` scope covers reliable active-session switching, direct transcript selection and clipboard delivery, turn-level visual hierarchy, and per-block disclosure interactions inside the existing fixed workbench. The `1.6.1` repair removes the redundant `/copy` command, clarifies the active-session count, and resumes stopped sessions from another workspace in-process on hosts that cannot hand off the terminal. The `1.6.2` repair makes failed resume setup retryable, waits briefly for stopped-session title lookup, and preserves complete stored-image references.
+The `1.6.0` scope covers reliable active-session switching, direct transcript selection and clipboard delivery, turn-level visual hierarchy, and per-block disclosure interactions inside the existing fixed workbench. The `1.6.1` repair removes the redundant `/copy` command, clarifies the active-session count, and resumes stopped sessions from another workspace in-process on hosts that cannot hand off the terminal. The `1.6.2` repair makes failed resume setup retryable, waits briefly for stopped-session title lookup, and preserves complete stored-image references. The `1.6.3` repair adds direct active-session removal after sidebar selection.
+
+## Version 1.6.3 active-session removal
+
+Clicking a sidebar row activates that session. Pressing `Delete` with an empty focused input and no completion or dialog removes the current project session from the workspace's Active list. The live conversation stays mounted and the session log remains available through `/sessions`. The assistant is permanent, a draft keeps editor `Delete` behavior, and one pending removal blocks duplicate key presses.
 
 ## Version 1.6.2 repair
 

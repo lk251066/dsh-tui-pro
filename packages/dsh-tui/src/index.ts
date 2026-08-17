@@ -1434,6 +1434,30 @@ function createTuiChatInternal(
     activateSession(next)
   }
 
+  let removingActiveSession: SessionId | undefined
+  const removeCurrentActiveSession = (): void => {
+    const sessionId = agent.session.id
+    if (sessionId === ASSISTANT_SESSION_ID) {
+      showTransientNotice('The assistant is always active.')
+      return
+    }
+    if (removingActiveSession !== undefined) return
+    if (!workspaceSessions.has(sessionId)) {
+      showTransientNotice('This session is not in active sessions.')
+      return
+    }
+    removingActiveSession = sessionId
+    void workspaceSessions.remove(sessionId).then((removed) => {
+      if (isDisposed()) return
+      if (removed) showTransientNotice('Removed from active sessions. History preserved.')
+    }, (error: unknown) => {
+      if (!isDisposed()) appendNotice(`Remove active session failed: ${errorChain(error)}`, 'error')
+    }).finally(() => {
+      if (removingActiveSession === sessionId) removingActiveSession = undefined
+      if (!isDisposed()) requestRender()
+    })
+  }
+
   let switchOverlay: TuiOverlaySession | undefined
   const showSessionSwitcher = (): void => {
     const items = sessionLayout?.sessionList.getItems() ?? []
@@ -1772,6 +1796,7 @@ function createTuiChatInternal(
     channel.chat.addChild(new Text([
       'Enter send/steer • Tab queue while running • Shift/Alt+Enter newline • Up/Down prompt history',
       'Esc cancel turn; double Esc edits a checkpoint • Alt+Left/Right switch active sessions',
+      'Delete remove the current project session from Active; history is preserved',
       'Ctrl+O cycle cards (collapse/expand/hide) • Ctrl+R toggle reasoning • Ctrl+L redraw',
       'Shift+Tab cycle permission preset • Ctrl+G goal actions • Ctrl+C cancel/clear/exit • Ctrl+D exit',
       '',
@@ -2340,6 +2365,10 @@ function createTuiChatInternal(
     }
     if (fastSessionSwitch && matchesKey(data, 'alt+right')) {
       cycleActiveSession(1)
+      return { consume: true }
+    }
+    if (fastSessionSwitch && matchesKey(data, Key.delete)) {
+      removeCurrentActiveSession()
       return { consume: true }
     }
     if (matchesKey(data, Key.pageUp)) {

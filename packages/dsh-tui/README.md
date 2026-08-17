@@ -4,7 +4,7 @@ Interactive terminal UI plugin and profile bundle for [DeepSeek Harness](https:/
 
 ## Release status
 
-Version [`1.6.2`](https://www.npmjs.com/package/@lk251066/dsh-tui/v/1.6.2) is the current release. Its source, artifact, empty-profile installation, and real PTY evidence are recorded in [TESTING.md](../../TESTING.md).
+Version [`1.6.3`](https://www.npmjs.com/package/@lk251066/dsh-tui/v/1.6.3) is the current release. Its source, artifact, empty-profile installation, and real PTY evidence are recorded in [TESTING.md](../../TESTING.md).
 
 ## Installation
 
@@ -44,7 +44,7 @@ The bundled profile opens the active project session for the current directory. 
 
 Use `/sessions` to replace the left chat area with complete history while the outer frame and right sidebar remain fixed. Up and Down select a row, Enter opens it, Tab switches between complete history and the active list, and Space adds or removes a project session from the active workspace list. Escape returns to the transcript. Removing membership never deletes the session log. Use `/assistant` for the fixed personal assistant session.
 
-Use `Alt+Left` and `Alt+Right` from an empty editor to cycle active workspace sessions without opening a browser. Use `/switch` for the bottom selector, or `/switch next`, `/switch previous`, `/switch <number>`, and `/switch <exact title>` for direct switching. Clicking an active row in the right sidebar opens it. Stopped sessions resume in the current process using each session's own workspace path, including sessions from another workspace. Persisted session titles are shown before a stopped session is opened.
+Use `Alt+Left` and `Alt+Right` from an empty editor to cycle active workspace sessions without opening a browser. Use `/switch` for the bottom selector, or `/switch next`, `/switch previous`, `/switch <number>`, and `/switch <exact title>` for direct switching. Clicking an active row in the right sidebar opens it. With that project session selected, press `Delete` while the input is empty to remove it from Active. The conversation remains open and its history remains available through `/sessions`; the assistant cannot be removed. A non-empty input keeps normal editor `Delete` behavior. Stopped sessions resume in the current process using each session's own workspace path, including sessions from another workspace. Persisted session titles are shown before a stopped session is opened.
 
 Drag directly across transcript text with the left mouse button to select and copy it. ANSI styles are removed from copied text, while Chinese and emoji graphemes remain intact. Local terminals use the system clipboard; tmux uses its clipboard forwarding; SSH and other unsupported local clipboard paths use OSC 52. The mouse wheel continues to scroll transcript history while mouse reporting is active.
 
