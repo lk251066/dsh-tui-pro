@@ -6,6 +6,8 @@ Version `1.7.0` is the current release. Its source, artifact, public-host, PTY, 
 
 The public repository carries the `dsh-plugin` GitHub topic, which is dshfind's official submission mechanism. The current listing is <https://dshfind.com/zh/plugins/lk251066/dsh-tui-pro>. The page is live after publication; its directory metadata can lag the npm and Release records until the next catalog sync.
 
+The private repository-root manifest mirrors the published package name and points `dsh.bundle.patch` at `packages/dsh-tui/cordis.patch.yml`. This lets dshfind's root-manifest probe associate the monorepo with the checksummed `@lk251066/dsh-tui` Release asset without making the repository root publishable.
+
 The repair and acceptance evidence are tracked in [REPAIR_PLAN.md](REPAIR_PLAN.md). Catalog publication remains a separate submission action.
 
 ## Package information
@@ -47,6 +49,7 @@ dsh plugin --profile tui add @lk251066/dsh-tui
 - [x] User-visible behavior has keyless snapshot coverage and reproducible terminal evidence.
 - [x] The `1.7.0` npm version, GitHub tag, GitHub Release, and release commit agree.
 - [x] The public installation command succeeds without the development workspace or `.tarballs/` directory.
+- [x] The repository-root discovery metadata identifies the published plugin and its nested bundle patch for the next dshfind catalog probe.
 
 ## Public links
 

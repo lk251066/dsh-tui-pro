@@ -46,6 +46,9 @@ Current source evidence:
 | Windows empty-profile installation | Passed against public dsh rc.6; `why`, `--dump-config`, module loading, and the expected non-TTY stop resolved `1.7.0` |
 | Linux empty-profile installation | Passed in a new WSL `/tmp` host and `DSH_HOME` against public dsh rc.6; `why` and `--dump-config` resolved `1.7.0` |
 | Linux real PTY | Passed welcome and compact headers, fixed layout, command paths, memory toggle, clipboard-image failure, session switching, export, and shutdown |
+| npm registry | Passed for public `@lk251066/dsh-tui@1.7.0`; registry SHA-1 is `c023ea4fc8460761219d1af28c34578acfc70e36` |
+| GitHub Release | Passed for `v1.7.0`; the Release contains the npm registry tarball and its SHA-256 file |
+| dshfind discovery metadata | Passed locally: the private root manifest identifies `@lk251066/dsh-tui` and the nested bundle patch; the public listing updates after dshfind's next catalog probe |
 
 ## 1.6.3 release verification
 

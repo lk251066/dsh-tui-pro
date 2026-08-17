@@ -1,8 +1,13 @@
 {
-  "name": "dsh-tui-pro",
+  "name": "@lk251066/dsh-tui",
   "version": "1.7.0",
   "private": true,
   "type": "module",
+  "dsh": {
+    "bundle": {
+      "patch": "./packages/dsh-tui/cordis.patch.yml"
+    }
+  },
   "engines": {
     "node": "^22.19.0 || >=24.0.0",
     "pnpm": "^11.7.0"
