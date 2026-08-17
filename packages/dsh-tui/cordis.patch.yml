@@ -60,7 +60,7 @@
     - id: tui
       name: '@lk251066/dsh-tui'
       config:
-        showReasoning: true
+        showReasoning: false
         maxToolOutputLines: 6
 
     - id: tool-ask-user

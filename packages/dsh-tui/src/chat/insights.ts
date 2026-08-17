@@ -250,12 +250,12 @@ interface SettingsDescriptor {
 export function settingsLines(deps: InsightsDeps): string[] {
   const settings = deps.ctx.get('settings') as {
     describe?: (options: { redactSecrets: boolean }) => Array<SettingsDescriptor>
-    documentPath?: () => string | undefined
+    readonly documentPath?: string
   } | undefined
   if (settings?.describe === undefined) return ['Settings are not available in this session.']
   const rows = settings.describe({ redactSecrets: true }).map(descriptor =>
     `${descriptor.user === undefined ? ' ' : '*'} ${descriptor.ns.padEnd(16)} ${descriptor.user === undefined ? 'default' : 'user override'}`)
-  const path = settings.documentPath?.()
+  const path = settings.documentPath
   return [...rows, '', `Edit ${path ?? 'the settings file'} — changes hot-reload.`]
 }
 
@@ -308,8 +308,8 @@ export function exportMarkdown(session: Session): string {
 }
 
 /** Write the transcript atomically (temp file + rename) and return the path. */
-export function writeExport(cwd: string, session: Session): string {
-  const path = join(cwd, `dsh-export-${String(session.id)}-${new Date().toISOString().replace(/[:.]/gu, '-')}.md`)
+export function writeExport(cwd: string, session: Session, outputPath?: string): string {
+  const path = outputPath ?? join(cwd, `dsh-export-${String(session.id)}-${new Date().toISOString().replace(/[:.]/gu, '-')}.md`)
   const temp = `${path}.tmp-${randomUUID()}`
   writeFileSync(temp, exportMarkdown(session), 'utf8')
   renameSync(temp, path)

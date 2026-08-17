@@ -6,7 +6,9 @@ This document is the source of truth for making `@lk251066/dsh-tui` independentl
 
 Ship one package: `@lk251066/dsh-tui`. Its package manifest already defines `dsh.bundle.patch`, so the repository will not create or publish a separate `@lk251066/dsh-tui-bundle` compatibility package.
 
-All five phases are complete for `1.0.2`. The existing `v1.0.0` tag and repository-root tarball remain invalid release inputs. The published npm package, annotated `v1.0.2` tag, checksummed GitHub Release, and reviewed commit are aligned, and the registry package passes a real-PTY flow against public `@deepseek-ai/dsh@0.1.0-rc.6`.
+The published `1.2.0` artifact remains the last verified release. The `1.3.0` release must align source, package version, lockfile, npm artifact, GitHub tag/release, and real PTY evidence against public `@deepseek-ai/dsh@0.1.0-rc.6`.
+
+The `1.3.0` scope is limited to command correctness and visible workbench behavior: settings getter access, model-effort selection, per-session model state, explicit export paths, fork activation, removal of unavailable commands, settled thinking and diff presentation, and mouse-wheel transcript scrolling.
 
 ## Version 1.1.0 terminal workbench
 
@@ -18,7 +20,11 @@ The same source also renders user messages before their assistant responses, sta
 
 The current source uses the official dsh workspace registry as the durable active-session index. Current-directory startup resumes the first active project session or creates and attaches one. The sidebar shows active membership rather than recent history; `/sessions` searches complete history and changes membership without deleting logs; `/assistant` remains a fixed entry. The assistant receives only the six direct session tools and no additional management prompt rules.
 
-Type checking, all 432 tests, lint with 38 warnings and no errors, build, the 307-file artifact audit, empty-profile installation against public dsh rc.6, and the clean Linux real-PTY flow pass for the `1.2.0` tarball. The artifact audit checks the workspace launcher export and dependency, and the public-host check confirms both workspace bundle rows are active.
+Type checking, all 422 tests, lint, build, artifact packing, empty-profile installation against public dsh rc.6, and the clean Linux real-PTY flow are the required evidence for the `1.3.0` tarball. The artifact audit checks the workspace launcher export and dependency, and the public-host check confirms every bundle row is active.
+
+## Version 1.3.0 command and display repair
+
+The current source fixes the rc.6 settings getter, adds `/effort`, isolates model selection per live session, makes `/fork` activate the new session, and makes `/export [path]` honor its path. It removes commands whose integrations are not part of the public bundle. The alternate-screen workbench consumes SGR and X10 mouse-wheel events before the editor and applies them only to transcript scrolling. Thinking, tool cards, and diff summaries have explicit settled-state rendering and visibility controls.
 
 ## Version 1.0.2 sidebar release
 

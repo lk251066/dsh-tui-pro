@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import type { Terminal } from '@earendil-works/pi-tui'
 import { agentEvents, type Agent } from '@deepseek-ai/dsh-agent'
-import type { UserMessage } from '@deepseek-ai/dsh-llm'
+import { ReasoningEffortId, type UserMessage } from '@deepseek-ai/dsh-llm'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import {
   appendUser,
@@ -103,14 +103,42 @@ async function switchHarness(cwd = '/workspace'): Promise<{
   const created: CreatedAgentRecord[] = []
   const terminal = new RecordingTerminal()
   const exit = vi.fn()
-  const harness = await createTuiTestHarness(terminal, exit, { cwd })
+  const harness = await createTuiTestHarness(terminal, exit, {
+    cwd,
+    agentOptions: { provider: 'alpha', model: 'a1' },
+    catalog: {
+      providers: [{ id: 'alpha', name: 'Alpha' }, { id: 'beta', name: 'Beta' }],
+      models: [
+        { provider: 'alpha', id: 'a1', name: 'Alpha One' },
+        { provider: 'beta', id: 'b1', name: 'Beta One' },
+      ],
+      resolveModelInfo: async (provider) => ({
+        context: { contextWindow: 100_000 },
+        reasoning: provider === 'alpha'
+          ? {
+              efforts: [
+                { id: ReasoningEffortId('low'), name: 'Low' },
+                { id: ReasoningEffortId('high'), name: 'High' },
+              ],
+              defaultEffort: ReasoningEffortId('low'),
+            }
+          : {
+              efforts: [
+                { id: ReasoningEffortId('standard'), name: 'Standard' },
+                { id: ReasoningEffortId('max'), name: 'Max' },
+              ],
+              defaultEffort: ReasoningEffortId('standard'),
+            },
+      }),
+    },
+  })
   harness.ctx.agents.setFactory({
     async createAgent(_ownerCtx, options) {
       const session = harness.ctx.sessions.create(options.sessionId, { meta: options.meta })
       const followups: string[] = []
       const agent = {
         id: options.sessionId,
-        options: {},
+        options: { provider: 'beta', model: 'b1' },
         session,
         status: 'idle',
         ctx: harness.ctx,
@@ -208,6 +236,26 @@ describe('multi-session switching (/new, /sessions)', () => {
     }
   })
 
+  it('/fork activates the branched session and routes input into it', async () => {
+    const { harness, created } = await switchHarness()
+    try {
+      harness.session.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
+      submit(harness, '/fork')
+      await tick()
+      expect(created).toHaveLength(1)
+      expect(harness.terminal.output).toContain('Forked into session-')
+      const forkedId = created[0]?.agent.session.id
+      expect(harness.ctx.workspaceRegistry.list().flatMap(workspace => workspace.sessionIds)).toContain(forkedId)
+
+      submit(harness, 'continue on branch')
+      await tick()
+      expect(created[0]?.followups).toEqual(['continue on branch'])
+      expect(harness.agent.sentMessages).toHaveLength(0)
+    } finally {
+      await disposeTuiTestHarness(harness)
+    }
+  })
+
   it('/sessions lists active sessions and search switches back', async () => {
     const { harness, created } = await switchHarness()
     try {
@@ -241,6 +289,38 @@ describe('multi-session switching (/new, /sessions)', () => {
       ])
       // The second session's agent heard nothing more.
       expect(created[0]?.followups).toEqual(['hello second'])
+    } finally {
+      await disposeTuiTestHarness(harness)
+    }
+  })
+
+  it('keeps model and reasoning effort independent across live sessions', async () => {
+    const { harness, created } = await switchHarness()
+    try {
+      submit(harness, '/effort high')
+      await tick()
+      expect(harness.terminal.output).toContain('Reasoning effort: High.')
+
+      submit(harness, '/new')
+      await tick()
+      expect(created).toHaveLength(1)
+      submit(harness, '/effort max')
+      await tick()
+      expect(harness.terminal.output).toContain('Reasoning effort: Max.')
+
+      await switchTo(harness, 'main-session')
+      const firstOutput = harness.terminal.output.length
+      submit(harness, '/effort')
+      await tick()
+      expect(harness.terminal.output.slice(firstOutput)).toContain('Reasoning effort: High.')
+      expect(harness.terminal.output.slice(firstOutput)).toContain('Available: low, high.')
+
+      await switchTo(harness, String(created[0]?.agent.session.id))
+      const secondOutput = harness.terminal.output.length
+      submit(harness, '/effort')
+      await tick()
+      expect(harness.terminal.output.slice(secondOutput)).toContain('Reasoning effort: Max.')
+      expect(harness.terminal.output.slice(secondOutput)).toContain('Available: standard, max.')
     } finally {
       await disposeTuiTestHarness(harness)
     }

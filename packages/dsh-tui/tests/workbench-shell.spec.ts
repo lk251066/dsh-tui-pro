@@ -82,6 +82,20 @@ describe('WorkbenchShellComponent', () => {
     expect(bottom.some(line => line.includes('row 11'))).toBe(true)
   })
 
+  it('scrolls by individual rows for mouse-wheel input', () => {
+    const transcript = Array.from({ length: 12 }, (_, index) => `row ${String(index)}`).join('\n')
+    const workbench = createWorkbench({ rows: 8, transcript })
+
+    workbench.scrollByRows(100, 1)
+    const older = workbench.render(100).map(stripSgr).join('\n')
+    expect(older).toContain('row 9')
+    expect(older).toContain('row 10')
+    expect(older).not.toContain('row 11')
+
+    workbench.scrollByRows(100, -1)
+    expect(workbench.render(100).map(stripSgr).join('\n')).toContain('row 11')
+  })
+
   it('replaces only the active transcript', () => {
     const workbench = createWorkbench({ transcript: 'first' })
     workbench.setTranscript(new Text('second', 0, 0))

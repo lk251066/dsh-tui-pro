@@ -511,14 +511,16 @@ function assistantMessageChildren(
   const foldsReasoning = settled && reasoning !== '' && !showReasoning
   if (foldedContinuation && !showsReasoning && !foldsReasoning && text === '') return []
   const children: Component[] = [new Spacer(1)]
+  const duration = thinkingMs === undefined ? '' : ` for ${formatStatusDuration(thinkingMs)}`
   if (foldsReasoning) {
-    const duration = thinkingMs === undefined ? '' : ` · ${formatStatusDuration(thinkingMs)}`
     children.push(new Text(palette.italic(palette.dim(
       `${THINKING_GLYPH} Thinking${duration} ${shortcutHint('ctrl+r', 'expand')}`,
     )), 0, 0))
   } else if (showsReasoning) {
     children.push(
-      new Text(palette.italic(palette.dim(`${THINKING_GLYPH} Thinking…`)), 0, 0),
+      new Text(palette.italic(palette.dim(
+        `${THINKING_GLYPH} Thinking${settled ? duration : '…'}`,
+      )), 0, 0),
       new Markdown(reasoning, 0, 0, mdTheme, { color: value => palette.dim(value), italic: true }),
     )
   }
@@ -994,9 +996,9 @@ export class ToolCardComponent extends CachedCardComponent {
       const files = new Set(view.diffs.map(diff => diff.path)).size
       const footer = [
         this.palette.dim('└ '),
-        this.palette.bold(`+${added}`),
+        this.palette.success(this.palette.bold(`+${added}`)),
         this.palette.dim(' · '),
-        this.palette.bold(`-${removed}`),
+        this.palette.error(this.palette.bold(`-${removed}`)),
         this.palette.dim(` · ${files} file${files === 1 ? '' : 's'}${approximate ? ' · approximate' : ''}`),
       ].join('')
       // A diff's own `+`/`-` colors carry its meaning, so it renders verbatim

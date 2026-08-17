@@ -7,10 +7,36 @@ import type { Terminal } from '@earendil-works/pi-tui'
 
 const ENTER_ALTERNATE_SCREEN = '\x1b[?1049h\x1b[H\x1b[?7l'
 const LEAVE_ALTERNATE_SCREEN = '\x1b[?7h\x1b[?1049l'
+const ENABLE_MOUSE_REPORTING = '\x1b[?1000h\x1b[?1006h'
+const DISABLE_MOUSE_REPORTING = '\x1b[?1006l\x1b[?1000l'
+
+/** Mouse input decoded before it can reach the prompt editor. */
+export type TerminalMouseInput = 'wheel-up' | 'wheel-down' | 'mouse'
+
+/**
+ * Decode SGR or legacy X10 mouse input emitted while mouse reporting is active.
+ * @param data - One complete input sequence from pi-tui's stdin buffer.
+ * @returns The wheel direction, another mouse event, or `undefined` for keyboard input.
+ */
+export function terminalMouseInput(data: string): TerminalMouseInput | undefined {
+  const sgr = /^\x1b\[<(\d+);\d+;\d+[Mm]$/u.exec(data)
+  if (sgr !== null) {
+    const button = Number.parseInt(sgr[1] ?? '', 10)
+    if ((button & 64) === 0) return 'mouse'
+    return (button & 1) === 0 ? 'wheel-up' : 'wheel-down'
+  }
+  if (data.length === 6 && data.startsWith('\x1b[M')) {
+    const button = data.charCodeAt(3) - 32
+    if ((button & 64) === 0) return 'mouse'
+    return (button & 1) === 0 ? 'wheel-up' : 'wheel-down'
+  }
+  return undefined
+}
 
 /** Runs each TUI start/stop cycle inside the terminal's alternate screen. */
 export class FullScreenTerminal implements Terminal {
   private alternateScreenActive = false
+  private mouseReportingActive = false
 
   constructor(private readonly terminal: Terminal) {}
 
@@ -22,7 +48,9 @@ export class FullScreenTerminal implements Terminal {
     this.enterAlternateScreen()
     try {
       this.terminal.start(onInput, onResize)
+      this.enableMouseReporting()
     } catch (error: unknown) {
+      this.disableMouseReporting()
       this.leaveAlternateScreen()
       throw error
     }
@@ -30,6 +58,7 @@ export class FullScreenTerminal implements Terminal {
 
   stop(): void {
     try {
+      this.disableMouseReporting()
       this.terminal.stop()
     } finally {
       this.leaveAlternateScreen()
@@ -60,5 +89,17 @@ export class FullScreenTerminal implements Terminal {
     if (!this.alternateScreenActive) return
     this.alternateScreenActive = false
     this.terminal.write(LEAVE_ALTERNATE_SCREEN)
+  }
+
+  private enableMouseReporting(): void {
+    if (this.mouseReportingActive) return
+    this.terminal.write(ENABLE_MOUSE_REPORTING)
+    this.mouseReportingActive = true
+  }
+
+  private disableMouseReporting(): void {
+    if (!this.mouseReportingActive) return
+    this.mouseReportingActive = false
+    this.terminal.write(DISABLE_MOUSE_REPORTING)
   }
 }

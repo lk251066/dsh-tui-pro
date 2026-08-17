@@ -1,9 +1,7 @@
 /**
  * The personal-assistant session (R2-3): a fixed-id live session under the
- * shared chrome with its own persona and, when the memory plugin is mounted,
- * the assistant-scoped memory tools and recalled-memories prompt section. The
- * session persists like any other: the next process resumes the same
- * conversation, and `setup` re-installs the persona either way.
+ * shared chrome with session-management tools. The session persists like any
+ * other, so the next process resumes the same conversation.
  * @module @deepseek-ai/dsh-tui/chat/assistant
  */
 
@@ -11,11 +9,9 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { errorChain } from '@deepseek-ai/dsh-llm'
 import { SessionId } from '@deepseek-ai/dsh-session'
-import { PERSONA_ORDER, PERSONA_SECTION } from '@deepseek-ai/dsh-system-prompt'
 import type { TuiSessionSlot } from '../index.ts'
 import type { ChannelRegistry } from './channel-registry.ts'
 import { installAssistantTools } from './assistant-tools.ts'
-import { optionalMemory } from './memories.ts'
 import type { WorkspaceSessions } from './workspace-sessions.ts'
 
 const installedAssistantScopes = new WeakMap<Context, WeakSet<object>>()
@@ -24,27 +20,7 @@ const installedAssistantScopes = new WeakMap<Context, WeakSet<object>>()
 export const ASSISTANT_SESSION_ID = SessionId('assistant')
 
 /**
- * The assistant's persona, shadowing the deployment persona for this one
- * session (the same-section replacement the system-prompt registry defines).
- * Plain text: the strict `{{variable}}` interpolation rejects unknown names.
- */
-export const ASSISTANT_PERSONA = [
-  '你是这个用户的个人助手,由 {{model}} 模型驱动。',
-  '回答简洁。技术或编程请求照常处理,可以使用常规工具;但不要默认进入大型编码流程,先弄清用户想要什么。',
-].join('')
-
-/** Assistant persona used only when a compatible memory service installs its tools. */
-export const ASSISTANT_PERSONA_WITH_MEMORY = [
-  '你是这个用户的个人助手,由 {{model}} 模型驱动。',
-  '你有跨对话的持久记忆:回答任何关于用户偏好、背景或过往约定的问题之前,先用 memory_search 检索;',
-  '当用户陈述值得长期记住的事实或偏好时,主动调用 memory_save 保存——一条记忆只写一件独立的事,已列出的不重复保存。',
-  '回答简洁。技术或编程请求照常处理,可以使用常规工具;但不要默认进入大型编码流程,先弄清用户想要什么。',
-].join('')
-
-/**
- * Install the assistant's scoped world on one (unpublished) agent context: the
- * persona shadow plus, when the memory service is mounted, its tools and the
- * auto-recalled memories section, plus the assistant-specific session control tools.
+ * Install the assistant's session-control tools on one agent context.
  * @param agentCtx - the agent scope `setup` receives.
  * @param registry - the multi-session registry for session control tools.
  */
@@ -57,17 +33,7 @@ export function setupAssistant(
   if (registries.has(registry)) return
   registries.add(registry)
   installedAssistantScopes.set(agentCtx, registries)
-  agentCtx.inject(['systemPrompt', 'tools'], (promptCtx: Context) => {
-    const memory = optionalMemory(promptCtx)
-    promptCtx.systemPrompt.section({
-      name: PERSONA_SECTION,
-      order: PERSONA_ORDER,
-      text: memory === undefined ? ASSISTANT_PERSONA : ASSISTANT_PERSONA_WITH_MEMORY,
-    })
-    // Optional by design: without the memory plugin the assistant is still a
-    // persona-shifted session, never a broken one.
-    memory?.installTools(promptCtx)
-    // Install assistant-specific session control tools
+  agentCtx.inject(['tools'], (promptCtx: Context) => {
     installAssistantTools(promptCtx, registry, workspaceSessions)
   })
 }

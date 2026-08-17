@@ -1,5 +1,13 @@
 # Terminal Workbench
 
+## 1.3.0 changes
+
+The workbench remains in the terminal alternate screen with a fixed outer frame, fixed sidebar, and fixed editor. Keyboard Page Up/Page Down and mouse-wheel input scroll only the transcript; input never receives wheel escape sequences. The transcript renders user messages before the assistant response, settled thinking as a duration summary when hidden, and tool/diff cards with their configured visibility and colored change counts.
+
+`/settings` reads the rc.6 settings document path correctly. `/effort` queries or changes only levels advertised by the current model. Model and reasoning selections belong to each live session, so switching sessions cannot leak the previous session's selection. `/fork` adds and opens the new project session, and `/export [path]` writes to the requested path.
+
+The public command set is documented in the package README. Removed experimental or unavailable commands are not registered.
+
 The TUI is a fixed full-screen workbench. The left area owns the transcript, tool output, dialogs, and editor. Page Up and Page Down scroll only the transcript. The right sidebar and input stay fixed inside the outer terminal frame.
 
 The sidebar contains Workspace, Active, Current, and Status. Active is a user-maintained list, not recent-session history: it always includes the personal assistant entry, then project sessions stored through the dsh workspace registry. A stopped active session stays visible. Removing one from the list retains its session log.

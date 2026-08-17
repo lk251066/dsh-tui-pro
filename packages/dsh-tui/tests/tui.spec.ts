@@ -43,7 +43,7 @@ import {
 } from '../src/index.ts'
 import { WorkspaceFileSearch } from '../src/chat/file-autocomplete.ts'
 import { ResumePicker } from '../src/components/dialogs.ts'
-import { ATTRIBUTE_ROLES, brandText, COLOR_ROLES, createPalette, paletteSpec } from '../src/components/theme.ts'
+import { brandText, createPalette } from '../src/components/theme.ts'
 import { TOOL_SETTLED } from '../src/components/figures.ts'
 import {
   appendAssistant,
@@ -1589,6 +1589,32 @@ describe('pi-tui chat lifecycle and transcript', () => {
     terminal.send('\x1b[6~')
     await terminal.waitForFrame(beforeDown)
     expect(await terminal.snapshot()).toContain('history row 39')
+    await disposeTuiTestHarness(result)
+  })
+
+  it('routes the mouse wheel to transcript history without inserting mouse bytes into the editor', async () => {
+    const terminal = new HeadlessTerminal(100, 24)
+    const result = await createTuiTestHarness(terminal, vi.fn(), {
+      omitInitialLifecycle: true,
+      omitWelcome: true,
+      beforeMount(session) {
+        for (let index = 0; index < 40; index += 1) appendUser(session, `wheel row ${String(index)}`)
+      },
+    })
+    await terminal.waitForFrame(0)
+    expect(await terminal.snapshot()).toContain('wheel row 39')
+
+    const before = terminal.frames
+    terminal.send('\x1b[<64;10;10M')
+    await terminal.waitForFrame(before)
+    const older = await terminal.snapshot()
+    expect(older).not.toContain('wheel row 39')
+    expect(older).toContain('Workspace')
+    expect(older).toContain('dsh >')
+
+    terminal.send('clean prompt')
+    terminal.send('\r')
+    expect(result.agent.sent).toEqual([[{ type: 'text', text: 'clean prompt' }]])
     await disposeTuiTestHarness(result)
   })
 
@@ -3159,11 +3185,9 @@ describe('pi-tui chat lifecycle and transcript', () => {
     expect(result.agent.cancelled).toContainEqual({ kind: 'user' })
 
     result.agent.status = 'idle'
-    for (const command of ['/help', '/palette', '/reload']) {
-      result.terminal.send(command)
-      result.terminal.send('\r')
-      await tick()
-    }
+    result.terminal.send('/help')
+    result.terminal.send('\r')
+    await tick()
     for (const command of ['/clear', '/wat']) {
       result.terminal.send(command)
       result.terminal.send('\r')
@@ -3183,8 +3207,6 @@ describe('pi-tui chat lifecycle and transcript', () => {
     expect(result.terminal.output).toContain('Reasoning expanded.')
     expect(result.terminal.output).toContain('Tool and context cards')
     expect(result.terminal.output).toContain('Unknown command')
-    // /reload without a Loader in the context degrades to a warning.
-    expect(result.terminal.output).toContain('/reload needs the cordis Loader')
     expect(result.exit).toHaveBeenCalledWith(0)
 
     // The exit above left the TUI disposed (the mocked runtime.exit returns):
@@ -3987,6 +4009,50 @@ describe('pi-tui chat lifecycle and transcript', () => {
     await dispose(result)
   })
 
+  it('/effort reports and sets only levels advertised by the selected model', async () => {
+    const result = await setup({
+      agentOptions: { provider: 'alpha', model: 'a1' },
+      catalog: {
+        providers: [{ id: 'alpha', name: 'Alpha' }],
+        models: [{ provider: 'alpha', id: 'a1', name: 'Alpha One' }],
+        resolveModelInfo: () => Promise.resolve({
+          context: { contextWindow: 100_000 },
+          reasoning: {
+            efforts: [
+              { id: ReasoningEffortId('low'), name: 'Low' },
+              { id: ReasoningEffortId('high'), name: 'High' },
+            ],
+            defaultEffort: ReasoningEffortId('low'),
+          },
+        }),
+      },
+    })
+
+    result.terminal.send('/effort')
+    result.terminal.send('\r')
+    await vi.waitFor(() => {
+      expect(result.terminal.output).toContain('Reasoning effort: Low.')
+      expect(result.terminal.output).toContain('Available: low, high.')
+    })
+    result.terminal.send('/effort high')
+    result.terminal.send('\r')
+    await vi.waitFor(() => { expect(result.terminal.output).toContain('Reasoning effort: High.') })
+    await result.ctx.systemPrompt.assemble(assembleContextFor(result.agent))
+    const request = await agentEvents(result.ctx, result.agent).waterfall(
+      'agent/request',
+      { turn: 0, step: 0, signal: new AbortController().signal },
+      () => Promise.resolve({ provider: 'seed', model: 'seed' }),
+    )
+    expect(request).toEqual({ provider: 'alpha', model: 'a1', reasoningEffort: ReasoningEffortId('high') })
+
+    result.terminal.send('/effort impossible')
+    result.terminal.send('\r')
+    await vi.waitFor(() => {
+      expect(result.terminal.output).toContain('Unknown reasoning effort: impossible. Available: low, high.')
+    })
+    await dispose(result)
+  })
+
   it('restores the logged model, keeps an unlisted current model visible, and reports catalog failures', async () => {
     const resumed = await setup({
       agentOptions: { provider: 'alpha', model: 'configured' },
@@ -4244,19 +4310,16 @@ describe('pi-tui chat lifecycle and transcript', () => {
       'clear',
       'context',
       'details',
+      'effort',
       'exit',
       'export',
-      'fleet',
       'fork',
       'help',
       'jobs',
-      'memories',
       'model',
       'new',
-      'palette',
       'queue',
       'quit',
-      'reload',
       'rename',
       'sessions',
       'settings',
@@ -6682,42 +6745,6 @@ describe('terminal mounting', () => {
     await ctx.fiber.dispose()
   })
 
-  it('degrades /reload to a warning when mounted as a real plugin without a Loader', async () => {
-    // Production shape: the TUI runs inside a plugin fiber, where a bare
-    // `ctx.loader` proxy read would THROW `cannot get property without
-    // inject` — only the non-throwing `ctx.get` lookup degrades gracefully.
-    const ctx = new Context()
-    provideTokenMeter(ctx)
-    provideLlmCatalog(ctx)
-    await ctx.plugin(SessionStore)
-    await ctx.plugin(AgentRegistry)
-    await ctx.plugin(CommandService)
-    await ctx.plugin(UserInteractionService)
-    await ctx.plugin(TuiPromptService)
-    ctx.provide('tools', { get: () => undefined } as never)
-    provideWorkspaceRegistry(ctx)
-    const session = ctx.sessions.create(SessionId('main'))
-    ctx.agents.register({
-      id: session.id, options: {}, session, status: 'idle', ctx,
-      followup: () => {}, steer: () => ({ outcome: Promise.resolve({ status: 'rejected' as const }) }), inject: () => {}, send: () => {}, updateInbox: () => 'not-found', reserveTurnAdmission: () => undefined, cancel() {}, whenIdle: () => Promise.resolve(),
-    })
-    const terminal = new FakeTerminal()
-    // Mirror dsh-tui's own inject (minus loader, the absence under test).
-    await ctx.plugin({
-      inject: ['agents', 'commands', 'userQuestions', 'tools', 'llm', 'tokenMeter', 'tuiPrompt', 'workspaceRegistry'],
-      apply: (pluginCtx: Context) => {
-        mountTui(pluginCtx, { theme: { color: false } }, { terminal, exit: vi.fn() })
-      },
-    })
-    await tick()
-    expect(terminal.started).toBe(1)
-    terminal.send('/reload')
-    terminal.send('\r')
-    await tick()
-    expect(terminal.output).toContain('/reload needs the cordis Loader')
-    await ctx.fiber.dispose()
-  })
-
   it('waits for its configured agent before starting the TUI', async () => {
     const ctx = new Context()
     provideTokenMeter(ctx)
@@ -6905,37 +6932,6 @@ describe('terminal mounting', () => {
     await ctx.fiber.dispose()
   })
 
-  it('prints every palette role through /palette, each painted by the code it reports', async () => {
-    const result = await setup({ config: { theme: { color: true } }, terminalRows: 80 })
-    const before = result.terminal.output.length
-    result.terminal.send('/palette')
-    result.terminal.send('\r')
-    await tick()
-    const printed = result.terminal.output.slice(before)
-
-    // Every declared role appears with its purpose, so a role added to the spec
-    // without a listing entry (or the reverse) fails here rather than silently
-    // going unlisted.
-    const spec = paletteSpec('dark')
-    for (const name of COLOR_ROLES) {
-      expect(printed).toContain(name)
-      expect(printed).toContain(spec.colors[name].purpose)
-    }
-    for (const name of ATTRIBUTE_ROLES) {
-      expect(printed).toContain(name)
-      expect(printed).toContain(spec.attributes[name].purpose)
-    }
-
-    // Each row is painted by the role it names, so the listing cannot report one
-    // code while rendering another: the sample carries the spec's own open code.
-    expect(printed).toContain(`\x1b[${spec.colors.accent.open}m`)
-    expect(printed).toContain(`\x1b[${spec.colors.dim.open}m`)
-    expect(printed).toContain(`\x1b[${spec.attributes.selected.open}m`)
-    // `text` is the terminal default, emitted as no escape at all.
-    expect(printed).toContain('no escape')
-    await dispose(result)
-  })
-
   it('uses the official DeepSeek SVG ink for truecolor brand art', () => {
     expect(brandText('mark')).toBe('\x1b[38;2;77;107;254mmark\x1b[39m')
   })
@@ -6990,91 +6986,4 @@ describe('terminal mounting', () => {
     expect(terminal.output).toContain('\x1b[2;39m (tui-staging)')
     await disposeTuiTestHarness(result)
   })
-  it('runs /reload against every file-backed loader subtree, reports completion, and rejects re-entry while in flight', async () => {
-    const refreshed: string[] = []
-    let releaseRefresh!: () => void
-    const gate = new Promise<void>((resolve) => { releaseRefresh = resolve })
-    const result = await setup({
-      configureContext: async (ctx) => {
-        ctx.provide('tools', { get: () => undefined } as never)
-        // A structural Loader: two file-backed subtrees and one plain entry.
-        // The first subtree blocks on a gate so re-entry can be probed
-        // deterministically mid-flight.
-        ctx.provide('loader', {
-          entries: () => [
-            { subtree: { refresh: async () => { refreshed.push('root'); await gate } } },
-            {},
-            { subtree: { refresh: async () => { refreshed.push('nested') } } },
-          ],
-        } as never)
-      },
-    })
-    result.terminal.send('/reload')
-    result.terminal.send('\r')
-    await tick()
-    expect(result.terminal.output).toContain('Reloading 2 config tree(s)')
-    // Second /reload while the first is gated: refused, no extra refreshes.
-    result.terminal.send('/reload')
-    result.terminal.send('\r')
-    await tick()
-    expect(result.terminal.output).toContain('A config reload is already running.')
-    expect(refreshed.sort()).toEqual(['nested', 'root'])
-    releaseRefresh()
-    await tick()
-    expect(result.terminal.output).toContain('Config reload complete.')
-    // The guard released: a third /reload runs again.
-    result.terminal.send('/reload')
-    result.terminal.send('\r')
-    await tick()
-    expect(refreshed).toHaveLength(4)
-    await dispose(result)
-  })
-
-  it('reports a /reload failure if a refresh ever rejects', async () => {
-    const result = await setup({
-      configureContext: async (ctx) => {
-        ctx.provide('tools', { get: () => undefined } as never)
-        ctx.provide('loader', {
-          entries: () => [{ subtree: { refresh: () => Promise.reject(new Error('disk gone')) } }],
-        } as never)
-      },
-    })
-    result.terminal.send('/reload')
-    result.terminal.send('\r')
-    await tick()
-    expect(result.terminal.output).toContain('Config reload failed: disk gone')
-    // The failure arm also releases the re-entrancy guard.
-    result.terminal.send('/reload')
-    result.terminal.send('\r')
-    await tick()
-    expect(result.terminal.output).not.toContain('A config reload is already running.')
-    await dispose(result)
-  })
-
-  it('refuses /reload while the agent is running and allows it back at idle', async () => {
-    const refreshed: string[] = []
-    const result = await setup({
-      status: 'running',
-      configureContext: async (ctx) => {
-        ctx.provide('tools', { get: () => undefined } as never)
-        ctx.provide('loader', {
-          entries: () => [{ subtree: { refresh: async () => { refreshed.push('tree') } } }],
-        } as never)
-      },
-    })
-    result.terminal.send('/reload')
-    result.terminal.send('\r')
-    await tick()
-    expect(result.terminal.output).toContain('/reload requires an idle agent (status: running).')
-    expect(refreshed).toHaveLength(0)
-    // Back at idle the same command runs.
-    result.agent.status = 'idle'
-    result.terminal.send('/reload')
-    result.terminal.send('\r')
-    await tick()
-    expect(refreshed).toHaveLength(1)
-    expect(result.terminal.output).toContain('Config reload complete.')
-    await dispose(result)
-  })
-
 })

@@ -99,17 +99,18 @@ export class WorkbenchShellComponent implements Component {
   /** Move the active transcript one viewport toward older rows. */
   scrollPageUp(width: number): void {
     const metrics = this.transcriptMetrics(width)
-    metrics.state.offset = Math.min(
-      metrics.maxOffset,
-      metrics.state.offset + Math.max(1, metrics.rows),
-    )
+    this.scrollRows(metrics, Math.max(1, metrics.rows))
   }
 
   /** Move the active transcript one viewport toward its live tail. */
   scrollPageDown(width: number): void {
     const metrics = this.transcriptMetrics(width)
-    metrics.state.offset = Math.max(0, metrics.state.offset - Math.max(1, metrics.rows))
-    if (metrics.state.offset === 0) metrics.state.unseenRows = 0
+    this.scrollRows(metrics, -Math.max(1, metrics.rows))
+  }
+
+  /** Move the active transcript by a row count; positive values reveal older rows. */
+  scrollByRows(width: number, rows: number): void {
+    this.scrollRows(this.transcriptMetrics(width), Math.trunc(rows))
   }
 
   /** Resume following the active transcript's newest row. */
@@ -238,6 +239,14 @@ export class WorkbenchShellComponent implements Component {
       rows,
       maxOffset: Math.max(0, lineCount - rows),
     }
+  }
+
+  private scrollRows(
+    metrics: { readonly state: TranscriptViewportState; readonly maxOffset: number },
+    rows: number,
+  ): void {
+    metrics.state.offset = Math.min(metrics.maxOffset, Math.max(0, metrics.state.offset + rows))
+    if (metrics.state.offset === 0) metrics.state.unseenRows = 0
   }
 
   private renderTranscript(width: number, rows: number): string[] {

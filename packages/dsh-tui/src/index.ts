@@ -76,7 +76,7 @@ import type {
 } from './extension/types.ts'
 import { displayInlineText, displayText } from './components/text.ts'
 import { createCodeHighlighter } from './components/highlight.ts'
-import { brandText, createPalette, markdownTheme, renderPalette, selectTheme } from './components/theme.ts'
+import { brandText, createPalette, markdownTheme, selectTheme } from './components/theme.ts'
 import { THEME_PRESETS, THEME_PRESET_NAMES, type ThemePreset } from './components/theme-presets.ts'
 import {
   cacheHitRate,
@@ -102,7 +102,7 @@ import {
 } from './components/transcript.ts'
 import { FramedEditorComponent } from './components/framed-editor.ts'
 import { WorkbenchShellComponent } from './components/workbench-shell.ts'
-import { FullScreenTerminal } from './full-screen-terminal.ts'
+import { FullScreenTerminal, terminalMouseInput } from './full-screen-terminal.ts'
 import { NoticeSlotComponent, type NoticeKind } from './components/notice-slot.ts'
 import { WorkingLineComponent } from './components/working-line.ts'
 import { contextPressureLevel } from './chat/context-pressure.ts'
@@ -116,14 +116,12 @@ import {
   formatDiagnosticNumber,
   formatDiagnosticTime,
   initialTarget,
-  MemoryBrowserDialog,
   StatusCardComponent,
   PromptContextComponent,
   RenameDialog,
   targetLabel,
   ThemeDialog,
   type DetailsSelection,
-  type MemoryRowView,
   type StatusCardRow,
 } from './components/dialogs.ts'
 import {
@@ -146,8 +144,6 @@ import {
 import { createSessionLayout, type SessionLayoutController } from './chat/session-layout.ts'
 import { createWorkspaceSessions } from './chat/workspace-sessions.ts'
 import { TUI_WORKSPACE_STARTUP_KEY } from './workspace-agent-loop.ts'
-import { MEMORY_UNAVAILABLE_LINES, memoryRows, optionalMemory } from './chat/memories.ts'
-import { fleetLines } from './chat/fleet.ts'
 import {
   createChannelRegistry,
   DEFAULT_MAX_LIVE_SLOTS,
@@ -355,6 +351,8 @@ interface TuiConstructionState {
  * the slot factory, swapped under the shared chrome by the channel registry.
  */
 export interface TuiSessionSlot extends SessionSlot {
+  /** Model and reasoning selection owned only by this session. */
+  readonly target: ModelSelectionRef
   /** Transcript channel: chat container, todo strip, session listeners. */
   readonly channel: SessionChannel
   /** The goal dock (Ctrl+G actions) for this session. */
@@ -479,7 +477,14 @@ function createTuiChatInternal(
   const commandControllers = new Set<AbortController>()
   const referenceControllers = new Set<AbortController>()
   let tuiServiceFiber: Fiber | undefined
-  const target: ModelSelectionRef = { current: initialTarget(agent), assembled: undefined }
+  const initialTargetRef: ModelSelectionRef = { current: initialTarget(agent), assembled: undefined }
+  let activeTargetRef = initialTargetRef
+  const target: ModelSelectionRef = {
+    get current() { return activeTargetRef.current },
+    set current(value) { activeTargetRef.current = value },
+    get assembled() { return activeTargetRef.assembled },
+    set assembled(value) { activeTargetRef.assembled = value },
+  }
   // `updatePromptValues` (defined below) closes over the model controller, but
   // the controller needs `appendNotice`/`overlayManager`, defined after that
   // closure. Declare here, assign once after those exist, and defer the first
@@ -932,9 +937,13 @@ function createTuiChatInternal(
         if (isActiveAgent()) disposed = true
       },
     })
+    const slotTarget = slotAgent === initialAgent
+      ? initialTargetRef
+      : { current: initialTarget(slotAgent), assembled: undefined }
     return {
       sessionId: slotAgent.session.id,
       agent: slotAgent,
+      target: slotTarget,
       channel: slotChannel,
       goalBar: slotGoalBar,
       queueDock: slotQueueDock,
@@ -955,7 +964,7 @@ function createTuiChatInternal(
         },
         pendingCallLabel: callId => slotChannel.toolCardLabel(callId),
       }),
-      disposeTargetListeners: installModelSelection(slotAgent.ctx, target),
+      disposeTargetListeners: installModelSelection(slotAgent.ctx, slotTarget),
       // The @-file reference section registers on the agent's own scope (the
       // per-agent override the systemPrompt registry names in its collision
       // error). Agents sharing one context (embedders, fakes) share the first
@@ -972,6 +981,7 @@ function createTuiChatInternal(
     // Publish the mounted slot before attach: listener callbacks and repaint
     // requests must always observe the channel that owns the mounted UI.
     agent = slot.agent
+    activeTargetRef = slot.target
     channel = slot.channel
     goalBar = slot.goalBar
     queueDock = slot.queueDock
@@ -1035,6 +1045,7 @@ function createTuiChatInternal(
       formattedCwd = displayText(runtime.formatCwd?.(nextCwd) ?? formatCwd(nextCwd))
       branch = runtime.gitBranch?.(nextCwd) ?? gitBranch(nextCwd)
       sessionTitle = foldSessionTitle(next.agent.session.events)?.title
+      modelController.activateSelection()
       header.invalidate()
       updateTerminalTitle()
       setStatus(next.agent.status)
@@ -1057,7 +1068,7 @@ function createTuiChatInternal(
   if (agent.session.id === ASSISTANT_SESSION_ID) setupAssistant(agent.ctx, registry, workspaceSessions)
 
   /**
-   * Start a fresh in-process session (Ctrl+N, `/new`) and switch to it. The
+   * Start a fresh in-process session (`/new`) and switch to it. The
    * created agent runs the same loop and routing as the initial one; its slot
    * mounts under the shared chrome immediately.
    */
@@ -1085,10 +1096,8 @@ function createTuiChatInternal(
     })
   }
 
-  // The personal assistant (`/assistant`): a fixed-id session with its own
-  // persona and the memory tools, resumed across processes when its log
-  // exists. Memory stays optional — without the plugin the assistant is a
-  // persona-shifted session and `/memories` reports the gap.
+  // The personal assistant (`/assistant`): a fixed-id session with workspace
+  // management tools, resumed across processes when its log exists.
   const assistant = createAssistantController({
     ctx,
     registry,
@@ -1544,14 +1553,6 @@ function createTuiChatInternal(
     requestRender()
   }
 
-  const showPalette = (): void => {
-    channel.chat.addChild(new Spacer(1))
-    channel.chat.addChild(new Text(
-      renderPalette(palette, currentScheme, resolved.theme.color, paletteOptions()).join('\n'), 0, 0,
-    ))
-    requestRender()
-  }
-
   const showStatus = async (signal: AbortSignal): Promise<void> => {
     const assembly = await ctx.systemPrompt.assemble(assembleContextFor(agent, signal))
     /* v8 ignore next -- disposal during the awaited assembly is covered by command-owner teardown tests. */
@@ -1705,10 +1706,19 @@ function createTuiChatInternal(
     })
     commandCtx.commands.register({
       name: 'model',
-      description: 'Show or switch this session\'s model',
+      description: 'Show or switch this session\'s model; use /effort for reasoning level',
       input: { hint: '[[provider/]model]' },
       handler: ({ rawInput }) => {
         modelController.queueModelCommand(rawInput)
+        return { kind: 'success' }
+      },
+    })
+    commandCtx.commands.register({
+      name: 'effort',
+      description: 'Show or set this session\'s reasoning effort',
+      input: { hint: '[level]' },
+      handler: ({ rawInput }) => {
+        modelController.queueReasoningEffortCommand(rawInput)
         return { kind: 'success' }
       },
     })
@@ -1724,11 +1734,6 @@ function createTuiChatInternal(
       handler: ({ rawInput }) => runDetails(rawInput),
     })
     commandCtx.commands.register({
-      name: 'palette',
-      description: 'Show every color and attribute role this terminal renders',
-      handler: () => { showPalette(); return { kind: 'success' } },
-    })
-    commandCtx.commands.register({
       name: 'theme',
       description: 'Show or switch the TUI color theme',
       input: { hint: '[name]' },
@@ -1741,11 +1746,6 @@ function createTuiChatInternal(
         }
         return { kind: 'success' }
       },
-    })
-    commandCtx.commands.register({
-      name: 'reload',
-      description: 'EXPERIMENTAL (dev): re-read loader config files and apply the diff (idle only)',
-      handler: () => { runReload(); return { kind: 'success' } },
     })
     commandCtx.commands.register({
       name: 'queue',
@@ -1776,11 +1776,14 @@ function createTuiChatInternal(
     })
     commandCtx.commands.register({
       name: 'fork',
-      description: 'Branch this session at its last completed turn',
+      description: 'Branch this session at its last completed turn and open it',
       handler: async () => {
         await forkSession({
           ctx, resolved, palette, overlayManager, requestRender, isDisposed, appendNotice, agent,
-          ...runtime.handoffResume === undefined ? {} : { handoffResume: runtime.handoffResume },
+          activate: async (forkedAgent) => {
+            await workspaceSessions.add(forkedAgent.session.id)
+            if (!isDisposed()) registry.adopt(forkedAgent)
+          },
         })
         return { kind: 'success' }
       },
@@ -1829,11 +1832,12 @@ function createTuiChatInternal(
       input: { hint: '[path]' },
       handler: ({ rawInput }) => {
         const argument = rawInput.trim()
-        if (argument !== '') {
-          appendNotice('Writing to a chosen path is not supported yet; the export lands in the workspace root.', 'warning')
-        }
         try {
-          const path = writeExport(activeCwd(), agent.session)
+          const path = writeExport(
+            activeCwd(),
+            agent.session,
+            argument === '' ? undefined : resolve(activeCwd(), argument),
+          )
           showTransientNotice(`Exported to ${path}`)
         } catch (error) {
           appendNotice(`Export failed: ${errorChain(error)}`, 'error')
@@ -1868,41 +1872,8 @@ function createTuiChatInternal(
     })
     commandCtx.commands.register({
       name: 'assistant',
-      description: 'Switch to the personal assistant (resumes across restarts, keeps long-term memory)',
+      description: 'Switch to the personal assistant session',
       handler: () => { assistant.open(); return { kind: 'success' } },
-    })
-    commandCtx.commands.register({
-      name: 'memories',
-      description: 'Browse and delete the assistant\'s long-term memories',
-      handler: () => {
-        const memory = optionalMemory(ctx)
-        if (memory === undefined) {
-          appendNotice(MEMORY_UNAVAILABLE_LINES[0] ?? 'Memory is not available in this composition.', 'warning')
-          return { kind: 'success' }
-        }
-        const rows = (): MemoryRowView[] => memoryRows(memory.list())
-        const session = overlayManager.open({
-          create: () => new MemoryBrowserDialog(
-            rows(),
-            palette,
-            id => memory.remove(id),
-            () => { void session.close() },
-            rows,
-          ),
-          options: { width: 76, anchor: 'center', margin: 1 },
-        })
-        requestRender()
-        return { kind: 'success' }
-      },
-    })
-    commandCtx.commands.register({
-      name: 'fleet',
-      description: 'Monitor every persisted session in this store (cross-process)',
-      handler: async ({ signal }) => {
-        const lines = await fleetLines(insights, signal)
-        if (!isDisposed()) openStaticDialog(insights, 'Fleet', lines)
-        return { kind: 'success' }
-      },
     })
   })
   // The @-file reference prompt section registers per-slot (on each agent's
@@ -1991,55 +1962,6 @@ function createTuiChatInternal(
       },
       reportFailure,
     )
-  }
-
-  // EXPERIMENTAL, dev-only: manually re-read every file-backed loader config
-  // tree and apply the diff to the running app — the same path the HMR
-  // watcher's config-change branch drives, minus the watcher. Useful when the
-  // watcher misses an edit (replace-by-rename saves) or HMR is not mounted.
-  // Module-source hot reload stays watcher-owned; this refreshes configs only.
-  let reloadInFlight = false
-  const runReload = (): void => {
-    // Idle-only: a reload can dispose and re-mount entries mid-flight; doing
-    // that under an active turn could tear tools or the adapter out from
-    // under in-flight calls. Idleness is advisory (a send can race in after
-    // the check), but it removes the common footgun.
-    if (agent.status !== 'idle') {
-      appendNotice(`/reload requires an idle agent (status: ${agent.status}).`, 'warning')
-      return
-    }
-    // Re-entrancy guard: concurrent refreshes over a genuinely changed file
-    // would race unmutexed tree updates (create/remove interleaving); one
-    // reload at a time keeps the update pass single-writer.
-    if (reloadInFlight) {
-      appendNotice('A config reload is already running.', 'warning')
-      return
-    }
-
-    // Optional-service lookup: the TUI must not depend on the Loader (tests
-    // and embedders run without one), so `loader` stays out of `inject` and
-    // is read through the non-throwing `ctx.get` accessor — a bare `ctx.loader`
-    // proxy read would throw `cannot get property without inject` in a fiber.
-    const loader = ctx.get('loader') as { entries(): Iterable<{ subtree?: { refresh?(): Promise<void> } }> } | undefined
-    if (loader === undefined) {
-      appendNotice('/reload needs the cordis Loader; this runtime has none.', 'warning')
-      return
-    }
-    const refreshes: Promise<void>[] = []
-    for (const entry of loader.entries()) {
-      if (entry.subtree?.refresh !== undefined) refreshes.push(entry.subtree.refresh())
-    }
-    reloadInFlight = true
-    showTransientNotice(`Reloading ${refreshes.length} config tree(s)… (experimental)`)
-    // refresh() never rejects (it warns and keeps the running tree), so the
-    // join can only fulfill; the catch arm guards a future contract change.
-    void Promise.all(refreshes).then(() => {
-      showTransientNotice('Config reload complete. Unchanged files were skipped; invalid files keep the running tree (see logs).')
-    }).catch((error: unknown) => {
-      appendNotice(`Config reload failed: ${errorChain(error)}`, 'error')
-    }).finally(() => {
-      reloadInFlight = false
-    })
   }
 
   editor.onSubmit = (value: string) => {
@@ -2134,6 +2056,14 @@ function createTuiChatInternal(
   const removeInputListener = ui.addInputListener((data) => {
     if (overlayManager.hasActiveOverlay()) return undefined
 
+    const mouse = terminalMouseInput(data)
+    if (mouse !== undefined) {
+      if (mouse === 'wheel-up') workbench?.scrollByRows(runtime.terminal.columns, 3)
+      else if (mouse === 'wheel-down') workbench?.scrollByRows(runtime.terminal.columns, -3)
+      if (mouse !== 'mouse') requestRender()
+      return { consume: true }
+    }
+
     if (matchesKey(data, Key.pageUp)) {
       workbench?.scrollPageUp(runtime.terminal.columns)
       requestRender()
@@ -2168,17 +2098,6 @@ function createTuiChatInternal(
     }
     if (matchesKey(data, Key.ctrl('g'))) {
       goalBar.showActions()
-      return { consume: true }
-    }
-    // Ctrl+H returns to the assistant hub (from any session)
-    if (matchesKey(data, Key.ctrl('h'))) {
-      assistant.open()
-      return { consume: true }
-    }
-    // Ctrl+N starts a fresh in-process session and switches to it (the /new
-    // command's keyboard door); /sessions switches back.
-    if (matchesKey(data, Key.ctrl('n'))) {
-      newSession()
       return { consume: true }
     }
     if (matchesKey(data, Key.ctrl('o'))) {

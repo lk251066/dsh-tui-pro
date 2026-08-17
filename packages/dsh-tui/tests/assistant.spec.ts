@@ -2,15 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { Terminal } from '@earendil-works/pi-tui'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { UserMessage } from '@deepseek-ai/dsh-llm'
-import { Context } from '@deepseek-ai/cordis'
-import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import { createScope } from '@deepseek-ai/dsh-scope'
-import ToolRegistry from '@deepseek-ai/dsh-tools'
-import {
-  ASSISTANT_PERSONA,
-  ASSISTANT_PERSONA_WITH_MEMORY,
-  setupAssistant,
-} from '../src/chat/assistant.ts'
 import {
   createTuiTestHarness,
   disposeTuiTestHarness,
@@ -19,9 +11,8 @@ import {
 
 /**
  * The `/assistant` flow through the production TUI: a fake agent factory
- * stands in for agent-loop's (create AND resume), the fake persistence list
- * decides which path the preflight takes, and a fake `memory` service proves
- * the scoped installation.
+ * stands in for agent-loop's (create AND resume), and the fake persistence
+ * list decides which path the preflight takes.
  */
 
 class RecordingTerminal implements Terminal {
@@ -105,23 +96,6 @@ async function tick(): Promise<void> {
   await new Promise(resolve => setTimeout(resolve, 25))
 }
 
-/** One row of the memory double's backing list. */
-interface MemoryRowDouble {
-  id: string
-  text: string
-  tags: readonly string[]
-  createdAt: number
-  updatedAt: number
-}
-
-/** The optional memory service double: records the installTools receiver. */
-interface MemoryDouble {
-  installTools: (agentCtx: unknown) => void
-  list: () => MemoryRowDouble[]
-  remove: (id: string) => Promise<boolean>
-  rows: MemoryRowDouble[]
-}
-
 interface AssistantHarnessOptions {
   /** Persisted session headers the persistence preflight sees. */
   persistedIds?: string[]
@@ -133,29 +107,12 @@ async function assistantHarness(options: AssistantHarnessOptions = {}): Promise<
   harness: TuiHarness<RecordingTerminal, (code: number) => void>
   calls: FactoryCall[]
   created: CreatedAgentRecord[]
-  memory: MemoryDouble
 }> {
   const calls: FactoryCall[] = []
   const created: CreatedAgentRecord[] = []
-  const memory: MemoryDouble = {
-    installTools: vi.fn(),
-    rows: [
-      { id: 'm1', text: 'likes lattes', tags: ['food'], createdAt: 1, updatedAt: 2 },
-      { id: 'm2', text: 'hates cilantro', tags: [], createdAt: 1, updatedAt: 3 },
-    ],
-    list() {
-      return [...this.rows]
-    },
-    async remove(id: string) {
-      const before = this.rows.length
-      this.rows = this.rows.filter(row => row.id !== id)
-      return this.rows.length < before
-    },
-  }
   const terminal = new RecordingTerminal()
   const harness = await createTuiTestHarness(terminal, vi.fn(), {
     beforeMount(_session, ctx) {
-      ctx.provide('memory', memory as never)
       ctx.provide('sessionPersistence', {
         list: async () => (options.persistedIds ?? []).map(id => ({
           version: 0,
@@ -214,7 +171,7 @@ async function assistantHarness(options: AssistantHarnessOptions = {}): Promise<
       }
     },
   })
-  return { harness, calls, created, memory }
+  return { harness, calls, created }
 }
 
 function submit(harness: TuiHarness<RecordingTerminal, (code: number) => void>, line: string): void {
@@ -300,112 +257,6 @@ describe('/assistant', () => {
       await tick()
       expect(calls.map(call => call.kind)).toEqual(['resume', 'create'])
       expect(harness.terminal.output).toContain('Assistant session created.')
-    } finally {
-      await disposeTuiTestHarness(harness)
-    }
-  })
-})
-
-describe('setupAssistant', () => {
-  it('shadows the deployment persona and installs the memory tools on the agent scope', async () => {
-    const ctx = new Context()
-    await ctx.plugin(SystemPrompt)
-    await ctx.plugin(ToolRegistry)
-    const memory = { installTools: vi.fn(), list: () => [] }
-    ctx.provide('memory', memory as never)
-    // The real factory calls setup on a SCOPED agent context; the scoped
-    // layer is what turns the same-name persona section into a shadow.
-    const agentKey = {}
-    let scope!: ReturnType<typeof createScope>
-    await ctx.inject(['systemPrompt', 'tools'], (pluginCtx: Context) => {
-      scope = createScope(pluginCtx, agentKey)
-    })
-    await scope.ctx.fiber.await()
-    setupAssistant(scope.ctx, { slots: () => [] } as never, {
-      list: () => [], has: () => false, add: vi.fn(), remove: vi.fn(),
-    })
-    // The setup drives an inject fiber; wait for its observable registration.
-    await vi.waitFor(() => { expect(memory.installTools).toHaveBeenCalledTimes(1) })
-    expect(memory.installTools).toHaveBeenCalledTimes(1)
-    const globalAssembly = await ctx.systemPrompt.assemble({ scope: ctx })
-    expect(globalAssembly.sections.map(section => section.text)).not.toContain(ASSISTANT_PERSONA_WITH_MEMORY)
-    const scopedAssembly = await ctx.systemPrompt.assemble({ scope: agentKey })
-    const persona = scopedAssembly.sections.find(section => section.name === 'deployment:persona')
-    expect(persona?.text).toBe(ASSISTANT_PERSONA_WITH_MEMORY)
-    scope.dispose()
-    await ctx.fiber.dispose()
-  })
-
-  it('does not advertise memory tools when no compatible service is mounted', async () => {
-    const ctx = new Context()
-    await ctx.plugin(SystemPrompt)
-    await ctx.plugin(ToolRegistry)
-    const agentKey = {}
-    let scope!: ReturnType<typeof createScope>
-    await ctx.inject(['systemPrompt', 'tools'], (pluginCtx: Context) => {
-      scope = createScope(pluginCtx, agentKey)
-    })
-    await scope.ctx.fiber.await()
-    setupAssistant(scope.ctx, { slots: () => [] } as never, {
-      list: () => [], has: () => false, add: vi.fn(), remove: vi.fn(),
-    })
-    await vi.waitFor(async () => {
-      const assembly = await ctx.systemPrompt.assemble({ scope: agentKey })
-      const section = assembly.sections.find(candidate => candidate.name === 'deployment:persona')
-      expect(section?.text).toBe(ASSISTANT_PERSONA)
-    })
-    const scopedAssembly = await ctx.systemPrompt.assemble({ scope: agentKey })
-    const persona = scopedAssembly.sections.find(section => section.name === 'deployment:persona')
-    expect(persona?.text).toBe(ASSISTANT_PERSONA)
-    expect(persona?.text).not.toContain('memory_search')
-    expect(persona?.text).not.toContain('memory_save')
-    scope.dispose()
-    await ctx.fiber.dispose()
-  })
-})
-
-describe('/memories', () => {
-  it('lists the durable memories with a refreshable panel', async () => {
-    const { harness, memory } = await assistantHarness()
-    try {
-      submit(harness, '/memories')
-      await tick()
-      expect(harness.terminal.output).toContain('Memories')
-      expect(harness.terminal.output).toContain('likes lattes')
-      // r re-reads the store through the live service.
-      memory.list = () => [{ id: 'm2', text: 'likes oolong', tags: [], createdAt: 1, updatedAt: 3 }]
-      harness.terminal.send('r')
-      await tick()
-      expect(harness.terminal.output).toContain('likes oolong')
-    } finally {
-      await disposeTuiTestHarness(harness)
-    }
-  })
-
-  it('deletes a memory through the browser dialog', async () => {
-    const { harness, memory } = await assistantHarness()
-    try {
-      submit(harness, '/memories')
-      await tick()
-      expect(harness.terminal.output).toContain('likes lattes')
-      expect(harness.terminal.output).toContain('hates cilantro')
-      harness.terminal.send('d')
-      await tick()
-      await tick()
-      expect(memory.rows.map(row => row.id)).toEqual(['m2'])
-      expect(harness.terminal.output.slice(harness.terminal.output.lastIndexOf('Memories'))).not.toContain('likes lattes')
-    } finally {
-      await disposeTuiTestHarness(harness)
-    }
-  })
-
-  it('reports the gap when the memory plugin is absent', async () => {
-    const terminal = new RecordingTerminal()
-    const harness = await createTuiTestHarness(terminal, vi.fn(), {})
-    try {
-      submit(harness, '/memories')
-      await tick()
-      expect(terminal.output).toContain('Memory is not available in this composition.')
     } finally {
       await disposeTuiTestHarness(harness)
     }

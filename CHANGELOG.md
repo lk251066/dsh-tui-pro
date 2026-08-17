@@ -4,6 +4,25 @@ All notable changes to this project will be documented in this file.
 
 The `v1.0.0` tag is not an installable public release: no npm package was published, and the repository-root tarball does not contain the required dsh bundle metadata. See [REPAIR_PLAN.md](REPAIR_PLAN.md) for the first verified release criteria.
 
+## [1.3.0] - unreleased
+
+### Added
+
+- Add `/effort [level]` for model-advertised reasoning levels.
+- Decode SGR and X10 mouse-wheel input and page the transcript without moving the editor.
+
+### Fixed
+
+- Read the rc.6 settings document path as a property, so `/settings` no longer fails with `settings.documentPath is not a function`.
+- Keep model and reasoning selections isolated between live sessions.
+- Add forked sessions to the active workspace and open them immediately.
+- Make `/export [path]` honor an explicit output path.
+- Render settled thinking duration and diff summary colors consistently.
+
+### Removed
+
+- Remove unavailable `/palette`, `/reload`, `/fleet`, and `/memories` commands and their default-bundle integrations.
+
 ## [1.2.0] - 2026-08-17
 
 ### Added

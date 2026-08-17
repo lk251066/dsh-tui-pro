@@ -4,9 +4,7 @@ Interactive terminal UI plugin and profile bundle for [DeepSeek Harness](https:/
 
 ## Release status
 
-Version `1.0.2` is published on [npm](https://www.npmjs.com/package/@lk251066/dsh-tui) with provenance and is mirrored by the checksummed [GitHub Release](https://github.com/lk251066/dsh-tui-pro/releases/tag/v1.0.2). The registry package passes empty-profile installation and real-PTY interaction against the public dsh rc.6 host.
-
-Version [`1.2.0`](https://www.npmjs.com/package/@lk251066/dsh-tui/v/1.2.0) adds durable active workspace sessions and unified history management while retaining the framed terminal workbench from `1.1.0`. Its checksummed [GitHub Release](https://github.com/lk251066/dsh-tui-pro/releases/tag/v1.2.0) identifies the same commit.
+Version `1.3.0` is the current release target. The previous public package is [`1.2.0`](https://www.npmjs.com/package/@lk251066/dsh-tui/v/1.2.0); release checks must pass before publication.
 
 ## Installation
 
@@ -46,6 +44,8 @@ The bundled profile opens the active project session for the current directory. 
 
 Use `/sessions` to search complete history. Up and Down select a row, Enter opens it, Tab switches between complete history and the active list, and Space adds or removes a project session from the active workspace list. Removing membership never deletes the session log. Use `/assistant` for the fixed personal assistant session.
 
+The TUI owns these commands: `/help`, `/model`, `/effort`, `/clear`, `/details`, `/theme`, `/queue`, `/rename`, `/fork`, `/status`, `/context`, `/agents`, `/jobs`, `/settings`, `/export`, `/exit`, `/quit`, `/sessions`, `/new`, and `/assistant`. `/effort` only accepts reasoning levels advertised by the selected model; model and effort selections are independent for each live session. dsh-base may add `/feedback`, `/goal`, `/compact`, `/permission`, and `/plan`. The bundle does not provide `/palette`, `/reload`, `/fleet`, or `/memories`.
+
 Use `/new` for another session in the active project. Use the whole command remainder as a project path, including spaces:
 
 ```text
@@ -61,13 +61,13 @@ The bundled `cordis.patch.yml` installs the TUI with these defaults:
   name: '@lk251066/dsh-tui'
   config:
     sidebarWidth: 32
-    showReasoning: true
+    showReasoning: false
     maxToolOutputLines: 6
 ```
 
 `sidebarWidth` sets the preferred right-sidebar width in terminal columns, defaults to 32, and accepts values of 24 or greater. The outer frame reserves one row and column on each edge. Below 65 total columns the sidebar hides so the main area remains usable. A height of at least 24 rows is recommended to keep Workspace, Sessions, Current, Status, and the editor visible together.
 
-The package also exports `@lk251066/dsh-tui/prompt` and `@lk251066/dsh-tui/invariant` for its bundle composition. Treat the bundled patch as the supported entry path; direct manual profile composition must provide every service injected by the TUI. Long-term memory is optional and is not mounted by the default bundle because no compatible public `@deepseek-ai/dsh-memory` package is available.
+The package also exports `@lk251066/dsh-tui/prompt` and `@lk251066/dsh-tui/invariant` for its bundle composition. Treat the bundled patch as the supported entry path; direct manual profile composition must provide every service injected by the TUI.
 
 ## Runtime requirements
 

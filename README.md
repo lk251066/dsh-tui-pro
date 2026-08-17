@@ -4,13 +4,11 @@ Community-maintained interactive terminal UI plugin for [DeepSeek Harness](https
 
 ## Release status
 
-Version `1.0.2` is publicly available on [npm](https://www.npmjs.com/package/@lk251066/dsh-tui) and in the [GitHub Release](https://github.com/lk251066/dsh-tui-pro/releases/tag/v1.0.2). The npm package, `v1.0.2` tag, and checksummed Release identify the same reviewed source.
+Version `1.3.0` is the current release target. The previous public release is [`1.2.0`](https://www.npmjs.com/package/@lk251066/dsh-tui/v/1.2.0); publication of `1.3.0` requires the source, artifact, and PTY checks in [TESTING.md](TESTING.md).
 
 Do not use the existing `v1.0.0` GitHub tag; it predates the repaired source and bundle metadata. Install from npm or a verified GitHub Release.
 
-The source tree, published package, empty-profile installation, and real-PTY runtime pass against public `@deepseek-ai/dsh@0.1.0-rc.6`. Version `1.0.2` adds the persistent workspace sidebar and fixed operational status display. See [REPAIR_PLAN.md](REPAIR_PLAN.md) for the completed repair record and release evidence.
-
-Version [`1.2.0`](https://www.npmjs.com/package/@lk251066/dsh-tui/v/1.2.0) adds durable active workspace sessions and unified history management while retaining the framed terminal workbench from `1.1.0`. Its checksummed [GitHub Release](https://github.com/lk251066/dsh-tui-pro/releases/tag/v1.2.0) identifies the same commit.
+The `1.3.0` source keeps durable workspace sessions and the framed workbench from `1.2.0`, fixes settings and model-effort commands, isolates model selection per session, and routes mouse-wheel input to the transcript. See [REPAIR_PLAN.md](REPAIR_PLAN.md) for the release record.
 
 ## Intended installation
 
@@ -28,13 +26,16 @@ The package itself owns the TUI plugin and its `cordis.patch.yml` profile layer.
 - Persistent right-side active workspace sessions, current activity, and status sidebar
 - Internal transcript paging with fixed input and status areas
 - `/sessions` search across complete history, with direct activate, remove, and open actions
-- A fixed personal assistant entry with optional memory integration
+- A fixed personal assistant entry with workspace-session tools
 - `/new` for the active project and `/new <path>` for another project
-- Fleet monitoring across sessions
 - Syntax highlighting, diff rendering, and Markdown rendering
+- Thinking blocks are hidden by default; `/details ... reasoning on` expands settled reasoning
+- Tool cards support hidden, collapsed, and expanded views; diff cards show colored additions and deletions
 - Approval dialogs with risk confirmation
 
 Launching in a directory resumes its first manually ordered active project session. If that directory has no active session, dsh creates one and adds it to the workspace. Removing a session from the workspace retains its history.
+
+The TUI commands are `/help`, `/model`, `/effort`, `/clear`, `/details`, `/theme`, `/queue`, `/rename`, `/fork`, `/status`, `/context`, `/agents`, `/jobs`, `/settings`, `/export`, `/sessions`, `/new`, `/assistant`, `/exit`, and `/quit`. dsh-base may additionally provide `/feedback`, `/goal`, `/compact`, `/permission`, and `/plan`. `/palette`, `/reload`, `/fleet`, and `/memories` are not part of this bundle.
 
 ## Development
 

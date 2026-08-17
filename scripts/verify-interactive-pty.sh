@@ -6,11 +6,15 @@ host_root="${DSH_PTY_HOST_ROOT:-$repo_root/.test-results/public-dsh-smoke/host}"
 dsh_home="${DSH_PTY_HOME:-$repo_root/.test-results/public-dsh-smoke/home}"
 profile="${DSH_PTY_PROFILE:-tui-public-smoke}"
 output_root="${DSH_PTY_OUTPUT_DIR:-$repo_root/.test-results/public-dsh-smoke}"
-timeout_seconds="${DSH_PTY_TIMEOUT:-45}"
+timeout_seconds="${DSH_PTY_TIMEOUT:-120}"
 dsh_bin="${DSH_PTY_DSH_BIN:-$host_root/node_modules/@deepseek-ai/dsh/lib/bin.js}"
 node_bin="${NODE:-$(command -v node)}"
 capture="$output_root/interactive.typescript"
 readable="$output_root/interactive.strings"
+export_path="$output_root/pty-export.md"
+
+rm -f "$export_path"
+trap 'rm -f "$export_path"' EXIT
 
 test -f "$dsh_bin"
 command -v python3 >/dev/null
@@ -25,11 +29,16 @@ python3 "$repo_root/scripts/drive-interactive-pty.py" \
   --env DEEPSEEK_API_KEY=dummy \
   -- "$node_bin" "$dsh_bin" --profile "$profile"
 "$node_bin" "$repo_root/scripts/render-pty-capture.mjs" "$capture" "$readable"
-grep -aqF 'Memory is not available in this' "$capture"
+grep -aqF 'Settings' "$capture"
+grep -aqF 'Reasoning effort:' "$capture"
+grep -aqF 'Exported to' "$capture"
 grep -aqF 'New session session-' "$capture"
 grep -aqF 'assistant' "$capture"
 grep -aqF $'\x1b[?1049h' "$capture"
 grep -aqF $'\x1b[?1049l' "$capture"
+grep -aqF $'\x1b[?1000h\x1b[?1006h' "$capture"
+grep -aqF $'\x1b[?1006l\x1b[?1000l' "$capture"
+test -f "$export_path"
 grep -qF 'Workspace' "$readable"
 grep -qF 'Active' "$readable"
 grep -qF 'Status' "$readable"
@@ -59,5 +68,8 @@ PY
 ! grep -aqF 'setPrompt is not a function' "$capture"
 ! grep -aqF 'TUI prompt value' "$capture"
 ! grep -aqF 'ERR_MODULE_NOT_FOUND' "$capture"
+! grep -aqF 'Unknown command:' "$capture"
+! grep -aqF 'Command failed:' "$capture"
+! grep -aqF 'documentPath is not a function' "$capture"
 
-echo 'Verified the terminal workbench, right sidebar, commands, session switching, and shutdown through a real PTY.'
+echo 'Verified the terminal workbench, right sidebar, command paths, wheel reporting, session switching, export, and shutdown through a real PTY.'

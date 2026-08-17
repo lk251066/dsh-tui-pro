@@ -17,7 +17,7 @@ The 2026-08-15 repair checks and 2026-08-16 release verification produced these 
 | `pnpm run pack:artifact` | Passed; package content and bundled editor reviewed |
 | Empty-`DSH_HOME` tarball installation | Passed through the automated public-host smoke |
 | `dsh plugin ... why` | Passed; one installed `@lk251066/dsh-tui@1.0.1` |
-| `dsh --profile tui-public-smoke --dump-config` | Passed; every declared bundle row is active and memory is absent |
+| `dsh --profile tui-public-smoke --dump-config` | Passed; every declared bundle row is active and no removed optional integration is loaded |
 | GitHub CI workflow | Passed on Ubuntu and Windows, including the public rc.6 host smoke |
 | Public `@deepseek-ai/dsh@0.1.0-rc.6` launch | Passed module loading and reached only the intentional non-TTY error |
 | Interactive TTY smoke | Passed in WSL2 with GNU `script`; the Linux CI and release jobs run the same flow |
@@ -28,7 +28,7 @@ The 2026-08-15 repair checks and 2026-08-16 release verification produced these 
 
 The source checks passed on the reviewed commit, and the final integration checks used the anonymous public registry rather than a workspace link or local tarball.
 
-## Unreleased workbench verification
+## 1.3.0 workbench verification
 
 The workbench uses `HeadlessTerminal` snapshots because pi-tui emits incremental ANSI updates rather than a complete screen on every render. Coverage includes alternate-buffer activation and restoration, zero scrollback growth while transcript rows append, the full outer frame, right-sidebar placement, fixed-bottom input, Page Up and Page Down transcript scrolling, session switching without remounting the workbench, queue retention after unrelated durable messages, and inline-dialog replacement of the editor.
 
@@ -45,13 +45,13 @@ Current source evidence:
 | Check | Result |
 | --- | --- |
 | `pnpm run typecheck` | Passed |
-| `pnpm run test` | Passed: 37 files, 432 tests |
-| `pnpm run lint` | Passed with 38 warnings and no errors |
+| `pnpm run test` | Passed: 37 files, 422 tests |
+| `pnpm run lint` | Passed with 40 warnings and no errors |
 | `pnpm run build` | Passed |
-| `pnpm run pack:artifact` | Passed: 307 files, including the workspace launcher, workbench JavaScript, and declarations |
+| `pnpm run pack:artifact` | Passed: 301 files in the `1.3.0` artifact, including the workspace launcher, workbench JavaScript, declarations, and bundled editor |
 | `scripts/verify-packed-artifact.sh` | Passed |
 | Empty-profile public host | Passed against public `@deepseek-ai/dsh@0.1.0-rc.6`; `why` and `--dump-config` resolve the packed plugin and every bundle row |
-| Current-tree real PTY | Passed from the `1.2.0` packed plugin in a clean Linux WSL host; the replay verifies the compact title, fixed Active sidebar, left editor, session switching, and shutdown |
+| Current-tree real PTY | Passed in a clean Linux WSL host from the `1.3.0` tarball; command paths, export, session switching, mouse-wheel reporting, fixed sidebar, frame, and shutdown verified |
 
 ## Source checks
 
@@ -101,7 +101,7 @@ dsh --profile tui-smoke --dump-config
 dsh --profile tui-smoke
 ```
 
-Verify that installation adds the package to the profile dependencies and `dsh.profile.bundles`. The config dump must include the TUI rows and resolve every bare package in the bundled patch. The default patch intentionally omits long-term memory because `@deepseek-ai/dsh-memory` is not publicly installable.
+Verify that installation adds the package to the profile dependencies and `dsh.profile.bundles`. The config dump must include the TUI rows and resolve every bare package in the bundled patch. The default patch contains only publicly installable integrations.
 
 The TUI's Service Definition packages remain peers supplied by the dsh host. Plugins named directly by `cordis.patch.yml` are package dependencies so profile installation does not rely on the host's incidental transitive dependency tree. Treat a real launcher load as the final resolution check.
 
@@ -126,8 +126,13 @@ Exercise these behaviors through the installed profile:
 13. `/new` uses the active workspace, `/new <path>` validates and uses another project, `/assistant` opens the fixed assistant, and file and skill completion follow the active session's workspace.
 14. Repeated session switching preserves each transcript and input state.
 15. Normal exit disposes listeners and processes without an unhandled rejection.
+16. `/settings` renders the settings path without a `documentPath is not a function` error.
+17. `/effort` lists advertised levels, changes the selected level, and rejects an unavailable level.
+18. Switching between two live sessions preserves each session's model and reasoning selection.
+19. `/fork` adds the new session to Active and opens it; `/export <path>` creates that exact file.
+20. SGR and X10 wheel events move only transcript rows; editor text and cursor state remain unchanged.
 
-`scripts/verify-interactive-pty.sh` drives the packed plugin through a Python standard-library PTY. The driver answers terminal capability queries, runs the optional-memory diagnostic, creates and switches sessions, opens the session picker, and performs double-Ctrl+C shutdown. The captured ANSI stream is replayed through `@xterm/headless`; the check requires the compact title, every sidebar section, Workspace to the right of the separator, and the editor to the left. The repository snapshot suite remains the keyless evidence for stable rendered output.
+`scripts/verify-interactive-pty.sh` drives the packed plugin through a Python standard-library PTY. The driver answers terminal capability queries, creates and switches sessions, opens the session picker, exercises command paths, and performs double-Ctrl+C shutdown. The captured ANSI stream is replayed through `@xterm/headless`; the check requires the compact title, every sidebar section, Workspace to the right of the separator, and the editor to the left. The repository snapshot suite remains the keyless evidence for stable rendered output.
 
 ## Registry verification
 

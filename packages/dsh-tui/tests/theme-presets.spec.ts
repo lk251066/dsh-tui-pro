@@ -86,7 +86,7 @@ describe('theme presets', () => {
     expect(palette.accent('x')).toBe('x')
   })
 
-  it('/palette prints the themed SGR pairs, not the adaptive defaults', () => {
+  it('renders themed SGR pairs, not the adaptive defaults', () => {
     const palette = createPalette(true, 'dark', { preset: THEME_PRESETS.dracula, truecolor: true })
     const rows = renderPalette(palette, 'dark', true, { preset: THEME_PRESETS.dracula, truecolor: true }).join('\n')
     expect(rows).toContain('38;2;189;147;249')

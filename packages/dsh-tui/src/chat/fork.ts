@@ -40,8 +40,8 @@ export function forkCut(events: readonly SessionEvent[], atSeq?: number): number
 export interface ForkDeps extends ChatChannelDeps, ChannelNotice {
   /** The agent whose session forks. */
   agent: Agent
-  /** Hand off into the forked session when a resume host is mounted. */
-  handoffResume?: (sessionId: SessionId, cwd: string) => void
+  /** Add the created branch to the active workspace and open it in this TUI. */
+  activate(agent: Agent): Promise<void>
 }
 
 /**
@@ -64,20 +64,19 @@ export async function forkSession(deps: ForkDeps): Promise<void> {
   const cwd = agent.session.header.cwd ?? process.cwd()
   const sessionId = SessionId(`session-${randomUUID()}`)
   try {
-    await deps.ctx.agents.create({
+    const handle = await deps.ctx.agents.create({
       sessionId,
       seed: events.slice(0, cut),
       meta: { cwd, parentSession: agent.session.id, seedLength: cut },
     })
+    if (deps.isDisposed()) return
+    await deps.activate(handle.agent)
   } catch (error) {
     deps.appendNotice(`Fork failed: ${errorChain(error)}`, 'error')
     return
   }
   if (deps.isDisposed()) return
   deps.appendNotice(`Forked into ${displayTextId(sessionId)} at ${cut} events.`)
-  // Hand off like /sessions when a host is mounted; otherwise the fork waits in history.
-  if (deps.handoffResume !== undefined) deps.handoffResume(sessionId, cwd)
-  else deps.appendNotice('Open it later from /sessions.')
 }
 
 /** Short, terminal-safe id echo for notices. */

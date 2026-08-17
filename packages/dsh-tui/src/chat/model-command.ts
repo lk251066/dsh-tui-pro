@@ -38,6 +38,10 @@ export interface ModelController {
   contextWindow(): number | undefined
   /** Queue a `/model` command; empty argument opens the selector. */
   queueModelCommand(raw: string): void
+  /** Queue an `/effort` command for the selected model. */
+  queueReasoningEffortCommand(raw: string): void
+  /** Re-resolve model metadata after the active session changes. */
+  activateSelection(): void
   /** Drop the pending context-window resolution (shutdown). */
   resetContextResolution(): void
   /** Forget the tracked selector overlay (shutdown). */
@@ -205,6 +209,43 @@ export function createModelController(deps: ModelControllerDeps): ModelControlle
     selectModel(selected)
   }
 
+  const handleReasoningEffortCommand = async (raw: string): Promise<void> => {
+    const current = target.current
+    if (current === undefined) {
+      deps.appendNotice('No model is selected. Run /model first.', 'warning')
+      return
+    }
+    const choices = await readModelChoices(ctx, current)
+    if (deps.isDisposed()) return
+    const selected = choices.find(choice => choice.provider === current.provider && choice.model === current.model)
+    if (selected === undefined) {
+      deps.appendNotice(`The selected model ${targetLabel(current)} is not advertised. Run /model to choose an available model.`, 'warning')
+      return
+    }
+    const reasoning = selected.reasoning
+    if (reasoning === undefined || reasoning.efforts.length === 0) {
+      deps.appendNotice(`Model ${targetLabel(selected)} does not advertise configurable reasoning effort.`, 'warning')
+      return
+    }
+    const argument = raw.trim()
+    const available = reasoning.efforts.map(effort => effort.id)
+    if (argument === '') {
+      const currentEffort = current.reasoningEffort ?? reasoning.defaultEffort
+      deps.appendNotice([
+        `Reasoning effort: ${targetReasoningLabel(selected, currentEffort) ?? 'Default'}.`,
+        `Available: ${available.join(', ')}.`,
+        'Set it with /effort <level>.',
+      ].join('\n'))
+      return
+    }
+    const match = reasoning.efforts.find(effort => effort.id === argument)
+    if (match === undefined) {
+      deps.appendNotice(`Unknown reasoning effort: ${displayText(argument)}. Available: ${available.join(', ')}.`, 'warning')
+      return
+    }
+    selectModel(selected, { effort: match.id })
+  }
+
   return {
     contextWindow: () => contextWindow,
     queueModelCommand(raw: string): void {
@@ -213,6 +254,18 @@ export function createModelController(deps: ModelControllerDeps): ModelControlle
       }).catch((error: unknown) => {
         if (!deps.isDisposed()) deps.appendNotice(`Could not read the model catalog: ${errorChain(error)}`, 'error')
       })
+    },
+    queueReasoningEffortCommand(raw: string): void {
+      modelCommands = modelCommands.then(async () => {
+        await handleReasoningEffortCommand(raw)
+      }).catch((error: unknown) => {
+        if (!deps.isDisposed()) deps.appendNotice(`Could not read reasoning efforts: ${errorChain(error)}`, 'error')
+      })
+    },
+    activateSelection(): void {
+      void modelOverlay?.close()
+      modelOverlay = undefined
+      resolveContextWindow(target.current)
     },
     resetContextResolution(): void {
       contextResolution = undefined
