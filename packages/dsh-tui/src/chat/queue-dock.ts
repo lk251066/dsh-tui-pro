@@ -42,12 +42,21 @@ export interface QueueDockController {
    */
   armLatestForEdit(): boolean
   /**
+   * Load one still-pending submission for editing. The next submit replaces
+   * that exact inbox item in place.
+   * @param messageId - Pending message identity recorded at submission time.
+   * @returns whether the message was still pending and was loaded.
+   */
+  armForEdit(messageId: MessageId): boolean
+  /**
    * A pending edit target: when set, the next submit replaces this queued
    * message rather than dispatching a new turn; cleared after one submit.
    */
   takeEditTarget(): UserMessage | undefined
   /** Whether an inbox edit is armed (suppresses the ordinary submit path). */
   hasEditTarget(): boolean
+  /** Stop treating the editor draft as an in-place queue edit. */
+  cancelEditTarget(): void
   /** Tear down state. */
   dispose(): void
 }
@@ -83,6 +92,17 @@ export function createQueueDock(deps: QueueDockDeps): QueueDockController {
       ...inbox.nextStep.map(message => entryOf(message, 'step')),
       ...inbox.nextTurn.map(message => entryOf(message, 'turn')),
     ]
+  }
+
+  const armForEdit = (messageId: MessageId): boolean => {
+    const inbox = inboxLanes()
+    if (inbox === undefined) return false
+    const message = [...inbox.nextStep, ...inbox.nextTurn]
+      .find(candidate => candidate.id === messageId)
+    if (message === undefined) return false
+    editTarget = message
+    deps.loadIntoEditor(contentText(message.content))
+    return true
   }
 
   return {
@@ -140,6 +160,7 @@ export function createQueueDock(deps: QueueDockDeps): QueueDockController {
       deps.loadIntoEditor(contentText(message.content))
       return true
     },
+    armForEdit,
     takeEditTarget(): UserMessage | undefined {
       const target = editTarget
       editTarget = undefined
@@ -147,6 +168,9 @@ export function createQueueDock(deps: QueueDockDeps): QueueDockController {
     },
     hasEditTarget(): boolean {
       return editTarget !== undefined
+    },
+    cancelEditTarget(): void {
+      editTarget = undefined
     },
     dispose(): void {
       editTarget = undefined

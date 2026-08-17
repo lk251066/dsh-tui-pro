@@ -4,11 +4,11 @@ Community-maintained interactive terminal UI plugin for [DeepSeek Harness](https
 
 ## Release status
 
-Version `1.4.0` is the current release target. The previous public release is [`1.3.0`](https://www.npmjs.com/package/@lk251066/dsh-tui/v/1.3.0); publication of `1.4.0` requires the source, artifact, and PTY checks in [TESTING.md](TESTING.md).
+Version [`1.5.0`](https://www.npmjs.com/package/@lk251066/dsh-tui/v/1.5.0) is the current release. Its source, artifact, empty-profile installation, and real PTY evidence are recorded in [TESTING.md](TESTING.md).
 
 Do not use the existing `v1.0.0` GitHub tag; it predates the repaired source and bundle metadata. Install from npm or a verified GitHub Release.
 
-The `1.4.0` source renders short choices in the fixed bottom area without popup borders and makes `/sessions` replace only the left chat area while the frame and active-workspace sidebar stay fixed. See [REPAIR_PLAN.md](REPAIR_PLAN.md) for the release record.
+The `1.5.0` source adds Codex-style running-input controls, current-conversation checkpoint branching, fast active-session switching, persisted stopped-session titles, and main-area information views without changing the fixed workbench layout. See [REPAIR_PLAN.md](REPAIR_PLAN.md) for the release record.
 
 ## Intended installation
 
@@ -26,6 +26,9 @@ The package itself owns the TUI plugin and its `cordis.patch.yml` profile layer.
 - Persistent right-side active workspace sessions, current activity, and status sidebar
 - Internal transcript paging with fixed input and status areas
 - `/sessions` main-area browser across complete history, with direct activate, remove, and open actions
+- Double Escape checkpoint browser for branching before an earlier turn in the current conversation
+- Enter steering, Tab next-turn queueing, and empty Up recall while the agent runs
+- `Ctrl+PageUp` and `Ctrl+PageDown` active-workspace session switching
 - Fixed bottom selectors for questions, approvals, models, reasoning effort, details, themes, permissions, renaming, goals, and queue actions
 - A fixed personal assistant entry with workspace-session tools
 - `/new` for the active project and `/new <path>` for another project
@@ -36,7 +39,7 @@ The package itself owns the TUI plugin and its `cordis.patch.yml` profile layer.
 
 Launching in a directory resumes its first manually ordered active project session. If that directory has no active session, dsh creates one and adds it to the workspace. Removing a session from the workspace retains its history.
 
-The TUI commands are `/help`, `/model`, `/effort`, `/clear`, `/details`, `/theme`, `/queue`, `/rename`, `/fork`, `/status`, `/context`, `/agents`, `/jobs`, `/settings`, `/export`, `/sessions`, `/new`, `/assistant`, `/exit`, and `/quit`. dsh-base may additionally provide `/feedback`, `/goal`, `/compact`, `/permission`, and `/plan`. `/palette`, `/reload`, `/fleet`, and `/memories` are not part of this bundle.
+The TUI commands are `/help`, `/model`, `/effort`, `/clear`, `/details`, `/theme`, `/queue`, `/rename`, `/fork`, `/status`, `/context`, `/agents`, `/jobs`, `/settings`, `/export`, `/sessions`, `/new`, `/assistant`, `/exit`, and `/quit`. `/context`, `/agents`, `/jobs`, `/settings`, and `/sessions` use the chat main area while the frame and sidebar remain fixed. dsh-base may additionally provide `/feedback`, `/goal`, `/compact`, `/permission`, and `/plan`. `/palette`, `/reload`, `/fleet`, and `/memories` are not part of this bundle.
 
 ## Development
 

@@ -4,6 +4,21 @@ All notable changes to this project will be documented in this file.
 
 The `v1.0.0` tag is not an installable public release: no npm package was published, and the repository-root tarball does not contain the required dsh bundle metadata. See [REPAIR_PLAN.md](REPAIR_PLAN.md) for the first verified release criteria.
 
+## [1.5.0] - 2026-08-17
+
+### Added
+
+- Add Enter steering, Tab next-turn queueing, and empty-Up recall for running input.
+- Add double-Escape checkpoint navigation that branches the current conversation before a selected turn.
+- Add `Ctrl+PageUp` and `Ctrl+PageDown` cycling across active workspace sessions.
+
+### Changed
+
+- Load persisted titles for stopped active sessions and resume same-workspace sessions without replacing the TUI process.
+- Delay queued session-reference context until the queued turn begins.
+- Render `/context`, `/agents`, `/jobs`, and `/settings` in the chat main area while preserving the frame and sidebar.
+- Prevent duplicate local-resume and cross-workspace handoff requests for the same session.
+
 ## [1.4.0] - 2026-08-17
 
 ### Changed

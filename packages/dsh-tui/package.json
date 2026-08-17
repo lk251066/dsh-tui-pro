@@ -1,7 +1,7 @@
 {
   "name": "@lk251066/dsh-tui",
   "description": "Interactive terminal UI plugin for DeepSeek Harness",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "private": false,
   "type": "module",
   "main": "lib/index.js",

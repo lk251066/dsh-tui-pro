@@ -228,7 +228,7 @@ describe('TUI config', () => {
         leftPrompt: '${cwd}${git/worktree}${stats}',
         rightPrompt: '',
         inputPrompt: '${symbol} ${indicator}',
-        inputPlaceholder: 'press enter to steer and esc to cancel',
+        inputPlaceholder: 'Enter steer · Tab queue · Esc cancel',
       },
       title: 'DeepSeek Harness',
     })
@@ -277,7 +277,7 @@ describe('TUI config', () => {
         leftPrompt: '${cwd}${git/worktree}${stats}',
         rightPrompt: '',
         inputPrompt: '${symbol} ${indicator}',
-        inputPlaceholder: 'press enter to steer and esc to cancel',
+        inputPlaceholder: 'Enter steer · Tab queue · Esc cancel',
       },
       title: 'DSH',
     })
@@ -971,7 +971,7 @@ describe('goodbye message and /sessions', () => {
 
   it('falls back to assistant provenance and header creation time for sparse logs', async () => {
     const assistantOnly = header('assistant-route', 20, '/workspace')
-    const empty = header('empty-log', 10, '/workspace')
+    const empty = header('empty-log', 10, '/other-workspace')
     const events = resumeEvents('Assistant route', 'absent-provider')
       .filter(event => event.type !== 'request/header')
       .map((event, seq) => ({ ...event, seq })) as SessionEvent[]
@@ -1007,8 +1007,8 @@ describe('goodbye message and /sessions', () => {
     await dispose(result)
   })
 
-  it('flushes, releases the terminal, and invokes one host handoff for the same SessionId and workspace', async () => {
-    const target = header('target-session', 10, '/workspace')
+  it('flushes, releases the terminal, and invokes one host handoff for the selected session and workspace', async () => {
+    const target = header('target-session', 10, '/other-workspace')
     const handoff = vi.fn<NonNullable<TuiRuntime['handoffResume']>>(() => Promise.reject(new Error('test host retained process')))
     const result = await setup({
       cwd: '/workspace',
@@ -1025,14 +1025,14 @@ describe('goodbye message and /sessions', () => {
     result.terminal.send('\r')
     await tick(); await tick()
     expect(handoff).toHaveBeenCalledTimes(1)
-    expect(handoff).toHaveBeenCalledWith(target.id, '/workspace')
+    expect(handoff).toHaveBeenCalledWith(target.id, '/other-workspace')
     expect(result.terminal.stopped).toBeGreaterThan(0)
     expect(result.terminal.output).toContain('Resume handoff failed: test host retained process')
     await dispose(result)
   })
 
   it('restores the UI when a host returns instead of replacing the process', async () => {
-    const target = header('returning-host', 10, '/workspace')
+    const target = header('returning-host', 10, '/other-workspace')
     const result = await setup({
       cwd: '/workspace',
       handoffResume: async () => undefined as never,
@@ -1051,7 +1051,7 @@ describe('goodbye message and /sessions', () => {
     await dispose(result)
   })
 
-  it('keeps the current TUI when the selected log fails its second preflight load', async () => {
+  it('keeps the current TUI when the selected-session preflight load fails', async () => {
     const target = header('racing-corruption', 10, '/workspace')
     let loads = 0
     const result = await setup({
@@ -1071,7 +1071,7 @@ describe('goodbye message and /sessions', () => {
     result.terminal.send('Racing corruption')
     result.terminal.send('\r')
     await tick(); await tick()
-    expect(result.terminal.output).toContain('Resume failed: session cannot be loaded: failed to inspect session')
+    expect(result.terminal.output).toContain('Session open failed: session cannot be loaded: failed to inspect session')
     expect(result.terminal.output).toContain('log changed during selection')
     expect(result.terminal.stopped).toBe(0)
     await dispose(result)
@@ -1115,7 +1115,7 @@ describe('goodbye message and /sessions', () => {
   })
 
   it('hands off a validated session exposed by a query backend without a persistence service', async () => {
-    const target = header('query-without-persistence', 10, '/workspace')
+    const target = header('query-without-persistence', 10, '/other-workspace')
     const handoff = vi.fn<NonNullable<TuiRuntime['handoffResume']>>(
       () => Promise.reject(new Error('test host retained process')),
     )
@@ -1145,13 +1145,13 @@ describe('goodbye message and /sessions', () => {
     result.terminal.send('Query without persistence')
     result.terminal.send('\r')
     await tick(); await tick()
-    expect(handoff).toHaveBeenCalledWith(target.id, '/workspace')
+    expect(handoff).toHaveBeenCalledWith(target.id, '/other-workspace')
     expect(result.terminal.output).toContain('Resume handoff failed: test host retained process')
     await dispose(result)
   })
 
   it('does not hand off after disposal begins during the current-session flush', async () => {
-    const target = header('dispose-during-flush', 10, '/workspace')
+    const target = header('dispose-during-flush', 10, '/other-workspace')
     const flushing = Promise.withResolvers<undefined>()
     const handoff = vi.fn<NonNullable<TuiRuntime['handoffResume']>>()
     const result = await setup({
@@ -1180,7 +1180,7 @@ describe('goodbye message and /sessions', () => {
   })
 
   it('does not hand off after disposal begins while terminal input drains', async () => {
-    const target = header('dispose-during-drain', 10, '/workspace')
+    const target = header('dispose-during-drain', 10, '/other-workspace')
     const draining = Promise.withResolvers<undefined>()
     const handoff = vi.fn<NonNullable<TuiRuntime['handoffResume']>>()
     const result = await setup({
@@ -1205,7 +1205,7 @@ describe('goodbye message and /sessions', () => {
   })
 
   it('does not restart the terminal when a pending host rejects during disposal', async () => {
-    const target = header('host-rejects-during-disposal', 10, '/workspace')
+    const target = header('host-rejects-during-disposal', 10, '/other-workspace')
     const host = Promise.withResolvers<never>()
     const handoff = vi.fn<NonNullable<TuiRuntime['handoffResume']>>(() => host.promise)
     const result = await setup({
@@ -1348,8 +1348,8 @@ describe('goodbye message and /sessions', () => {
     await dispose(result)
   })
 
-  it('admits only one handoff while the selected preflight is pending', async () => {
-    const target = header('single-handoff', 10, '/workspace')
+  it('admits only one session open while the selected preflight is pending', async () => {
+    const target = header('single-handoff', 10, '/other-workspace')
     const preflight = Promise.withResolvers<{ meta: SessionHeader; events: SessionEvent[] }>()
     let loads = 0
     const result = await setup({
@@ -1441,7 +1441,7 @@ describe('goodbye message and /sessions', () => {
   })
 
   it('warns without releasing the terminal when the host cannot hand off', async () => {
-    const target = header('no-fallback-session', 10, '/workspace')
+    const target = header('no-fallback-session', 10, '/other-workspace')
     const result = await setup({
       cwd: '/workspace',
       sessionPersistence: {
@@ -1462,7 +1462,7 @@ describe('goodbye message and /sessions', () => {
   })
 
   it('rechecks idleness after the current-session flush', async () => {
-    const target = header('post-flush-running', 10, '/workspace')
+    const target = header('post-flush-running', 10, '/other-workspace')
     const control: { setRunning?: () => void } = {}
     const handoff = vi.fn<NonNullable<TuiRuntime['handoffResume']>>()
     const result = await setup({
@@ -1836,7 +1836,7 @@ describe('pi-tui chat lifecycle and transcript', () => {
       expect(result.terminal.output).toContain('final live answer')
     })
 
-    expect(result.terminal.output).toContain('press enter to steer and esc to cancel')
+    expect(result.terminal.output).toContain('Enter steer · Tab queue · Esc cancel')
     expect(result.terminal.output).toContain('steering note')
     expect(result.terminal.output).toContain('user context')
     expect(result.terminal.output).toContain('Context · workspace-context')
@@ -2063,16 +2063,16 @@ describe('pi-tui chat lifecycle and transcript', () => {
     // Pin a cwd free of the substring under test; the prompt context renders the path.
     const result = await setup({ status: 'running', cwd: '/workspace' })
     // Running with nothing queued: the badge is absent and the editor keeps its hint.
-    expect(result.terminal.output).toContain('press enter to steer and esc to cancel')
+    expect(result.terminal.output).toContain('Enter steer · Tab queue · Esc cancel')
     expect(result.terminal.output).not.toMatch(/Queue\s+[1-9]/)
 
     result.terminal.output = ''
     result.terminal.send('x')
     await tick()
-    expect(result.terminal.output).not.toContain('press enter to steer and esc to cancel')
+    expect(result.terminal.output).not.toContain('Enter steer · Tab queue · Esc cancel')
     result.terminal.send('\x7f')
     await tick()
-    expect(result.terminal.output).toContain('press enter to steer and esc to cancel')
+    expect(result.terminal.output).toContain('Enter steer · Tab queue · Esc cancel')
 
     const submitSteering = (text: string): void => {
       result.terminal.send(text)
@@ -2124,7 +2124,7 @@ describe('pi-tui chat lifecycle and transcript', () => {
     result.terminal.output = ''
     drainSteering('second')
     await tick()
-    expect(result.terminal.output).toContain('press enter to steer and esc to cancel')
+    expect(result.terminal.output).toContain('Enter steer · Tab queue · Esc cancel')
     expect(result.terminal.output).toMatch(/Queue\s+0/)
 
     // A drain with no matching queued entry is ignored rather than underflowing.
@@ -2329,7 +2329,8 @@ describe('pi-tui chat lifecycle and transcript', () => {
     await tick()
     expect(result.terminal.output).toContain('type / for commands, @ for files')
 
-    // An empty step lane falls back to the newest next-turn message.
+    // A later externally inserted inbox item does not outrank the latest
+    // submission made through this editor.
     result.inbox.seed('next-turn', [
       freezeMessage(createUserMessage({
         content: [{ type: 'text', text: 'queued for next turn' }],
@@ -2339,7 +2340,7 @@ describe('pi-tui chat lifecycle and transcript', () => {
     result.terminal.output = ''
     result.terminal.send('\x1b[A')
     await tick()
-    expect(result.terminal.output).toContain('queued for next turn')
+    expect(result.terminal.output).toContain('second queued attempt second edit')
 
     await dispose(result)
   })
@@ -2365,7 +2366,7 @@ describe('pi-tui chat lifecycle and transcript', () => {
       result.terminal.output = ''
       agentEvents(result.ctx, result.agent).emit('agent/status', { status: 'running' })
       await tick()
-      expect(result.terminal.output).toContain('press enter to steer and esc to cancel')
+    expect(result.terminal.output).toContain('Enter steer · Tab queue · Esc cancel')
 
       result.session.append('turn/start', { turn: 2 })
       result.session.append('step/start', { turn: 2, step: 1 })
@@ -4010,6 +4011,133 @@ describe('pi-tui chat lifecycle and transcript', () => {
       reasoningEffort: ReasoningEffortId('max'),
       temperature: 0.2,
     })
+    await dispose(result)
+  })
+
+  it('uses Enter for steering, Tab for next-turn queueing, and Up for the latest submission', async () => {
+    const result = await setup({ status: 'running' })
+
+    result.terminal.send('steer now')
+    result.terminal.send('\r')
+    result.terminal.send('queue next')
+    result.terminal.send('\t')
+
+    expect(result.agent.steered).toEqual([[{ type: 'text', text: 'steer now' }]])
+    expect(result.agent.sent).toEqual([[{ type: 'text', text: 'queue next' }]])
+
+    result.terminal.send('\x1b[A')
+    result.terminal.send(' recalled')
+    result.terminal.send('\r')
+    expect(result.agent.steered.at(-1)).toEqual([{ type: 'text', text: 'queue next recalled' }])
+
+    result.terminal.send('queue replace')
+    result.terminal.send('\t')
+    const queued = result.agent.sentMessages[1]
+    if (queued === undefined) throw new Error('expected Tab submission')
+    result.inbox.seed('next-turn', [queued])
+    result.terminal.send('\x1b[A')
+    result.terminal.send(' replacement')
+    result.terminal.send('\r')
+    expect(result.inbox.nextTurn).toHaveLength(1)
+    expect(result.inbox.nextTurn[0]?.content).toEqual([{ type: 'text', text: 'queue replace replacement' }])
+    expect(result.agent.sent).toHaveLength(2)
+
+    await dispose(result)
+  })
+
+  it('does not queue Tab from an empty, idle, slash-autocomplete, or disabled editor', async () => {
+    const result = await setup({ status: 'running' })
+
+    result.terminal.send('\t')
+    result.terminal.send('/he')
+    result.terminal.send('\t')
+    await tick()
+    expect(result.agent.sent).toEqual([])
+    expect(result.agent.steered).toEqual([])
+    result.terminal.send('\x03')
+
+    result.agent.status = 'idle'
+    agentEvents(result.ctx, result.agent).emit('agent/status', { status: 'idle' })
+    result.terminal.send('idle draft')
+    result.terminal.send('\t')
+    await tick()
+    expect(result.agent.sent).toEqual([])
+    result.terminal.send('\x03')
+
+    await dispose(result)
+
+    const sourceId = SessionId('disabled-editor-source')
+    const disabled = await setup({
+      status: 'running',
+      async configureContext(ctx) {
+        ctx.provide('tools', { get: () => undefined } as never)
+        await ctx.plugin(TestSessionQueryService)
+        await ctx.plugin(SessionReferenceResolver)
+        ctx.sessions.create(sourceId)
+      },
+    })
+    const preparation = Promise.withResolvers<{ content: { type: 'text'; text: string }[] }>()
+    const prepare = vi.spyOn(disabled.ctx.sessionReferenceResolver, 'prepare')
+      .mockReturnValue(preparation.promise)
+    disabled.terminal.send(formatSessionReferenceMention({ sessionId: sourceId }))
+    disabled.terminal.send('\r')
+    await vi.waitFor(() => { expect(prepare).toHaveBeenCalledOnce() })
+    disabled.terminal.send('\t')
+    expect(disabled.agent.sent).toEqual([])
+    expect(disabled.agent.steered).toEqual([])
+    preparation.resolve({ content: [{ type: 'text', text: 'prepared once' }] })
+    await vi.waitFor(() => { expect(disabled.agent.steered).toHaveLength(1) })
+    await dispose(disabled)
+  })
+
+  it('delays queued session-reference context until the running turn ends', async () => {
+    const sourceId = SessionId('queued-reference-source')
+    const result = await setup({
+      status: 'running',
+      async configureContext(ctx) {
+        ctx.provide('tools', { get: () => undefined } as never)
+        await ctx.plugin(TestSessionQueryService)
+        await ctx.plugin(SessionReferenceResolver)
+        const source = ctx.sessions.create(sourceId)
+        appendUser(source, 'context available only to the queued turn')
+      },
+    })
+    const mention = formatSessionReferenceMention({ sessionId: sourceId, label: 'Queued source' })
+    result.terminal.send(`use ${mention}`)
+    result.terminal.send('\t')
+    await vi.waitFor(() => { expect(result.agent.sentMessages).toHaveLength(1) })
+    expect(result.agent.injected).toEqual([])
+
+    result.inbox.seed('next-turn', [result.agent.sentMessages[0]!])
+    result.session.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
+    await tick()
+    expect(result.agent.injected).toHaveLength(1)
+    expect(result.agent.injectedOptions[0]?.source).toMatchObject({
+      kind: 'session-reference',
+      references: [{ sessionId: sourceId }],
+    })
+
+    await dispose(result)
+  })
+
+  it('shows context, agents, jobs, and settings in the main area while preserving the workspace sidebar', async () => {
+    const result = await setup({ terminalRows: 80 })
+    for (const [command, title] of [
+      ['/context', 'Context'],
+      ['/agents', 'Subagents'],
+      ['/jobs', 'Background jobs'],
+      ['/settings', 'Settings'],
+    ] as const) {
+      result.terminal.output = ''
+      result.terminal.send(command)
+      result.terminal.send('\r')
+      await tick()
+      expect(result.terminal.output).toContain(title)
+      expect(result.terminal.output).toContain('Workspace')
+      expect(result.terminal.output).toContain('Status')
+      result.terminal.send('\x03')
+      await tick()
+    }
     await dispose(result)
   })
 

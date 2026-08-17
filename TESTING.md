@@ -28,16 +28,24 @@ The 2026-08-15 repair checks and 2026-08-16 release verification produced these 
 
 The source checks passed on the reviewed commit, and the final integration checks used the anonymous public registry rather than a workspace link or local tarball.
 
-## 1.4.0 interaction verification
+## 1.5.0 interaction verification
 
-The `1.4.0` checks cover two distinct placements. Built-in short choices render without popup borders in the fixed bottom area, while `/sessions` replaces the left chat area and leaves the outer frame and right sidebar intact. Component and command tests cover model, effort, details, theme, approval, permission, rename, goal, queue, and session-history interactions.
+The `1.5.0` checks cover three distinct placements and two input paths. Built-in short choices render without popup borders in the fixed bottom area; `/context`, `/agents`, `/jobs`, `/settings`, and `/sessions` replace the left chat area; and double Escape uses the current conversation's checkpoint view. Enter steers a running turn, Tab queues the next turn, and empty Up recalls the latest submission. Component and command tests cover these paths, active-session cycling, persisted titles, handoff locking, and frame/sidebar preservation.
 
 Current source evidence:
 
 | Check | Result |
 | --- | --- |
 | `pnpm run typecheck` | Passed |
-| `pnpm run test` | Passed: 37 files, 424 tests |
+| `pnpm run test` | Passed: 37 files, 435 tests |
+| `pnpm run lint` | Passed with 40 warnings and no errors |
+| `pnpm run build` | Passed |
+| `git diff --check` | Passed |
+| `pnpm run pack:artifact` | Passed: 307 files in the `1.5.0` artifact |
+| Packed-artifact audit | Passed for exports, bundle metadata, bundled editor, and runtime dependencies |
+| Windows empty-profile installation | Passed against public dsh rc.6 using the packed tarball |
+| Linux empty-profile installation | Passed against public dsh rc.6 using the packed tarball |
+| Linux real PTY | Passed startup, command paths, wheel reporting, session switching, export, and shutdown |
 | Main-area session-browser layout | Passed with outer-frame and sidebar assertions |
 | Bottom interaction rendering | Passed for built-in selectors and confirmations |
 
@@ -145,6 +153,11 @@ Exercise these behaviors through the installed profile:
 19. `/fork` adds the new session to Active and opens it; `/export <path>` creates that exact file.
 20. SGR and X10 wheel events move only transcript rows; editor text and cursor state remain unchanged.
 21. Questions, approvals, model, details, theme, permission, rename, goal, and queue choices render in the fixed bottom area without centered popup borders.
+22. While running, Enter steers and Tab queues; empty Up recalls the latest real submission and a duplicate queued submission replaces the existing item.
+23. Tab does not queue empty text, slash or file completion text, or a submission while idle; queued session references are applied when the queued turn starts.
+24. Double Escape opens only the current-conversation checkpoint view while idle with an empty editor; older/newer navigation, branch creation, close, and original-session preservation all work.
+25. `Ctrl+PageUp` and `Ctrl+PageDown` cycle the active workspace in both CSI forms; same-workspace resume, cross-workspace handoff, duplicate-open locking, and persisted stopped-session titles work.
+26. `/context`, `/agents`, `/jobs`, and `/settings` cover the chat main area while the full frame and sidebar remain visible.
 
 `scripts/verify-interactive-pty.sh` drives the packed plugin through a Python standard-library PTY. The driver answers terminal capability queries, creates and switches sessions, opens the session picker, exercises command paths, and performs double-Ctrl+C shutdown. The captured ANSI stream is replayed through `@xterm/headless`; the check requires the compact title, every sidebar section, Workspace to the right of the separator, and the editor to the left. The repository snapshot suite remains the keyless evidence for stable rendered output.
 

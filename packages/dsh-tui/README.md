@@ -4,7 +4,7 @@ Interactive terminal UI plugin and profile bundle for [DeepSeek Harness](https:/
 
 ## Release status
 
-Version `1.4.0` is the current release target. The previous public release is [`1.3.0`](https://www.npmjs.com/package/@lk251066/dsh-tui/v/1.3.0); publication follows the checks in [TESTING.md](../../TESTING.md).
+Version [`1.5.0`](https://www.npmjs.com/package/@lk251066/dsh-tui/v/1.5.0) is the current release. Its source, artifact, empty-profile installation, and real PTY evidence are recorded in [TESTING.md](../../TESTING.md).
 
 ## Installation
 
@@ -44,7 +44,11 @@ The bundled profile opens the active project session for the current directory. 
 
 Use `/sessions` to replace the left chat area with complete history while the outer frame and right sidebar remain fixed. Up and Down select a row, Enter opens it, Tab switches between complete history and the active list, and Space adds or removes a project session from the active workspace list. Escape returns to the transcript. Removing membership never deletes the session log. Use `/assistant` for the fixed personal assistant session.
 
-The TUI owns these commands: `/help`, `/model`, `/effort`, `/clear`, `/details`, `/theme`, `/queue`, `/rename`, `/fork`, `/status`, `/context`, `/agents`, `/jobs`, `/settings`, `/export`, `/exit`, `/quit`, `/sessions`, `/new`, and `/assistant`. `/effort` only accepts reasoning levels advertised by the selected model; model and effort selections are independent for each live session. dsh-base may add `/feedback`, `/goal`, `/compact`, `/permission`, and `/plan`. The bundle does not provide `/palette`, `/reload`, `/fleet`, or `/memories`.
+Use `Ctrl+PageUp` and `Ctrl+PageDown` to cycle the active workspace sessions without opening a browser. A stopped session in the same workspace resumes in the current process; a session in another workspace is handed to the dsh host. Persisted session titles are shown before a stopped session is opened.
+
+While the agent is running, Enter sends the editor text as immediate steering and Tab queues it for the next turn. Empty Up recalls the latest Enter or Tab submission; resubmitting the same queued text replaces that queue entry. Double Escape opens checkpoints from the current conversation only when the agent is idle and the editor is empty. Left or Escape selects an older checkpoint, Right selects a newer one, Enter creates and activates a branch before the selected turn, and `Ctrl+C` or `q` closes the view. This is separate from `/sessions`, which browses complete session history.
+
+The TUI owns these commands: `/help`, `/model`, `/effort`, `/clear`, `/details`, `/theme`, `/queue`, `/rename`, `/fork`, `/status`, `/context`, `/agents`, `/jobs`, `/settings`, `/export`, `/exit`, `/quit`, `/sessions`, `/new`, and `/assistant`. `/context`, `/agents`, `/jobs`, `/settings`, and `/sessions` replace the left main area and preserve the outer frame and active-workspace sidebar. `/effort` only accepts reasoning levels advertised by the selected model; model and effort selections are independent for each live session. dsh-base may add `/feedback`, `/goal`, `/compact`, `/permission`, and `/plan`. The bundle does not provide `/palette`, `/reload`, `/fleet`, or `/memories`.
 
 Use `/new` for another session in the active project. Use the whole command remainder as a project path, including spaces:
 

@@ -25,6 +25,8 @@ export interface SessionLayoutController {
   readonly sidebar: WorkspaceSidebarComponent
   /** Rebuild the sidebar rows from current registry state for the next render. */
   refresh(): void
+  /** Merge titles read from persisted stopped sessions, then rebuild the rows. */
+  setPersistedTitles(titles: ReadonlyMap<SessionId, string>): void
   /** Update active-session operational values without rebuilding navigation. */
   updateStatus(state: WorkspaceSidebarState): void
 }
@@ -49,10 +51,10 @@ function formatAge(ageMs: number): string {
   return `${Math.floor(ageMs / 86_400_000)}d`
 }
 
-function titleOf(slot: TuiSessionSlot): string {
+function titleOf(slot: TuiSessionSlot): string | undefined {
   const titleEvent = slot.agent.session.events.findLast(event => event.type === 'session/title')
   if (titleEvent?.type === 'session/title') return displayText(titleEvent.data.title)
-  return displayText(String(slot.sessionId))
+  return undefined
 }
 
 function workspaceOf(slot: TuiSessionSlot): string {
@@ -66,7 +68,7 @@ function itemOf(slot: TuiSessionSlot, activeId: SessionId, now: number): Session
   const lastActivityAt = events.at(-1)?.time ?? slot.agent.session.header.createdAt
   return {
     id: String(slot.sessionId),
-    title: titleOf(slot),
+    title: titleOf(slot) ?? displayText(String(slot.sessionId)),
     workspace: workspaceOf(slot),
     status: slot.agent.status,
     lastActivityAgo: formatAge(Math.max(0, now - lastActivityAt)),
@@ -80,6 +82,7 @@ function itemOf(slot: TuiSessionSlot, activeId: SessionId, now: number): Session
  * @returns The layout controller mounted by the TUI host.
  */
 export function createSessionLayout(deps: SessionLayoutDeps): SessionLayoutController {
+  const persistedTitles = new Map<SessionId, string>()
   const sessionList = new SessionListComponent(deps.palette, {
     // Workspace and status sections retain their rows; sessions consume the
     // remaining viewport and scroll around the selected item.
@@ -95,13 +98,13 @@ export function createSessionLayout(deps: SessionLayoutDeps): SessionLayoutContr
     const now = deps.now()
     const assistantSlot = deps.registry.get(ASSISTANT_SESSION_ID)
     const assistant = assistantSlot === undefined
-      ? stoppedItem(ASSISTANT_SESSION_ID, 'personal', activeId)
-      : itemOf(assistantSlot, activeId, now)
+      ? stoppedItem(ASSISTANT_SESSION_ID, 'personal', activeId, persistedTitles.get(ASSISTANT_SESSION_ID) ?? 'Assistant')
+      : rememberTitle(persistedTitles, assistantSlot, itemOf(assistantSlot, activeId, now))
     const projects = deps.workspaceSessions.list().map(({ sessionId, workspace }) => {
       const slot = deps.registry.get(sessionId)
       return slot === undefined
-        ? stoppedItem(sessionId, workspace.title, activeId)
-        : itemOf(slot, activeId, now)
+        ? stoppedItem(sessionId, workspace.title, activeId, persistedTitles.get(sessionId))
+        : rememberTitle(persistedTitles, slot, itemOf(slot, activeId, now))
     })
     sessionList.setItems([assistant, ...projects])
   }
@@ -110,16 +113,35 @@ export function createSessionLayout(deps: SessionLayoutDeps): SessionLayoutContr
     sessionList,
     sidebar,
     refresh,
+    setPersistedTitles(titles): void {
+      for (const [sessionId, title] of titles) persistedTitles.set(sessionId, displayText(title))
+      refresh()
+    },
     updateStatus(state): void {
       sidebar.update(state)
     },
   }
 }
 
-function stoppedItem(sessionId: SessionId, workspace: string, activeId: SessionId): SessionListItem {
+function rememberTitle(
+  titles: Map<SessionId, string>,
+  slot: TuiSessionSlot,
+  item: SessionListItem,
+): SessionListItem {
+  const title = titleOf(slot)
+  if (title !== undefined) titles.set(slot.sessionId, title)
+  return item
+}
+
+function stoppedItem(
+  sessionId: SessionId,
+  workspace: string,
+  activeId: SessionId,
+  title?: string,
+): SessionListItem {
   return {
     id: String(sessionId),
-    title: displayText(String(sessionId)),
+    title: title ?? displayText(String(sessionId)),
     workspace: displayText(workspace),
     status: 'stopped',
     lastActivityAgo: '',

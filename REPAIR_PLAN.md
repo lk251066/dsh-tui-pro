@@ -6,9 +6,17 @@ This document is the source of truth for making `@lk251066/dsh-tui` independentl
 
 Ship one package: `@lk251066/dsh-tui`. Its package manifest already defines `dsh.bundle.patch`, so the repository will not create or publish a separate `@lk251066/dsh-tui-bundle` compatibility package.
 
-The published `1.3.0` package, annotated tag, checksummed GitHub Release, source version, and lockfile identify release commit `8fca5ec`. Version `1.4.0` is the current release target and must pass the same Windows and Linux empty-profile installation and real PTY evidence against public `@deepseek-ai/dsh@0.1.0-rc.6`.
+The published `1.4.0` package, annotated tag, checksummed GitHub Release, source version, and lockfile identify release commit `61344cc`. Version `1.5.0` is the current release and passes Windows and Linux empty-profile installation plus real PTY evidence against public `@deepseek-ai/dsh@0.1.0-rc.6`.
 
-The `1.4.0` scope is limited to interaction placement: short choices use the fixed bottom area without popup borders, while complete session history replaces only the left chat area and preserves the frame and active-workspace sidebar.
+The `1.5.0` scope covers interaction routing inside the existing fixed workbench: running input has direct-steer and next-turn queue paths, the current conversation has checkpoint branching, active workspace sessions have keyboard cycling and durable titles, and information views replace only the left chat area while preserving the frame and sidebar.
+
+## Version 1.5.0 interaction routing
+
+Enter while running steers the current turn. Tab while running queues the next turn, with no queue action for empty input or an open completion menu. Empty Up recalls the latest real submission, and an unchanged queued submission replaces its existing entry. Session-reference context attached to a queued message is delayed until that message becomes the next turn.
+
+Double Escape is a checkpoint navigator for the current conversation, not a history browser. It is available only while idle with an empty editor and closed completion menu. Selecting a checkpoint creates a new branch before that turn; the original session remains unchanged. `/sessions` continues to browse complete history. `Ctrl+PageUp` and `Ctrl+PageDown` cycle active workspace sessions, with same-workspace resume, cross-workspace host handoff, and duplicate-open locking.
+
+`/context`, `/agents`, `/jobs`, and `/settings` use the same main-area placement as `/sessions`. The outer frame, sidebar, and input ownership remain fixed.
 
 ## Version 1.4.0 interaction placement
 

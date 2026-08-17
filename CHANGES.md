@@ -1,5 +1,15 @@
 # Terminal Workbench
 
+## 1.5.0 changes
+
+Running input now has two explicit paths. Enter sends immediate steering for the current turn, while Tab queues text for the next turn. Empty Up recalls the latest real Enter or Tab submission, and resubmitting an unchanged queued item replaces it instead of creating a duplicate. Queued session-reference context is applied with the queued turn rather than injected into the turn already running.
+
+Double Escape opens checkpoint navigation for the current conversation when the agent is idle and the editor is empty. The navigator creates a new branch before the selected turn and preserves the original session. `/sessions` remains the separate complete-history browser.
+
+`Ctrl+PageUp` and `Ctrl+PageDown` cycle the active workspace sessions. Same-workspace stopped sessions resume in the current process, cross-workspace sessions use host handoff, and duplicate open requests are ignored until the first request completes. Persisted titles are loaded for stopped active sessions.
+
+`/context`, `/agents`, `/jobs`, and `/settings` now replace the chat main area like `/sessions`, leaving the full-screen frame and active-workspace sidebar fixed.
+
 ## 1.4.0 changes
 
 Built-in choices now use the fixed bottom interaction area without popup borders. This applies to questions, approvals, model and reasoning-effort selection, transcript details, themes, permissions, session renaming, goal actions, and queue actions. The transcript stays visible above the selector and the right sidebar remains fixed.

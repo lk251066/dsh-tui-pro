@@ -5,12 +5,13 @@ import { describe, expect, it, vi } from 'vitest'
 import type { Terminal } from '@earendil-works/pi-tui'
 import { agentEvents, type Agent } from '@deepseek-ai/dsh-agent'
 import { ReasoningEffortId, type UserMessage } from '@deepseek-ai/dsh-llm'
-import { SessionId } from '@deepseek-ai/dsh-session'
+import { SessionId, type SessionEvent, type SessionHeader } from '@deepseek-ai/dsh-session'
 import {
   appendUser,
   createTuiTestHarness,
   disposeTuiTestHarness,
   type TuiHarness,
+  type TuiHarnessOptions,
 } from './harness.ts'
 
 /**
@@ -95,15 +96,23 @@ async function tick(): Promise<void> {
   await new Promise(resolve => setTimeout(resolve, 25))
 }
 
-/** Compose the TUI plus a fake creation factory recording every `/new` agent. */
-async function switchHarness(cwd = '/workspace'): Promise<{
+interface SwitchHarnessOptions extends Pick<TuiHarnessOptions, 'handoffResume' | 'sessionPersistence'> {
+  resumeError?: Error
+}
+
+/** Compose the TUI plus a fake factory recording every created or resumed agent. */
+async function switchHarness(cwd = '/workspace', options: SwitchHarnessOptions = {}): Promise<{
   harness: TuiHarness<RecordingTerminal, (code: number) => void>
   created: CreatedAgentRecord[]
+  resumed: CreatedAgentRecord[]
 }> {
   const created: CreatedAgentRecord[] = []
+  const resumed: CreatedAgentRecord[] = []
   const terminal = new RecordingTerminal()
   const exit = vi.fn()
+  const { resumeError, ...harnessOptions } = options
   const harness = await createTuiTestHarness(terminal, exit, {
+    ...harnessOptions,
     cwd,
     agentOptions: { provider: 'alpha', model: 'a1' },
     catalog: {
@@ -134,7 +143,7 @@ async function switchHarness(cwd = '/workspace'): Promise<{
   })
   harness.ctx.agents.setFactory({
     async createAgent(_ownerCtx, options) {
-      const session = harness.ctx.sessions.create(options.sessionId, { meta: options.meta })
+      const session = harness.ctx.sessions.create(options.sessionId, { seed: options.seed, meta: options.meta })
       const followups: string[] = []
       const agent = {
         id: options.sessionId,
@@ -159,11 +168,41 @@ async function switchHarness(cwd = '/workspace'): Promise<{
       created.push({ agent, followups, cwd: options.meta?.cwd })
       return { agent, dispose: async () => {} }
     },
-    async resume() {
-      throw new Error('resume is not part of this suite')
+    async resume(_ownerCtx, options) {
+      if (resumeError !== undefined) throw resumeError
+      const persistence = harness.ctx.get('sessionPersistence')
+      if (persistence === undefined) throw new Error('session persistence is not mounted')
+      const prepared = await persistence.load(options.resumeSessionId)
+      const session = harness.ctx.sessions.create(options.resumeSessionId, {
+        seed: prepared.events,
+        meta: prepared.meta,
+      })
+      const followups: string[] = []
+      const agent = {
+        id: options.resumeSessionId,
+        options: { provider: 'beta', model: 'b1' },
+        session,
+        status: 'idle',
+        ctx: harness.ctx,
+        followup(message: UserMessage) {
+          followups.push(message.content.filter(block => block.type === 'text').map(block => block.text).join(''))
+        },
+        steer() {
+          return { outcome: Promise.resolve({ status: 'rejected' as const }) }
+        },
+        inject: () => '',
+        send: () => {},
+        updateInbox: () => 'not-found',
+        reserveTurnAdmission: () => undefined,
+        cancel() {},
+        whenIdle: () => Promise.resolve(),
+      } as unknown as Agent
+      harness.ctx.agents.register(agent)
+      resumed.push({ agent, followups, cwd: prepared.meta.cwd })
+      return { agent, dispose: async () => {} }
     },
   })
-  return { harness, created }
+  return { harness, created, resumed }
 }
 
 /** Type a full line into the editor and submit it. */
@@ -256,6 +295,86 @@ describe('multi-session switching (/new, /sessions)', () => {
     }
   })
 
+  it('double Escape branches before a completed user turn and restores its prompt for editing', async () => {
+    const { harness, created } = await switchHarness()
+    try {
+      appendUser(harness.session, 'first request')
+      harness.session.append('step/end', { turn: 1, step: 1 })
+      harness.session.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
+      harness.session.append('turn/start', {
+        turn: 2,
+        trigger: { kind: 'message', source: { kind: 'user' } },
+      })
+      appendUser(harness.session, 'second request to revise')
+      harness.session.append('turn/end', { turn: 2, reason: { kind: 'completed' } })
+
+      harness.terminal.send('\x1b')
+      await tick()
+      expect(harness.terminal.output).not.toContain('Rewind conversation')
+      harness.terminal.send('\x1b')
+      await tick()
+
+      expect(harness.terminal.output).toContain('Rewind conversation')
+      expect(harness.terminal.output).toContain('second request to revise')
+      harness.terminal.send('\x1b[D')
+      harness.terminal.send('\x1b[C')
+      harness.terminal.send('\r')
+      await tick()
+
+      expect(created).toHaveLength(1)
+      expect(created[0]?.agent.session.events.some(event =>
+        event.type === 'user/message'
+        && event.data.source.kind === 'user'
+        && event.data.content.some(block => block.type === 'text' && block.text.includes('second request')),
+      )).toBe(false)
+
+      harness.terminal.send('\r')
+      await tick()
+      expect(created[0]?.followups).toEqual(['second request to revise'])
+    } finally {
+      await disposeTuiTestHarness(harness)
+    }
+  })
+
+  it('does not enter checkpoint navigation from a draft, running turn, or active dialog', async () => {
+    const { harness } = await switchHarness()
+    try {
+      appendUser(harness.session, 'completed request')
+      harness.session.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
+
+      harness.terminal.output = ''
+      harness.terminal.send('draft')
+      harness.terminal.send('\x1b')
+      harness.terminal.send('\x1b')
+      await tick()
+      expect(harness.terminal.output).not.toContain('Rewind conversation')
+      harness.terminal.send('\x03')
+
+      harness.agent.status = 'running'
+      agentEvents(harness.ctx, harness.agent).emit('agent/status', { status: 'running' })
+      harness.terminal.output = ''
+      harness.terminal.send('\x1b')
+      harness.terminal.send('\x1b')
+      await tick()
+      expect(harness.agent.cancelled).toHaveLength(2)
+      expect(harness.terminal.output).not.toContain('Rewind conversation')
+
+      harness.agent.status = 'idle'
+      agentEvents(harness.ctx, harness.agent).emit('agent/status', { status: 'idle' })
+      submit(harness, '/settings')
+      await tick()
+      expect(harness.terminal.output).toContain('Settings')
+      harness.terminal.output = ''
+      harness.terminal.send('\x1b')
+      await tick()
+      harness.terminal.send('\x1b')
+      await tick()
+      expect(harness.terminal.output).not.toContain('Rewind conversation')
+    } finally {
+      await disposeTuiTestHarness(harness)
+    }
+  })
+
   it('/sessions lists active sessions and search switches back', async () => {
     const { harness, created } = await switchHarness()
     try {
@@ -289,6 +408,29 @@ describe('multi-session switching (/new, /sessions)', () => {
       ])
       // The second session's agent heard nothing more.
       expect(created[0]?.followups).toEqual(['hello second'])
+    } finally {
+      await disposeTuiTestHarness(harness)
+    }
+  })
+
+  it('cycles active workspace sessions with Ctrl+PageUp and Ctrl+PageDown', async () => {
+    const { harness, created } = await switchHarness()
+    try {
+      submit(harness, '/new')
+      await tick()
+      expect(created).toHaveLength(1)
+
+      // Move from the newly activated project session back to the startup
+      // session, then return to the project session.
+      harness.terminal.send('\x1b[5;5~')
+      await tick()
+      submit(harness, 'message on main')
+      expect(harness.agent.sentMessages.at(-1)?.content).toEqual([{ type: 'text', text: 'message on main' }])
+
+      harness.terminal.send('\x1b[6;5~')
+      await tick()
+      submit(harness, 'message on branch')
+      expect(created[0]?.followups).toEqual(['message on branch'])
     } finally {
       await disposeTuiTestHarness(harness)
     }
@@ -419,6 +561,134 @@ describe('multi-session switching (/new, /sessions)', () => {
       agentEvents(harness.ctx, background!).emit('agent/status', { status: 'running' })
       await tick()
       expect(harness.terminal.output).toContain('● Background work')
+    } finally {
+      await disposeTuiTestHarness(harness)
+    }
+  })
+
+  it('loads a persisted title for a stopped active session during startup', async () => {
+    const stoppedId = SessionId('stopped-project-session')
+    const header: SessionHeader = {
+      version: 0,
+      id: stoppedId,
+      createdAt: 1,
+      cwd: '/workspace',
+    }
+    const events: SessionEvent[] = [{
+      type: 'session/title',
+      seq: 0,
+      time: 2,
+      data: {
+        title: 'Persisted project title',
+        messageSeqs: [],
+        source: { kind: 'fallback' },
+      },
+    }]
+    const terminal = new RecordingTerminal()
+    const harness = await createTuiTestHarness(terminal, vi.fn(), {
+      sessionPersistence: {
+        list: async () => [header],
+        load: async () => ({ meta: header, events }),
+      },
+      beforeMount(_session, ctx) {
+        const workspace = ctx.workspaceRegistry.list()[0]
+        if (workspace !== undefined) void workspace.attachSession(stoppedId)
+      },
+    })
+    try {
+      await vi.waitFor(() => {
+        expect(terminal.output).toContain('Persisted project title')
+      })
+    } finally {
+      await disposeTuiTestHarness(harness)
+    }
+  })
+
+  it('resumes and switches to a stopped session in the startup workspace', async () => {
+    const target: SessionHeader = {
+      version: 0,
+      id: SessionId('stopped-same-workspace'),
+      createdAt: 1,
+      cwd: '/workspace',
+    }
+    const events: SessionEvent[] = [{
+      type: 'session/title',
+      seq: 0,
+      time: 2,
+      data: { title: 'Stopped project', messageSeqs: [], source: { kind: 'fallback' } },
+    }]
+    const { harness, resumed } = await switchHarness('/workspace', {
+      sessionPersistence: {
+        list: async () => [target],
+        load: async () => ({ meta: target, events }),
+      },
+    })
+    try {
+      const workspace = harness.ctx.workspaceRegistry.list()[0]
+      await workspace?.attachSession(target.id)
+
+      await switchTo(harness, target.id)
+      await tick()
+
+      expect(resumed).toHaveLength(1)
+      expect(workspace?.sessionIds).toContain(target.id)
+      submit(harness, 'continue stopped work')
+      await tick()
+      expect(resumed[0]?.followups).toEqual(['continue stopped work'])
+    } finally {
+      await disposeTuiTestHarness(harness)
+    }
+  })
+
+  it('keeps the current session usable when same-workspace resume fails', async () => {
+    const target: SessionHeader = {
+      version: 0,
+      id: SessionId('broken-stopped-session'),
+      createdAt: 1,
+      cwd: '/workspace',
+    }
+    const { harness, resumed } = await switchHarness('/workspace', {
+      resumeError: new Error('persisted log is unreadable'),
+      sessionPersistence: {
+        list: async () => [target],
+        load: async () => ({ meta: target, events: [] }),
+      },
+    })
+    try {
+      await switchTo(harness, target.id)
+      await tick()
+
+      expect(resumed).toHaveLength(0)
+      expect(harness.terminal.output).toContain('Session open failed: persisted log is unreadable')
+      submit(harness, 'current session still works')
+      expect(harness.agent.sent).toEqual([[{ type: 'text', text: 'current session still works' }]])
+    } finally {
+      await disposeTuiTestHarness(harness)
+    }
+  })
+
+  it('hands a stopped session from another project to the process host', async () => {
+    const target: SessionHeader = {
+      version: 0,
+      id: SessionId('stopped-other-workspace'),
+      createdAt: 1,
+      cwd: '/other-project',
+    }
+    const handoff = vi.fn(() => Promise.reject(new Error('test host retained process')))
+    const { harness, resumed } = await switchHarness('/workspace', {
+      handoffResume: handoff,
+      sessionPersistence: {
+        list: async () => [target],
+        load: async () => ({ meta: target, events: [] }),
+      },
+    })
+    try {
+      await switchTo(harness, target.id)
+      await tick()
+
+      expect(resumed).toHaveLength(0)
+      expect(handoff).toHaveBeenCalledWith(target.id, '/other-project')
+      expect(harness.terminal.output).toContain('Resume handoff failed: test host retained process')
     } finally {
       await disposeTuiTestHarness(harness)
     }

@@ -38,7 +38,7 @@ viewport
   style 34-50 dim
   style 53-57 dim
   style 60-69 dim
-18| " dsh ● press enter to steer and esc to cancel                                                   "
+18| " dsh ● Enter steer · Tab queue · Esc cancel                                                     "
   style 1-3 fg=bright-magenta bold
   style 5-44 dim
 19-35| <blank>

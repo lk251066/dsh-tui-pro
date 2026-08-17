@@ -316,7 +316,7 @@ export function writeExport(cwd: string, session: Session, outputPath?: string):
   return path
 }
 
-/** Open one static insight overlay. */
+/** Open one static insight view in the chat main area. */
 export function openStaticDialog(
   deps: InsightsDeps,
   title: string,
@@ -325,7 +325,7 @@ export function openStaticDialog(
 ): void {
   const session = deps.overlayManager.open({
     create: () => new StaticDialog(title, lines, deps.palette, () => { void session.close() }, refresh),
-    options: { width: 76, maxHeight: 24, anchor: 'center', margin: 1 },
-  })
+    options: { width: '100%', maxHeight: '100%' },
+  }, 'main')
   deps.requestRender()
 }

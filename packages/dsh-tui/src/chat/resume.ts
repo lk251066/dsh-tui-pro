@@ -47,6 +47,8 @@ export interface ResumeControllerDeps extends ChatChannelDeps, ChannelNotice {
   readonly workspaceSessions: WorkspaceSessions
   /** Switch or adopt a session already live in this process. */
   openLive(sessionId: SessionId): boolean
+  /** Resume and adopt a stopped session when its tools share this process workspace. */
+  openPersisted(sessionId: SessionId, cwd: string): Promise<boolean>
   /** Current agent status, re-read at each resume precondition point. */
   agentStatus(): AgentStatus
 }
@@ -55,6 +57,8 @@ export interface ResumeControllerDeps extends ChatChannelDeps, ChannelNotice {
 export interface ResumeController {
   /** Open the unified searchable active-workspace and history selector. */
   showSessions(): void
+  /** Open one active session directly, using an in-process switch or host handoff. */
+  openSession(sessionId: SessionId): void
 }
 
 /**
@@ -76,6 +80,7 @@ export function createResumeController(deps: ResumeControllerDeps): ResumeContro
   const agent = (): Agent => deps.agent
   let resumeOverlay: TuiOverlaySession | undefined
   let resumeInFlight = false
+  let sessionOpenInFlight = false
   let resumeScan = 0
 
   /** Label any session's own workspace the way the prompt labels the current one. */
@@ -248,15 +253,19 @@ export function createResumeController(deps: ResumeControllerDeps): ResumeContro
     return { id: record.header.id, cwd }
   }
 
-  const handoffResume = async (candidate: ResumeCandidate, overlay: TuiOverlaySession): Promise<void> => {
+  const handoffResume = async (
+    sessionId: SessionId,
+    overlay?: TuiOverlaySession,
+    preflight?: { id: SessionId; cwd: string },
+  ): Promise<void> => {
     if (resumeInFlight) return
     resumeInFlight = true
     let terminalReleased = false
     try {
-      const checked = await preflightResume(candidate.record.header.id)
+      const checked = preflight ?? await preflightResume(sessionId)
       const hostHandoff = runtime.handoffResume
       if (hostHandoff === undefined) {
-        await overlay.close()
+        await overlay?.close()
         resumeOverlay = undefined
         deps.appendNotice('Session is resumable, but this host cannot hand it off in place.', 'warning')
         return
@@ -267,7 +276,7 @@ export function createResumeController(deps: ResumeControllerDeps): ResumeContro
       // Disposal can run while the flush promise is pending.
       if (deps.isDisposed()) return
       if (agent().status !== 'idle') throw new Error(`Resume requires an idle agent (status: ${agent().status}).`)
-      await overlay.close()
+      await overlay?.close()
       resumeOverlay = undefined
       await runtime.terminal.drainInput(100, 20)
       // Disposal can run while terminal draining is pending.
@@ -286,7 +295,7 @@ export function createResumeController(deps: ResumeControllerDeps): ResumeContro
           ui.setFocus(editor)
           deps.appendNotice(`Resume handoff failed: ${errorChain(error)}`, 'error')
         } else {
-          await overlay.close()
+          await overlay?.close()
           resumeOverlay = undefined
           deps.appendNotice(`Resume failed: ${errorChain(error)}`, 'error')
         }
@@ -294,6 +303,29 @@ export function createResumeController(deps: ResumeControllerDeps): ResumeContro
     } finally {
       resumeInFlight = false
     }
+  }
+
+  const openStoppedSession = (sessionId: SessionId, overlay?: TuiOverlaySession): void => {
+    if (sessionOpenInFlight) return
+    sessionOpenInFlight = true
+    const open = async (): Promise<void> => {
+      try {
+        const checked = await preflightResume(sessionId)
+        if (await deps.openPersisted(checked.id, checked.cwd)) {
+          await overlay?.close()
+          return
+        }
+        await handoffResume(checked.id, overlay, checked)
+      } catch (error: unknown) {
+        if (!deps.isDisposed()) {
+          await overlay?.close()
+          deps.appendNotice(`Session open failed: ${errorChain(error)}`, 'error')
+        }
+      } finally {
+        sessionOpenInFlight = false
+      }
+    }
+    void open()
   }
 
   const openSession = (candidate: ResumeCandidate, overlay: TuiOverlaySession): void => {
@@ -305,10 +337,15 @@ export function createResumeController(deps: ResumeControllerDeps): ResumeContro
       void overlay.close()
       return
     }
-    void handoffResume(candidate, overlay)
+    openStoppedSession(candidate.record.header.id, overlay)
   }
 
   return {
+    openSession(sessionId): void {
+      if (sessionId === agent().session.id) return
+      if (deps.openLive(sessionId)) return
+      openStoppedSession(sessionId)
+    },
     showSessions(): void {
       const listQuery = sessionQuery()
       if (listQuery === undefined) {

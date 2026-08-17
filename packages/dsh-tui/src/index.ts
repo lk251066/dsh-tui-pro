@@ -36,7 +36,7 @@ import type {} from '@deepseek-ai/dsh-agent-loop'
 import type {} from '@deepseek-ai/dsh-token-meter'
 import type { CommandResult } from '@deepseek-ai/dsh-commands'
 import { createUserMessage, errorChain } from '@deepseek-ai/dsh-llm'
-import type { ContentBlock } from '@deepseek-ai/dsh-llm'
+import type { ContentBlock, MessageId } from '@deepseek-ai/dsh-llm'
 import type {} from '@deepseek-ai/dsh-llm-retry'
 import { renderPrompt } from '@deepseek-ai/dsh-system-prompt'
 import {
@@ -51,6 +51,7 @@ import { foldSessionTitle } from '@deepseek-ai/dsh-session-title'
 // Type import also declaration-merges the optional `sessionPersistence`
 // service onto `Context` so `ctx.get('sessionPersistence')` is typed.
 import type {} from '@deepseek-ai/dsh-session-persistence'
+import type { SessionQueryEngine } from '@deepseek-ai/dsh-session-query'
 import type {} from '@deepseek-ai/dsh-workspace'
 import type { SkillRegistry } from '@deepseek-ai/dsh-skill'
 // Merges the `permissionPresets` service and the `permission/preset` session
@@ -172,6 +173,7 @@ import {
 } from './chat/insights.ts'
 import { foldPlanMode } from '@deepseek-ai/dsh-plan-mode'
 import { createResumeController } from './chat/resume.ts'
+import { createRewindController } from './chat/rewind.ts'
 import type { TuiResumeHost, TuiRuntime } from './runtime.ts'
 import { WorkspaceFileSearch } from './chat/file-autocomplete.ts'
 
@@ -359,6 +361,8 @@ export interface TuiSessionSlot extends SessionSlot {
   readonly goalBar: GoalBarController
   /** The steering queue dock (/queue sheet) for this session. */
   readonly queueDock: QueueDockController
+  /** Ordinary editor submissions in their real submission order. */
+  readonly submissions: Array<{ readonly text: string; readonly messageId: MessageId }>
   /** Answers `approval/request` for this slot's agent only. */
   readonly approvals: ApprovalAnswerer
   /** Disposer for this agent's model-selection waterfall listeners. */
@@ -959,6 +963,7 @@ function createTuiChatInternal(
       channel: slotChannel,
       goalBar: slotGoalBar,
       queueDock: slotQueueDock,
+      submissions: [],
       approvals: createApprovalAnswerer({
         ctx,
         resolved,
@@ -1075,6 +1080,11 @@ function createTuiChatInternal(
     },
   }, agent)
 
+  // A queued session reference must not inject its context into the currently
+  // running turn. Hold it by prompt identity and inject it synchronously after
+  // that turn closes, before the next queued turn claims its first step.
+  const queuedReferenceContexts = new Map<MessageId, { readonly agent: Agent; readonly context: UserMessage }>()
+
   const workspaceSessions = createWorkspaceSessions(ctx)
 
   if (agent.session.id === ASSISTANT_SESSION_ID) setupAssistant(agent.ctx, registry, workspaceSessions)
@@ -1143,6 +1153,30 @@ function createTuiChatInternal(
   })
   ui.addChild(workbench)
   persistentLayout.refresh()
+  let stoppedTitleScan = 0
+  let stoppedTitleAbort: AbortController | undefined
+  const refreshStoppedTitles = (): void => {
+    const query = currentSessionQuery()
+    if (query === undefined) return
+    const ids = workspaceSessions.list().map(item => item.sessionId).filter((sessionId, index, all) =>
+      registry.get(sessionId) === undefined && all.indexOf(sessionId) === index)
+    if (ids.length === 0 || typeof query.readTitleSnapshots !== 'function') return
+    const scan = ++stoppedTitleScan
+    stoppedTitleAbort?.abort()
+    const controller = new AbortController()
+    stoppedTitleAbort = controller
+    void query.readTitleSnapshots(ids, controller.signal).then((results) => {
+      if (isDisposed() || controller.signal.aborted || scan !== stoppedTitleScan) return
+      const titles = new Map<SessionId, string>()
+      for (const result of results) {
+        if (result.status === 'fulfilled' && result.value.title !== undefined) {
+          titles.set(result.sessionId, result.value.title.title)
+        }
+      }
+      persistentLayout.setPersistedTitles(titles)
+      requestRender()
+    }, () => {})
+  }
   // Mounted channels already request renders for their own events. Background
   // channels are detached, so wake the shared chrome when one of their rows
   // changes; updatePromptValues() then rebuilds the full live-session list.
@@ -1150,15 +1184,32 @@ function createTuiChatInternal(
     const slot = registry.slots().find(candidate => candidate.agent.session === sourceSession)
     if (slot !== undefined && !registry.isActive(slot)) requestRender()
   })
+  const disposeQueuedReferenceTurns = ctx.on('session/event', (sourceSession, event) => {
+    if (event.type !== 'turn/end') return
+    const slot = registry.slots().find(candidate => candidate.agent.session === sourceSession)
+    const next = slot?.agent.inbox.nextTurn[0]
+    if (slot === undefined || next === undefined) return
+    const pending = queuedReferenceContexts.get(next.id)
+    if (pending === undefined || pending.agent !== slot.agent) return
+    queuedReferenceContexts.delete(next.id)
+    slot.agent.inject(pending.context)
+  })
+  const disposeQueuedReferenceDiscards = ctx.on('agent/inbox/discarded', ({ message }) => {
+    queuedReferenceContexts.delete(message.id)
+  })
   const disposeBackgroundStatusChanges = ctx.on('agent/status', ({ agent: source }) => {
     const slot = registry.slots().find(candidate => candidate.agent === source)
     if (slot !== undefined && !registry.isActive(slot)) requestRender()
   })
   const disposeWorkspaceChanges = ctx.on('domain/changed', (change) => {
-    if (change.domain === 'workspace') requestRender()
+    if (change.domain === 'workspace') {
+      refreshStoppedTitles()
+      requestRender()
+    }
   })
 
   updatePromptValues()
+  refreshStoppedTitles()
 
   /** Status-priority placeholder text for the empty editor (dim; the hint editor paints it). */
   const editorHintFor = (status: AgentStatus): string => {
@@ -1263,6 +1314,12 @@ function createTuiChatInternal(
   // The keyboard answerer behind `approval/request` lives per-slot in the
   // channel registry (each slot claims only its own agent's asks).
 
+  function currentSessionQuery(): SessionQueryEngine | undefined {
+    const implementation = ctx.reflect._getImpl('sessionQuery', false)
+    if (implementation === undefined || implementation.fiber.state >= FIBER_FAILED) return undefined
+    return ctx.get('sessionQuery', false)
+  }
+
   const resume = createResumeController({
     ctx,
     // Getter: /sessions preflights the mounted session, not the initial one.
@@ -1274,11 +1331,7 @@ function createTuiChatInternal(
     // Optional and independently mounted. Cordis transiently leaves this sibling
     // non-ACTIVE during command callbacks, so the non-strict read is intentional;
     // terminal fiber states still exclude failed, closing, and closed providers.
-    sessionQuery: () => {
-      const implementation = ctx.reflect._getImpl('sessionQuery', false)
-      if (implementation === undefined || implementation.fiber.state >= FIBER_FAILED) return undefined
-      return ctx.get('sessionQuery', false)
-    },
+    sessionQuery: currentSessionQuery,
     workspaceSessions,
     openLive(sessionId): boolean {
       const slot = registry.get(sessionId)
@@ -1286,6 +1339,15 @@ function createTuiChatInternal(
       const live = ctx.agents.get(sessionId)
       if (live === undefined) return false
       registry.adopt(live)
+      return true
+    },
+    async openPersisted(sessionId, cwd): Promise<boolean> {
+      if (resolve(cwd) !== resolve(initialCwd)) return false
+      const handle = await ctx.agents.resume({ resumeSessionId: sessionId })
+      if (isDisposed()) return true
+      await workspaceSessions.add(handle.agent.session.id)
+      if (isDisposed()) return true
+      registry.adopt(handle.agent)
       return true
     },
     ui,
@@ -1296,13 +1358,46 @@ function createTuiChatInternal(
     agentStatus,
   })
 
+  const rewind = createRewindController({
+    ctx,
+    get agent(): Agent { return agent },
+    resolved,
+    palette,
+    overlayManager,
+    appendNotice,
+    requestRender,
+    isDisposed,
+    async activate(rewoundAgent, prompt): Promise<void> {
+      await workspaceSessions.add(rewoundAgent.session.id)
+      if (isDisposed()) return
+      registry.adopt(rewoundAgent)
+      editor.setText(prompt)
+      requestRender()
+    },
+  })
+
+  const cycleActiveSession = (offset: -1 | 1): void => {
+    const ids = [
+      ASSISTANT_SESSION_ID,
+      ...workspaceSessions.list().map(item => item.sessionId),
+    ].filter((sessionId, index, all) => all.indexOf(sessionId) === index)
+    if (ids.length <= 1) return
+    const current = Math.max(0, ids.indexOf(agent.session.id))
+    const next = ids[(current + offset + ids.length) % ids.length]
+    if (next === undefined || next === agent.session.id) return
+    if (next === ASSISTANT_SESSION_ID) assistant.open()
+    else resume.openSession(next)
+  }
+
   // Ctrl+C/Ctrl+D at an idle empty prompt require a second press within
   // EXIT_DOUBLE_PRESS_MS (the Claude Code convention) — a stray press shows a
   // dim hint on the editor instead of killing the session.
   const EXIT_DOUBLE_PRESS_MS = 800
+  const REWIND_DOUBLE_PRESS_MS = 800
   // Hard ceiling on the shutdown dispose chain before the exit fires anyway.
   const SHUTDOWN_EXIT_FALLBACK_MS = 3_000
   let exitArmedAt: number | undefined
+  let rewindArmedAt: number | undefined
   const doublePressExit = (key: string): void => {
     const pressedAt = now()
     if (exitArmedAt !== undefined && pressedAt - exitArmedAt <= EXIT_DOUBLE_PRESS_MS) {
@@ -1556,8 +1651,9 @@ function createTuiChatInternal(
     channel.chat.addChild(new Spacer(1))
     channel.chat.addChild(new Text(palette.bold(palette.accent('Keyboard shortcuts')), 0, 0))
     channel.chat.addChild(new Text([
-      'Enter send • Shift/Alt+Enter newline • Up/Down prompt history',
-      'Esc cancel turn • Ctrl+O cycle cards (collapse/expand/hide) • Ctrl+R toggle reasoning • Ctrl+L redraw',
+      'Enter send/steer • Tab queue while running • Shift/Alt+Enter newline • Up/Down prompt history',
+      'Esc cancel turn; double Esc edits a checkpoint • Ctrl+PageUp/PageDown switch active sessions',
+      'Ctrl+O cycle cards (collapse/expand/hide) • Ctrl+R toggle reasoning • Ctrl+L redraw',
       'Shift+Tab cycle permission preset • Ctrl+G goal actions • Ctrl+C cancel/clear/exit • Ctrl+D exit',
       '',
       ...commandLines,
@@ -1912,21 +2008,38 @@ function createTuiChatInternal(
     ).finally(() => { commandControllers.delete(controller) })
   }
 
-  const dispatchMessage = (content: ContentBlock[], attachedContext?: UserMessage): void => {
+  type MessageDelivery = 'auto' | 'queue'
+
+  const dispatchMessage = (
+    content: ContentBlock[],
+    attachedContext?: UserMessage,
+    delivery: MessageDelivery = 'auto',
+    targetAgent: Agent = agent,
+    targetChannel: SessionChannel = channel,
+  ): UserMessage | undefined => {
     if (disposed) {
-      appendNotice(`Agent "${agent.id}" is disposed.`, 'error')
-      return
-    }
-    if (attachedContext !== undefined) {
-      agent.inject(attachedContext)
+      appendNotice(`Agent "${targetAgent.id}" is disposed.`, 'error')
+      return undefined
     }
     const message = createUserMessage({ content, source: { kind: 'user' } })
-    if (agent.status === 'running') {
-      agent.steer(message)
-      channel.addPendingSteering(message.id)
+    if (delivery === 'queue') {
+      if (attachedContext !== undefined) {
+        queuedReferenceContexts.set(message.id, { agent: targetAgent, context: attachedContext })
+      }
+      targetAgent.followup(message)
+    } else if (targetAgent.status === 'running') {
+      if (attachedContext !== undefined) targetAgent.inject(attachedContext)
+      targetAgent.steer(message)
+      targetChannel.addPendingSteering(message.id)
     } else {
-      agent.followup(message)
+      if (attachedContext !== undefined) targetAgent.inject(attachedContext)
+      targetAgent.followup(message)
     }
+    return message
+  }
+
+  const recordSubmission = (targetAgent: Agent, text: string, message: UserMessage): void => {
+    registry.get(targetAgent.session.id)?.submissions.push({ text, messageId: message.id })
   }
 
   /** Deliver a user turn to the agent: steer while running, send while idle, or report a disposed agent. */
@@ -1977,7 +2090,7 @@ function createTuiChatInternal(
     )
   }
 
-  editor.onSubmit = (value: string) => {
+  const submitEditorValue = (value: string, delivery: MessageDelivery = 'auto'): void => {
     const text = value.trim()
     if (text === '') return
     const restoreSubmittedInput = (): void => {
@@ -1990,14 +2103,22 @@ function createTuiChatInternal(
       editor.setText('')
       const replacement = replaceQueuedMessage(editTarget, [{ type: 'text', text }])
       if (agent.inbox.replace(editTarget.id, replacement)) {
-        channel.addPendingSteering(replacement.id)
+        const attached = queuedReferenceContexts.get(editTarget.id)
+        queuedReferenceContexts.delete(editTarget.id)
+        if (attached !== undefined) queuedReferenceContexts.set(replacement.id, attached)
+        if (agent.inbox.nextStep.some(message => message.id === replacement.id)) {
+          channel.addPendingSteering(replacement.id)
+        }
+        recordSubmission(agent, text, replacement)
         showTransientNotice('Queued message updated.')
       } else if (agent.status === 'running') {
         // The target left the queue while editing; deliver as fresh steering.
         agent.steer(replacement)
         channel.addPendingSteering(replacement.id)
+        recordSubmission(agent, text, replacement)
       } else {
         agent.followup(replacement)
+        recordSubmission(agent, text, replacement)
       }
       refreshQueueDock()
       channel.refreshStatus()
@@ -2030,7 +2151,8 @@ function createTuiChatInternal(
     if (parsed.references.length === 0) {
       editor.addToHistory(text)
       editor.setText('')
-      dispatchMessage([{ type: 'text', text: parsed.text }])
+      const message = dispatchMessage([{ type: 'text', text: parsed.text }], undefined, delivery)
+      if (message !== undefined) recordSubmission(agent, text, message)
       return
     }
     const sessionReferences = ctx.get('sessionReferenceResolver')
@@ -2040,10 +2162,12 @@ function createTuiChatInternal(
       return
     }
     const controller = new AbortController()
+    const targetAgent = agent
+    const targetChannel = channel
     referenceControllers.add(controller)
     editor.disableSubmit = true
     void sessionReferences.prepare(
-      agent,
+      targetAgent,
       [{ type: 'text', text: parsed.text }],
       parsed.references,
       controller.signal,
@@ -2053,7 +2177,8 @@ function createTuiChatInternal(
       if (editor.getText() === value) editor.setText('')
       // The snapshot travels with the prompt so a blocking admission hook
       // discards them together — see dispatchMessage's attached-context path.
-      dispatchMessage(prepared.content, prepared.additionalContext)
+      const message = dispatchMessage(prepared.content, prepared.additionalContext, delivery, targetAgent, targetChannel)
+      if (message !== undefined) recordSubmission(targetAgent, text, message)
     }, (error: unknown) => {
       if (!disposed && !controller.signal.aborted) {
         restoreSubmittedInput()
@@ -2065,6 +2190,7 @@ function createTuiChatInternal(
       requestRender()
     })
   }
+  editor.onSubmit = (value: string) => { submitEditorValue(value) }
 
   const removeInputListener = ui.addInputListener((data) => {
     if (overlayManager.hasActiveOverlay()) return undefined
@@ -2077,6 +2203,14 @@ function createTuiChatInternal(
       return { consume: true }
     }
 
+    if (matchesKey(data, Key.ctrl(Key.pageUp))) {
+      cycleActiveSession(-1)
+      return { consume: true }
+    }
+    if (matchesKey(data, Key.ctrl(Key.pageDown))) {
+      cycleActiveSession(1)
+      return { consume: true }
+    }
     if (matchesKey(data, Key.pageUp)) {
       workbench?.scrollPageUp(runtime.terminal.columns)
       requestRender()
@@ -2088,26 +2222,45 @@ function createTuiChatInternal(
       return { consume: true }
     }
 
-    // Empty-input ↑ with queued messages pops the newest queued message back
-    // into the editor (Claude Code's queue editing): the next submit REPLACES
-    // it through the same armed-edit path the /queue sheet uses. With nothing
-    // queued (or the editor non-empty) ↑ falls through to the editor's own
-    // prompt history / cursor movement. An open autocomplete menu keeps ↑ for
-    // itself.
+    // Shift+Tab cycles permission presets before plain Tab is considered for
+    // queue submission.
+    if (matchesKey(data, Key.shift(Key.tab))) {
+      permissionController.cycle()
+      return { consume: true }
+    }
+    if (
+      matchesKey(data, Key.tab)
+      && agent.status === 'running'
+      && editor.focused
+      && !editor.disableSubmit
+      && !editor.isShowingAutocomplete()
+      && editor.getText().trim() !== ''
+      && !editor.getText().trimStart().startsWith('/')
+    ) {
+      submitEditorValue(editor.getText(), 'queue')
+      return { consume: true }
+    }
+
+    // Empty-input ↑ recalls the latest real message submission. When that
+    // exact item is still pending, the next submit replaces it in place;
+    // otherwise the text is restored as a fresh draft. This preserves actual
+    // Enter/Tab order across the two inbox lanes.
     if (
       matchesKey(data, Key.up)
       && editor.focused
       && editor.getText() === ''
       && !editor.isShowingAutocomplete()
-      && queueDock.armLatestForEdit()
     ) {
-      return { consume: true }
+      const latest = registry.active().submissions.at(-1)
+      if (latest !== undefined) {
+        if (!queueDock.armForEdit(latest.messageId)) editor.setText(latest.text)
+        requestRender()
+        return { consume: true }
+      }
+      if (queueDock.armLatestForEdit()) return { consume: true }
     }
-    // Shift+Tab cycles permission presets (Claude Code's mode ring); the
-    // danger preset confirms through the risk dialog first.
-    if (matchesKey(data, Key.shift(Key.tab))) {
-      permissionController.cycle()
-      return { consume: true }
+    if (matchesKey(data, Key.up) && queueDock.hasEditTarget()) {
+      queueDock.cancelEditTarget()
     }
     if (matchesKey(data, Key.ctrl('g'))) {
       goalBar.showActions()
@@ -2127,7 +2280,33 @@ function createTuiChatInternal(
       return { consume: true }
     }
     if (matchesKey(data, Key.escape) && agent.status === 'running') {
+      rewindArmedAt = undefined
       agent.cancel({ kind: 'user' })
+      return { consume: true }
+    }
+    if (
+      matchesKey(data, Key.escape)
+      && agent.status === 'idle'
+      && editor.getText() === ''
+      && !editor.isShowingAutocomplete()
+    ) {
+      const pressedAt = now()
+      if (rewindArmedAt !== undefined && pressedAt - rewindArmedAt <= REWIND_DOUBLE_PRESS_MS) {
+        rewindArmedAt = undefined
+        applyEditorHint()
+        rewind.show()
+      } else {
+        rewindArmedAt = pressedAt
+        editor.hint = palette.dim('press Esc again to rewind this conversation')
+        requestRender()
+        setTimeout(() => {
+          if (rewindArmedAt !== undefined && now() - rewindArmedAt >= REWIND_DOUBLE_PRESS_MS) {
+            rewindArmedAt = undefined
+            applyEditorHint()
+            requestRender()
+          }
+        }, REWIND_DOUBLE_PRESS_MS + 50)
+      }
       return { consume: true }
     }
     if (matchesKey(data, Key.ctrl('c'))) {
@@ -2153,6 +2332,7 @@ function createTuiChatInternal(
   // detach them with the slot itself. The initial slot is already attached.
 
   const detachListeners = (): void => {
+    stoppedTitleAbort?.abort()
     skillAbort.abort()
     fileSearch.dispose()
     noticeSlot.dispose()
@@ -2161,12 +2341,15 @@ function createTuiChatInternal(
     disposeSkillChanges()
     disposePromptChanges()
     disposeBackgroundSessionEvents()
+    disposeQueuedReferenceTurns()
+    disposeQueuedReferenceDiscards()
     disposeBackgroundStatusChanges()
     disposeWorkspaceChanges()
     for (const value of promptValues) value.dispose()
     // Every live slot tears down together: session listeners, per-slot
     // approvals/docks, agent-scoped model routing and prompt sections.
     registry.disposeAll()
+    queuedReferenceContexts.clear()
     disposeSchemeListener()
     modelController.detach()
   }

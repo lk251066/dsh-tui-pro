@@ -733,7 +733,7 @@ export class StaticDialog implements Component {
     const innerWidth = Math.max(1, width - 4)
     const body = [...this.lines, '', this.palette.dim(this.refresh === undefined ? 'Esc close' : 'r refresh • Esc close')]
     return renderDialog(this.title, body.flatMap(line =>
-      line === '' ? [''] : truncateToWidth(line, innerWidth, '')), Math.min(width, 76), this.palette, { frame: 'topline' })
+      line === '' ? [''] : truncateToWidth(line, innerWidth, '')), width, this.palette, { frame: 'topline' })
   }
 }
 

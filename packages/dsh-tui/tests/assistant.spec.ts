@@ -184,9 +184,10 @@ describe('/assistant', () => {
     const { harness, calls, created } = await assistantHarness()
     try {
       submit(harness, '/assistant')
-      await tick()
+      await vi.waitFor(() => {
+        expect(harness.terminal.output).toContain('Assistant session created.')
+      })
       expect(calls).toEqual([expect.objectContaining({ kind: 'create', sessionId: 'assistant' })])
-      expect(harness.terminal.output).toContain('Assistant session created.')
       // Input now routes to the assistant agent.
       submit(harness, '今天天气怎么样')
       await tick()
@@ -254,9 +255,10 @@ describe('/assistant', () => {
     const { harness, calls } = await assistantHarness({ persistedIds: ['assistant'], resumeError: 'session "assistant" not found' })
     try {
       submit(harness, '/assistant')
-      await tick()
+      await vi.waitFor(() => {
+        expect(harness.terminal.output).toContain('Assistant session created.')
+      })
       expect(calls.map(call => call.kind)).toEqual(['resume', 'create'])
-      expect(harness.terminal.output).toContain('Assistant session created.')
     } finally {
       await disposeTuiTestHarness(harness)
     }
