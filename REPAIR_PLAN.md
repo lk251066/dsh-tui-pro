@@ -6,7 +6,7 @@ This document is the source of truth for making `@lk251066/dsh-tui` independentl
 
 Ship one package: `@lk251066/dsh-tui`. Its package manifest already defines `dsh.bundle.patch`, so the repository will not create or publish a separate `@lk251066/dsh-tui-bundle` compatibility package.
 
-The published `1.5.0` package, annotated tag, checksummed GitHub Release, source version, and lockfile identify release commit `9d201d2`. Version `1.6.0` is the current release target against public `@deepseek-ai/dsh@0.1.0-rc.6`.
+The published `1.5.0` package, annotated tag, checksummed GitHub Release, source version, and lockfile identify release commit `9d201d2`. Version `1.6.0` is the current release against public `@deepseek-ai/dsh@0.1.0-rc.6`.
 
 The `1.6.0` scope covers reliable active-session switching, direct transcript selection and clipboard delivery, turn-level visual hierarchy, and per-block disclosure interactions inside the existing fixed workbench.
 
@@ -77,6 +77,7 @@ The release passes type checking, all 440 tests, lint with warnings only, build,
 5. The annotated [`v1.0.2` tag and GitHub Release](https://github.com/lk251066/dsh-tui-pro/releases/tag/v1.0.2) identify the reviewed release commit and provide the npm tarball plus its SHA-256 file.
 6. [`@lk251066/dsh-tui@1.1.0`](https://www.npmjs.com/package/@lk251066/dsh-tui/v/1.1.0), annotated [`v1.1.0`](https://github.com/lk251066/dsh-tui-pro/releases/tag/v1.1.0), and the GitHub Release assets identify commit [`81b72c8`](https://github.com/lk251066/dsh-tui-pro/commit/81b72c8810e52b3c12d0f1558be30c5b2ad8c57e).
 7. [`@lk251066/dsh-tui@1.2.0`](https://www.npmjs.com/package/@lk251066/dsh-tui/v/1.2.0), annotated [`v1.2.0`](https://github.com/lk251066/dsh-tui-pro/releases/tag/v1.2.0), and the checksummed GitHub Release assets identify commit [`a3ead1b`](https://github.com/lk251066/dsh-tui-pro/commit/a3ead1b2ca6cfed6a16024efd5552879d90aa4fb).
+8. [`@lk251066/dsh-tui@1.6.0`](https://www.npmjs.com/package/@lk251066/dsh-tui/v/1.6.0), annotated [`v1.6.0`](https://github.com/lk251066/dsh-tui-pro/releases/tag/v1.6.0), and the checksummed GitHub Release assets identify commit [`6863b40`](https://github.com/lk251066/dsh-tui-pro/commit/6863b403860571bd534718700930b69d1a37dbbb).
 
 ## Phase 1: Restore a valid source tree
 

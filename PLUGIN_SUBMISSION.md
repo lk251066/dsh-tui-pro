@@ -2,9 +2,9 @@
 
 ## Submission status
 
-Version `1.6.0` is the current release target. Its source, artifact, public-host, PTY, npm, tag, and GitHub Release records must identify the same release before this checklist is complete.
+Version `1.6.0` is the current release. Its source, artifact, public-host, PTY, npm, tag, and GitHub Release records identify commit `6863b40`.
 
-The public repository carries the `dsh-plugin` GitHub topic, which is dshfind's official submission mechanism. The current listing is <https://dshfind.com/zh/plugins/lk251066/dsh-tui-pro>; it must show the `1.6.0` release after publication.
+The public repository carries the `dsh-plugin` GitHub topic, which is dshfind's official submission mechanism. The current listing is <https://dshfind.com/zh/plugins/lk251066/dsh-tui-pro>. The page is live after publication; its directory metadata can lag the npm and Release records until the next catalog sync.
 
 The repair and acceptance evidence are tracked in [REPAIR_PLAN.md](REPAIR_PLAN.md). Catalog publication remains a separate submission action.
 
@@ -45,7 +45,7 @@ dsh plugin --profile tui add @lk251066/dsh-tui
 - [x] The same checks pass on the release commit and registry package.
 - [x] The packed TUI starts, opens commands, creates and switches sessions, and shuts down cleanly through a real PTY.
 - [x] User-visible behavior has keyless snapshot coverage and reproducible terminal evidence.
-- [ ] The `1.6.0` npm version, GitHub tag, GitHub Release, and release commit agree after publication.
+- [x] The `1.6.0` npm version, GitHub tag, GitHub Release, and release commit agree.
 - [x] The public installation command succeeds without the development workspace or `.tarballs/` directory.
 
 ## Public links
