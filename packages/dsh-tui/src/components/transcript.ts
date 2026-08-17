@@ -51,6 +51,9 @@ import {
 } from '../chat/timing.ts'
 import { stripTerminalControls } from './transcript-selection.ts'
 
+/** Complete durable reference for one image content block. */
+type ImageAttachmentRef = Extract<ContentBlock, { type: 'image' }>['attachment']
+
 /** Concatenate the text of every block of one type, separated by blank lines. */
 function textBlocks(content: readonly ContentBlock[], type: 'text' | 'reasoning'): string {
   return content
@@ -422,21 +425,21 @@ const LOGO_TIPS = '/ commands · @ files · /sessions history · Ctrl+O cards ·
  */
 export class ImageBlockComponent extends Container {
   constructor(
-    attachmentId: string,
-    mediaType: string,
-    load: (attachmentId: string) => Promise<Uint8Array | undefined>,
+    ref: ImageAttachmentRef,
+    load: (ref: ImageAttachmentRef) => Promise<Uint8Array | undefined>,
     palette: Palette,
   ) {
     super()
+    const attachmentId = String(ref.attachmentId)
     this.addChild(new Text(palette.dim(`[loading image ${displayText(attachmentId)}]`), 0, 0))
-    void load(attachmentId).then((data) => {
+    void load(ref).then((data) => {
       this.clear()
       if (data === undefined) {
         this.addChild(new Text(palette.dim(`[image ${displayText(attachmentId)} unavailable]`), 0, 0))
       } else {
         this.addChild(new Image(
           Buffer.from(data).toString('base64'),
-          mediaType,
+          ref.mediaType,
           { fallbackColor: text => palette.dim(text) },
           { maxWidthCells: 40, filename: attachmentId },
         ))
@@ -458,18 +461,17 @@ export class UserMessageComponent extends Container {
   constructor(
     text: string,
     palette: Palette,
-    images: readonly { attachmentId: string; mediaType: string }[] = [],
-    loadImage?: (attachmentId: string) => Promise<Uint8Array | undefined>,
+    images: readonly ImageAttachmentRef[] = [],
+    loadImage?: (ref: ImageAttachmentRef) => Promise<Uint8Array | undefined>,
   ) {
     super()
     this.addChild(new Text(palette.underline(palette.bold(palette.accent('You'))), 0, 0))
     if (text !== '') this.addChild(new Text(displayText(text), 0, 0))
-    const loader: (attachmentId: string) => Promise<Uint8Array | undefined>
+    const loader: (ref: ImageAttachmentRef) => Promise<Uint8Array | undefined>
       = loadImage === undefined ? () => Promise.resolve(undefined) : loadImage
     for (const image of images) {
       this.addChild(new ImageBlockComponent(
-        image.attachmentId,
-        image.mediaType,
+        image,
         loader,
         palette,
       ))

@@ -4,11 +4,11 @@ Community-maintained interactive terminal UI plugin for [DeepSeek Harness](https
 
 ## Release status
 
-Version [`1.6.1`](https://www.npmjs.com/package/@lk251066/dsh-tui/v/1.6.1) is the current release. Its source, artifact, empty-profile installation, and real PTY evidence are recorded in [TESTING.md](TESTING.md).
+Version [`1.6.2`](https://www.npmjs.com/package/@lk251066/dsh-tui/v/1.6.2) is the current release. Its source, artifact, empty-profile installation, and real PTY evidence are recorded in [TESTING.md](TESTING.md).
 
 Do not use the existing `v1.0.0` GitHub tag; it predates the repaired source and bundle metadata. Install from npm or a verified GitHub Release.
 
-The `1.6.1` source adds cross-workspace in-process switching, clarifies the active-session count, and removes the redundant `/copy` command while retaining direct transcript selection. See [REPAIR_PLAN.md](REPAIR_PLAN.md) for the release record.
+The `1.6.2` source makes stopped-session switching retryable after setup failures, loads titles when the query service becomes ready shortly after startup, and renders stored images using their complete attachment metadata. See [REPAIR_PLAN.md](REPAIR_PLAN.md) for the release record.
 
 ## Intended installation
 
@@ -42,7 +42,7 @@ Launching in a directory resumes its first manually ordered active project sessi
 
 The TUI commands are `/help`, `/model`, `/effort`, `/clear`, `/details`, `/theme`, `/queue`, `/rename`, `/fork`, `/status`, `/context`, `/agents`, `/jobs`, `/settings`, `/export`, `/sessions`, `/switch`, `/new`, `/assistant`, `/exit`, and `/quit`. `/context`, `/agents`, `/jobs`, `/settings`, and `/sessions` use the chat main area while the frame and sidebar remain fixed. dsh-base may additionally provide `/feedback`, `/goal`, `/compact`, `/permission`, and `/plan`. `/palette`, `/reload`, `/fleet`, and `/memories` are not part of this bundle.
 
-The TUI input path currently accepts text only. Terminal paste protocols deliver text, not image bytes, so copying an image and pressing Ctrl+V does not attach it to a prompt. Image blocks already stored in a session can be displayed, but image capture from the system clipboard is not implemented.
+The TUI input path currently accepts text only. Terminal paste protocols deliver text, not image bytes, so copying an image and pressing Ctrl+V does not attach it to a prompt. Image blocks already stored in a session are displayed through the attachment store with their original media type, but image capture from the system clipboard is not implemented.
 
 ## Development
 

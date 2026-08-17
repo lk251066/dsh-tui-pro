@@ -215,6 +215,12 @@ export type {
 
 /** First terminal Cordis state: FAILED, DISPOSED, and UNLOADING are unusable. */
 const FIBER_FAILED = 3 as FiberState.FAILED
+/** Short, bounded window for a sibling session-query plugin to finish mounting. */
+const STOPPED_TITLE_RETRY_DELAY_MS = 50
+const STOPPED_TITLE_RETRY_LIMIT = 20
+
+/** Complete durable reference required by the attachment store. */
+type ImageAttachmentRef = Extract<ContentBlock, { type: 'image' }>['attachment']
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -831,12 +837,12 @@ function createTuiChatInternal(
   }
 
   /** Resolve one stored image attachment's bytes through the optional store. */
-  const loadAttachmentImage = (attachmentId: string): Promise<Uint8Array | undefined> => {
+  const loadAttachmentImage = (ref: ImageAttachmentRef): Promise<Uint8Array | undefined> => {
     const attachments = ctx.get('attachments') as {
-      readImage?: (ref: { attachmentId: string; mediaType: string }, signal?: AbortSignal) => Promise<{ data: Uint8Array }>
+      readImage?: (ref: ImageAttachmentRef, signal?: AbortSignal) => Promise<{ data: Uint8Array }>
     } | undefined
     if (attachments?.readImage === undefined) return Promise.resolve(undefined)
-    return attachments.readImage({ attachmentId, mediaType: 'image/png' }).then(
+    return attachments.readImage(ref).then(
       stored => stored.data,
       () => undefined,
     )
@@ -1158,9 +1164,25 @@ function createTuiChatInternal(
   persistentLayout.refresh()
   let stoppedTitleScan = 0
   let stoppedTitleAbort: AbortController | undefined
+  let stoppedTitleRetry: ReturnType<typeof setTimeout> | undefined
+  let stoppedTitleRetryCount = 0
   const refreshStoppedTitles = (): void => {
     const query = currentSessionQuery()
-    if (query === undefined) return
+    if (query === undefined) {
+      if (
+        stoppedTitleRetry === undefined
+        && stoppedTitleRetryCount < STOPPED_TITLE_RETRY_LIMIT
+        && !isDisposed()
+      ) {
+        stoppedTitleRetryCount += 1
+        stoppedTitleRetry = setTimeout(() => {
+          stoppedTitleRetry = undefined
+          refreshStoppedTitles()
+        }, STOPPED_TITLE_RETRY_DELAY_MS)
+      }
+      return
+    }
+    stoppedTitleRetryCount = 0
     const ids = workspaceSessions.list().map(item => item.sessionId).filter((sessionId, index, all) =>
       registry.get(sessionId) === undefined && all.indexOf(sessionId) === index)
     if (ids.length === 0 || typeof query.readTitleSnapshots !== 'function') return
@@ -1206,6 +1228,7 @@ function createTuiChatInternal(
   })
   const disposeWorkspaceChanges = ctx.on('domain/changed', (change) => {
     if (change.domain === 'workspace') {
+      stoppedTitleRetryCount = 0
       refreshStoppedTitles()
       requestRender()
     }
@@ -1353,11 +1376,17 @@ function createTuiChatInternal(
         throw error
       })
       if (handle === undefined) return false
-      if (isDisposed()) return true
-      await workspaceSessions.add(handle.agent.session.id)
-      if (isDisposed()) return true
-      registry.adopt(handle.agent)
-      return true
+      let adopted = false
+      try {
+        if (isDisposed()) return true
+        await workspaceSessions.add(handle.agent.session.id)
+        if (isDisposed()) return true
+        registry.adopt(handle.agent)
+        adopted = true
+        return true
+      } finally {
+        if (!adopted) await handle.dispose()
+      }
     },
     ui,
     editor,
@@ -2435,6 +2464,7 @@ function createTuiChatInternal(
 
   const detachListeners = (): void => {
     stoppedTitleAbort?.abort()
+    if (stoppedTitleRetry !== undefined) clearTimeout(stoppedTitleRetry)
     skillAbort.abort()
     fileSearch.dispose()
     noticeSlot.dispose()

@@ -6,9 +6,13 @@ This document is the source of truth for making `@lk251066/dsh-tui` independentl
 
 Ship one package: `@lk251066/dsh-tui`. Its package manifest already defines `dsh.bundle.patch`, so the repository will not create or publish a separate `@lk251066/dsh-tui-bundle` compatibility package.
 
-The published `1.5.0` package, annotated tag, checksummed GitHub Release, source version, and lockfile identify release commit `9d201d2`. Version `1.6.1` is the current release against public `@deepseek-ai/dsh@0.1.0-rc.6`.
+The published `1.5.0` package, annotated tag, checksummed GitHub Release, source version, and lockfile identify release commit `9d201d2`. Version `1.6.2` is the current release against public `@deepseek-ai/dsh@0.1.0-rc.6`.
 
-The `1.6.0` scope covers reliable active-session switching, direct transcript selection and clipboard delivery, turn-level visual hierarchy, and per-block disclosure interactions inside the existing fixed workbench. The `1.6.1` repair removes the redundant `/copy` command, clarifies the active-session count, and resumes stopped sessions from another workspace in-process on hosts that cannot hand off the terminal.
+The `1.6.0` scope covers reliable active-session switching, direct transcript selection and clipboard delivery, turn-level visual hierarchy, and per-block disclosure interactions inside the existing fixed workbench. The `1.6.1` repair removes the redundant `/copy` command, clarifies the active-session count, and resumes stopped sessions from another workspace in-process on hosts that cannot hand off the terminal. The `1.6.2` repair makes failed resume setup retryable, waits briefly for stopped-session title lookup, and preserves complete stored-image references.
+
+## Version 1.6.2 repair
+
+A resumed agent remains owned by the open operation until it is attached to its workspace and adopted by the session registry. Any failure before adoption disposes that handle. Stopped-title lookup retries for a bounded one-second startup window and cancels on TUI disposal. Stored image rendering passes the complete durable attachment reference to `readImage`, preserving PNG, JPEG, WebP, and GIF metadata. Clipboard input remains text-only.
 
 ## Version 1.6.1 repair
 

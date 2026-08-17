@@ -58,7 +58,6 @@ INTERACTIONS = (
     (0.3, b"\x1b[1;3C"),
     (0.3, b"/switch\r"),
     (0.4, b"\x1b"),
-    (0.2, b"/copy\r"),
     (0.8, b"/fork\r"),
     (0.3, b"/sessions\r"),
     (0.5, b"\x1b"),

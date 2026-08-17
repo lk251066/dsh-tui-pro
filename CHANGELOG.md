@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 The `v1.0.0` tag is not an installable public release: no npm package was published, and the repository-root tarball does not contain the required dsh bundle metadata. See [REPAIR_PLAN.md](REPAIR_PLAN.md) for the first verified release criteria.
 
+## [1.6.2] - 2026-08-17
+
+### Fixed
+
+- Retry stopped-session title loading while the optional query service finishes mounting.
+- Dispose a resumed agent when workspace attachment or UI adoption fails, allowing the session to be opened again.
+- Preserve complete stored-image attachment references, including media type, byte count, dimensions, and name, when rendering session history.
+
 ## [1.6.1] - 2026-08-17
 
 ### Changed

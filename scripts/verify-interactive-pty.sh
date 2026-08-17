@@ -39,7 +39,6 @@ grep -aqF $'\x1b[?1049l' "$capture"
 grep -aqF $'\x1b[?1002h\x1b[?1006h' "$capture"
 grep -aqF $'\x1b[?1006l\x1b[?1002l' "$capture"
 grep -aqF 'Switch active session' "$capture"
-grep -aqF 'There is no assistant reply to copy.' "$capture"
 test -f "$export_path"
 grep -qF 'Workspace' "$readable"
 grep -qF 'Active' "$readable"
@@ -74,4 +73,4 @@ PY
 ! grep -aqF 'Command failed:' "$capture"
 ! grep -aqF 'documentPath is not a function' "$capture"
 
-echo 'Verified the terminal workbench, right sidebar, command paths, button-motion mouse reporting, session switching, copy handling, export, and shutdown through a real PTY.'
+echo 'Verified the terminal workbench, right sidebar, command paths, button-motion mouse reporting, session switching, export, and shutdown through a real PTY.'

@@ -13,6 +13,7 @@ import { createUserMessage,
   ReasoningEffortId,
   type LlmCallConfig,
   type LlmModelReasoningInfo,
+  type ContentBlock,
   MessageId,
   createMessage,
   freezeMessage,
@@ -1491,6 +1492,56 @@ describe('goodbye message and /sessions', () => {
   })
 })
 describe('pi-tui chat lifecycle and transcript', () => {
+  it('passes complete PNG and JPEG references to the attachment store', async () => {
+    type ImageAttachmentRef = Extract<ContentBlock, { type: 'image' }>['attachment']
+    const png: ImageAttachmentRef = {
+      attachmentId: 'png-attachment' as never,
+      mediaType: 'image/png',
+      bytes: 4,
+      width: 20,
+      height: 10,
+      name: 'diagram.png',
+    }
+    const jpeg: ImageAttachmentRef = {
+      attachmentId: 'jpeg-attachment' as never,
+      mediaType: 'image/jpeg',
+      bytes: 3,
+      width: 30,
+      height: 15,
+      name: 'photo.jpg',
+    }
+    const readImage = vi.fn(async (ref: ImageAttachmentRef) => ({
+      ref,
+      data: new Uint8Array(ref.mediaType === 'image/png' ? [1, 2, 3, 4] : [5, 6, 7]),
+    }))
+    const terminal = new HeadlessTerminal(100, 24)
+    const result = await createTuiTestHarness(terminal, vi.fn(), {
+      omitInitialLifecycle: true,
+      omitWelcome: true,
+      async configureContext(ctx) {
+        ctx.provide('tools', { get: () => undefined } as never)
+        ctx.provide('attachments', { readImage } as never)
+      },
+      beforeMount(session) {
+        session.append('user/message', createUserMessage({
+          content: [
+            { type: 'text', text: 'inspect both images' },
+            { type: 'image', attachment: png },
+            { type: 'image', attachment: jpeg },
+          ],
+          source: { kind: 'user' },
+        }), { surfaceOp: 'append' })
+      },
+    })
+    try {
+      await vi.waitFor(() => { expect(readImage).toHaveBeenCalledTimes(2) })
+      expect(readImage).toHaveBeenNthCalledWith(1, png)
+      expect(readImage).toHaveBeenNthCalledWith(2, jpeg)
+    } finally {
+      await disposeTuiTestHarness(result)
+    }
+  })
+
   it('uses the alternate screen without growing terminal scrollback', async () => {
     const terminal = new HeadlessTerminal(100, 24)
     const result = await createTuiTestHarness(terminal, vi.fn(), {

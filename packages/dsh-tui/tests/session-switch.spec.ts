@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import type { Terminal } from '@earendil-works/pi-tui'
+import type { Context } from '@deepseek-ai/cordis'
 import { agentEvents, type Agent } from '@deepseek-ai/dsh-agent'
 import { ReasoningEffortId, type UserMessage } from '@deepseek-ai/dsh-llm'
 import { SessionId, type SessionEvent, type SessionHeader } from '@deepseek-ai/dsh-session'
@@ -90,6 +91,7 @@ interface CreatedAgentRecord {
   agent: Agent
   followups: string[]
   cwd: string | undefined
+  disposed: number
 }
 
 async function tick(): Promise<void> {
@@ -98,6 +100,7 @@ async function tick(): Promise<void> {
 
 interface SwitchHarnessOptions extends Pick<TuiHarnessOptions, 'handoffResume' | 'sessionPersistence'> {
   resumeError?: Error
+  mutateResumedAgent?: (agent: Agent, attempt: number) => void
 }
 
 /** Compose the TUI plus a fake factory recording every created or resumed agent. */
@@ -110,7 +113,7 @@ async function switchHarness(cwd = '/workspace', options: SwitchHarnessOptions =
   const resumed: CreatedAgentRecord[] = []
   const terminal = new RecordingTerminal()
   const exit = vi.fn()
-  const { resumeError, ...harnessOptions } = options
+  const { resumeError, mutateResumedAgent, ...harnessOptions } = options
   const harness = await createTuiTestHarness(terminal, exit, {
     ...harnessOptions,
     cwd,
@@ -165,7 +168,7 @@ async function switchHarness(cwd = '/workspace', options: SwitchHarnessOptions =
         whenIdle: () => Promise.resolve(),
       } as unknown as Agent
       harness.ctx.agents.register(agent)
-      created.push({ agent, followups, cwd: options.meta?.cwd })
+      created.push({ agent, followups, cwd: options.meta?.cwd, disposed: 0 })
       return { agent, dispose: async () => {} }
     },
     async resume(_ownerCtx, options) {
@@ -173,10 +176,12 @@ async function switchHarness(cwd = '/workspace', options: SwitchHarnessOptions =
       const persistence = harness.ctx.get('sessionPersistence')
       if (persistence === undefined) throw new Error('session persistence is not mounted')
       const prepared = await persistence.load(options.resumeSessionId)
-      const session = harness.ctx.sessions.create(options.resumeSessionId, {
+      const session = harness.ctx.sessions.prepare(options.resumeSessionId, {
         seed: prepared.events,
         meta: prepared.meta,
       })
+      const disposeSession = harness.ctx.sessions.enter(session)
+      harness.ctx.sessions.announce(session)
       const followups: string[] = []
       const agent = {
         id: options.resumeSessionId,
@@ -197,9 +202,18 @@ async function switchHarness(cwd = '/workspace', options: SwitchHarnessOptions =
         cancel() {},
         whenIdle: () => Promise.resolve(),
       } as unknown as Agent
-      harness.ctx.agents.register(agent)
-      resumed.push({ agent, followups, cwd: prepared.meta.cwd })
-      return { agent, dispose: async () => {} }
+      mutateResumedAgent?.(agent, resumed.length + 1)
+      const disposeAgent = harness.ctx.agents.register(agent)
+      const record = { agent, followups, cwd: prepared.meta.cwd, disposed: 0 }
+      resumed.push(record)
+      return {
+        agent,
+        async dispose() {
+          record.disposed += 1
+          disposeAgent()
+          disposeSession()
+        },
+      }
     },
   })
   return { harness, created, resumed }
@@ -673,6 +687,65 @@ describe('multi-session switching (/new, /sessions)', () => {
     }
   })
 
+  it('retries stopped-session titles while the query service finishes mounting', async () => {
+    const stoppedId = SessionId('late-query-title')
+    const target: SessionHeader = { version: 0, id: stoppedId, createdAt: 1, cwd: '/workspace' }
+    const titleEvent: SessionEvent = {
+      type: 'session/title',
+      seq: 0,
+      time: 2,
+      data: { title: 'Late persisted title', messageSeqs: [], source: { kind: 'fallback' } },
+    }
+    const terminal = new RecordingTerminal()
+    const harness = await createTuiTestHarness(terminal, vi.fn(), {
+      mountSessionQuery: false,
+      sessionPersistence: {
+        list: async () => [target],
+        load: async () => ({ meta: target, events: [titleEvent] }),
+      },
+      beforeMount(_session, ctx) {
+        const workspace = ctx.workspaceRegistry.list()[0]
+        if (workspace !== undefined) void workspace.attachSession(stoppedId)
+      },
+    })
+    try {
+      harness.ctx.provide('sessionQuery', {
+        listSessions: async () => [],
+        readTitleSnapshots: async () => [{
+          sessionId: stoppedId,
+          status: 'fulfilled',
+          value: { session: target, title: { title: 'Late persisted title' } },
+        }],
+      } as never)
+      await vi.waitFor(() => {
+        expect(terminal.output).toContain('Late persisted title')
+      })
+    } finally {
+      await disposeTuiTestHarness(harness)
+    }
+  })
+
+  it('cancels a pending stopped-title retry when the TUI is disposed', async () => {
+    const stoppedId = SessionId('disposed-title-retry')
+    const target: SessionHeader = { version: 0, id: stoppedId, createdAt: 1, cwd: '/workspace' }
+    const terminal = new RecordingTerminal()
+    const harness = await createTuiTestHarness(terminal, vi.fn(), {
+      mountSessionQuery: false,
+      sessionPersistence: {
+        list: async () => [target],
+        load: async () => ({ meta: target, events: [] }),
+      },
+      beforeMount(_session, ctx) {
+        const workspace = ctx.workspaceRegistry.list()[0]
+        if (workspace !== undefined) void workspace.attachSession(stoppedId)
+      },
+    })
+    await disposeTuiTestHarness(harness)
+    const outputAfterDispose = terminal.output
+    await new Promise(resolve => setTimeout(resolve, 75))
+    expect(terminal.output).toBe(outputAfterDispose)
+  })
+
   it('resumes and switches to a stopped session in the startup workspace', async () => {
     const target: SessionHeader = {
       version: 0,
@@ -704,6 +777,81 @@ describe('multi-session switching (/new, /sessions)', () => {
       submit(harness, 'continue stopped work')
       await tick()
       expect(resumed[0]?.followups).toEqual(['continue stopped work'])
+    } finally {
+      await disposeTuiTestHarness(harness)
+    }
+  })
+
+  it('disposes a resumed agent when workspace attachment fails and permits retry', async () => {
+    const target: SessionHeader = {
+      version: 0,
+      id: SessionId('retry-after-attachment-failure'),
+      createdAt: 1,
+      cwd: '/workspace',
+    }
+    const { harness, resumed } = await switchHarness('/workspace', {
+      sessionPersistence: {
+        list: async () => [target],
+        load: async () => ({ meta: target, events: [] }),
+      },
+    })
+    try {
+      const workspace = harness.ctx.workspaceRegistry.list()[0]!
+      const attachSession = workspace.attachSession.bind(workspace)
+      let attempts = 0
+      workspace.attachSession = async (sessionId) => {
+        if (++attempts === 1) throw new Error('workspace write failed')
+        await attachSession(sessionId)
+      }
+
+      await switchTo(harness, target.id)
+      await tick()
+      expect(resumed).toHaveLength(1)
+      expect(resumed[0]?.disposed).toBe(1)
+      expect(harness.ctx.agents.get(target.id)).toBeUndefined()
+      expect(harness.ctx.sessions.get(target.id)).toBeUndefined()
+      expect(harness.terminal.output).toContain('Session open failed: workspace write failed')
+
+      await switchTo(harness, target.id)
+      await tick()
+      expect(resumed).toHaveLength(2)
+      expect(resumed[1]?.disposed).toBe(0)
+      expect(harness.ctx.agents.get(target.id)).toBe(resumed[1]?.agent)
+    } finally {
+      await disposeTuiTestHarness(harness)
+    }
+  })
+
+  it('disposes a resumed agent when UI adoption fails and permits retry', async () => {
+    const target: SessionHeader = {
+      version: 0,
+      id: SessionId('retry-after-adoption-failure'),
+      createdAt: 1,
+      cwd: '/workspace',
+    }
+    const { harness, resumed } = await switchHarness('/workspace', {
+      mutateResumedAgent(agent, attempt) {
+        if (attempt === 1) (agent as { ctx: Context | undefined }).ctx = undefined
+      },
+      sessionPersistence: {
+        list: async () => [target],
+        load: async () => ({ meta: target, events: [] }),
+      },
+    })
+    try {
+      await switchTo(harness, target.id)
+      await tick()
+      expect(resumed).toHaveLength(1)
+      expect(resumed[0]?.disposed).toBe(1)
+      expect(harness.ctx.agents.get(target.id)).toBeUndefined()
+      expect(harness.ctx.sessions.get(target.id)).toBeUndefined()
+      expect(harness.terminal.output).toContain('Session open failed:')
+
+      await switchTo(harness, target.id)
+      await tick()
+      expect(resumed).toHaveLength(2)
+      expect(resumed[1]?.disposed).toBe(0)
+      expect(harness.ctx.agents.get(target.id)).toBe(resumed[1]?.agent)
     } finally {
       await disposeTuiTestHarness(harness)
     }

@@ -4,7 +4,7 @@ Interactive terminal UI plugin and profile bundle for [DeepSeek Harness](https:/
 
 ## Release status
 
-Version [`1.6.1`](https://www.npmjs.com/package/@lk251066/dsh-tui/v/1.6.1) is the current release. Its source, artifact, empty-profile installation, and real PTY evidence are recorded in [TESTING.md](../../TESTING.md).
+Version [`1.6.2`](https://www.npmjs.com/package/@lk251066/dsh-tui/v/1.6.2) is the current release. Its source, artifact, empty-profile installation, and real PTY evidence are recorded in [TESTING.md](../../TESTING.md).
 
 ## Installation
 
@@ -48,7 +48,7 @@ Use `Alt+Left` and `Alt+Right` from an empty editor to cycle active workspace se
 
 Drag directly across transcript text with the left mouse button to select and copy it. ANSI styles are removed from copied text, while Chinese and emoji graphemes remain intact. Local terminals use the system clipboard; tmux uses its clipboard forwarding; SSH and other unsupported local clipboard paths use OSC 52. The mouse wheel continues to scroll transcript history while mouse reporting is active.
 
-The TUI input path currently accepts text only. Terminal paste protocols deliver text, not image bytes, so copying an image and pressing Ctrl+V does not attach it to a prompt. Image blocks already stored in a session can be displayed, but image capture from the system clipboard is not implemented.
+The TUI input path currently accepts text only. Terminal paste protocols deliver text, not image bytes, so copying an image and pressing Ctrl+V does not attach it to a prompt. Image blocks already stored in a session are displayed through the attachment store with their original media type, but image capture from the system clipboard is not implemented.
 
 Conversation turns use `You` and `Assistant` headings instead of message bubbles. Thinking, individual tool calls, grouped tool calls, diffs, and injected context show `▶` or `▼`; click their header to expand or collapse that block. `Ctrl+O` and `Ctrl+R` remain the global visibility controls.
 

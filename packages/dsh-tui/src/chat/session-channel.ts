@@ -59,6 +59,9 @@ import {
 import type { TuiTerminalLike } from './terminal.ts'
 import { TranscriptContainer } from '../components/transcript-container.ts'
 
+/** Complete durable reference required to retrieve one image. */
+type ImageAttachmentRef = Extract<ContentBlock, { type: 'image' }>['attachment']
+
 /**
  * Low-signal read/search tools whose adjacent calls collapse into one summary
  * row (Claude Code's collapsed read/search group): the registered names `read`
@@ -118,7 +121,7 @@ export interface SessionChannelDeps {
   /** Append a durable notice row to the transcript. */
   appendNotice(message: string, kind?: 'info' | 'warning' | 'error'): void
   /** Resolve one stored image attachment's bytes (optional store). */
-  loadAttachmentImage(attachmentId: string): Promise<Uint8Array | undefined>
+  loadAttachmentImage(ref: ImageAttachmentRef): Promise<Uint8Array | undefined>
   /** Learn a rendered prompt into the shared editor's history. */
   addToEditorHistory(text: string): void
   /** The goal dock refreshes on goal/turn events (host-owned chrome). */
@@ -473,10 +476,10 @@ export function createSessionChannel(deps: SessionChannelDeps): SessionChannel {
         const text = displayText(contentText(event.data.content).trim())
         const images = event.data.content
           .filter((block): block is Extract<ContentBlock, { type: 'image' }> => block.type === 'image')
-          .map(block => ({ attachmentId: String(block.attachment.attachmentId), mediaType: block.attachment.mediaType }))
+          .map(block => block.attachment)
         if (text || images.length > 0) {
           chat.addChild(new Spacer(1))
-          chat.addChild(new UserMessageComponent(text, palette, images, id => deps.loadAttachmentImage(id)))
+          chat.addChild(new UserMessageComponent(text, palette, images, ref => deps.loadAttachmentImage(ref)))
           if (options.addHistory && text) deps.addToEditorHistory(text)
         }
         break

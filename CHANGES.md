@@ -1,5 +1,11 @@
 # Terminal Workbench
 
+## 1.6.2 changes
+
+Stopped active sessions now keep their display title when the session-query service finishes mounting shortly after the TUI. Resuming a stopped session releases the newly created agent if workspace attachment or UI adoption fails, so the same session can be opened again instead of remaining blocked by an invisible live agent.
+
+Stored image blocks pass their complete attachment reference to the attachment store. PNG, JPEG, WebP, and GIF history therefore retain their media type and dimensions when rendered. This repairs existing session history only; terminal paste remains text-only and does not attach an image copied to the system clipboard.
+
 ## 1.6.1 changes
 
 The right sidebar labels its count as `Active sessions · N` so it is clear that the section is the manually maintained active-workspace list, not recent history. Stopped sessions from another workspace resume in the current process using their session cwd; the host handoff remains available when that resume cannot be created. The `/copy` command is removed because transcript drag selection is the single copy path.
@@ -20,7 +26,7 @@ Running input now has two explicit paths. Enter sends immediate steering for the
 
 Double Escape opens checkpoint navigation for the current conversation when the agent is idle and the editor is empty. The navigator creates a new branch before the selected turn and preserves the original session. `/sessions` remains the separate complete-history browser.
 
-`Ctrl+PageUp` and `Ctrl+PageDown` cycle the active workspace sessions. Stopped sessions resume in the current process, and duplicate open requests are ignored until the first request completes. Persisted titles are loaded for stopped active sessions.
+`Ctrl+PageUp` and `Ctrl+PageDown` cycle the active workspace sessions. Stopped sessions in the startup workspace resume in the current process, while sessions from another workspace use host handoff. Duplicate open requests are ignored until the first request completes. Persisted titles are loaded for stopped active sessions.
 
 `/context`, `/agents`, `/jobs`, and `/settings` now replace the chat main area like `/sessions`, leaving the full-screen frame and active-workspace sidebar fixed.
 
