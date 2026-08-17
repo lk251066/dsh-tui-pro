@@ -1,10 +1,16 @@
 # Terminal Workbench
 
+## 1.6.1 changes
+
+The right sidebar labels its count as `Active sessions · N` so it is clear that the section is the manually maintained active-workspace list, not recent history. Stopped sessions from another workspace resume in the current process using their session cwd; the host handoff remains available when that resume cannot be created. The `/copy` command is removed because transcript drag selection is the single copy path.
+
+The TUI input path accepts text only. Image blocks can be rendered when already present in a session, but terminal clipboard image capture and image attachment on Ctrl+V are not supported.
+
 ## 1.6.0 changes
 
 Active-session switching now uses guarded `Alt+Left` and `Alt+Right`, the `/switch` command, and direct sidebar clicks. The old `Ctrl+PageUp` and `Ctrl+PageDown` bindings are removed so they cannot conflict with transcript navigation or terminal key handling.
 
-Left-button dragging selects transcript cells directly and copies plain text on release. Selection preserves multi-line blank rows and complete wide graphemes, coexists with wheel scrolling, and clears when a terminal resize changes line wrapping. Clipboard delivery supports the local system, tmux forwarding, and OSC 52; `/copy` copies the latest assistant text reply.
+Left-button dragging selects transcript cells directly and copies plain text on release. Selection preserves multi-line blank rows and complete wide graphemes, coexists with wheel scrolling, and clears when a terminal resize changes line wrapping. Clipboard delivery supports the local system, tmux forwarding, and OSC 52.
 
 Conversation turns now use separate `You` and `Assistant` headings with consistent blank space before the editor. Thinking, tool, grouped-tool, diff, and context headers show disclosure markers and respond to clicks. The existing restrained running-state animation remains above the input without moving the fixed sidebar.
 
@@ -14,7 +20,7 @@ Running input now has two explicit paths. Enter sends immediate steering for the
 
 Double Escape opens checkpoint navigation for the current conversation when the agent is idle and the editor is empty. The navigator creates a new branch before the selected turn and preserves the original session. `/sessions` remains the separate complete-history browser.
 
-`Ctrl+PageUp` and `Ctrl+PageDown` cycle the active workspace sessions. Same-workspace stopped sessions resume in the current process, cross-workspace sessions use host handoff, and duplicate open requests are ignored until the first request completes. Persisted titles are loaded for stopped active sessions.
+`Ctrl+PageUp` and `Ctrl+PageDown` cycle the active workspace sessions. Stopped sessions resume in the current process, and duplicate open requests are ignored until the first request completes. Persisted titles are loaded for stopped active sessions.
 
 `/context`, `/agents`, `/jobs`, and `/settings` now replace the chat main area like `/sessions`, leaving the full-screen frame and active-workspace sidebar fixed.
 

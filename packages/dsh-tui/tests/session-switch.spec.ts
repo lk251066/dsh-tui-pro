@@ -736,7 +736,7 @@ describe('multi-session switching (/new, /sessions)', () => {
     }
   })
 
-  it('hands a stopped session from another project to the process host', async () => {
+  it('resumes a stopped session from another project in the current process', async () => {
     const target: SessionHeader = {
       version: 0,
       id: SessionId('stopped-other-workspace'),
@@ -745,6 +745,34 @@ describe('multi-session switching (/new, /sessions)', () => {
     }
     const handoff = vi.fn(() => Promise.reject(new Error('test host retained process')))
     const { harness, resumed } = await switchHarness('/workspace', {
+      handoffResume: handoff,
+      sessionPersistence: {
+        list: async () => [target],
+        load: async () => ({ meta: target, events: [] }),
+      },
+    })
+    try {
+      await switchTo(harness, target.id)
+      await tick()
+
+      expect(resumed).toHaveLength(1)
+      expect(resumed[0]?.agent.session.header.cwd).toBe('/other-project')
+      expect(handoff).not.toHaveBeenCalled()
+    } finally {
+      await disposeTuiTestHarness(harness)
+    }
+  })
+
+  it('falls back to host handoff when cross-workspace in-process resume fails', async () => {
+    const target: SessionHeader = {
+      version: 0,
+      id: SessionId('handoff-other-workspace'),
+      createdAt: 1,
+      cwd: '/other-project',
+    }
+    const handoff = vi.fn(() => Promise.reject(new Error('test host retained process')))
+    const { harness, resumed } = await switchHarness('/workspace', {
+      resumeError: new Error('in-process resume unavailable'),
       handoffResume: handoff,
       sessionPersistence: {
         list: async () => [target],

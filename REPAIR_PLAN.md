@@ -6,15 +6,19 @@ This document is the source of truth for making `@lk251066/dsh-tui` independentl
 
 Ship one package: `@lk251066/dsh-tui`. Its package manifest already defines `dsh.bundle.patch`, so the repository will not create or publish a separate `@lk251066/dsh-tui-bundle` compatibility package.
 
-The published `1.5.0` package, annotated tag, checksummed GitHub Release, source version, and lockfile identify release commit `9d201d2`. Version `1.6.0` is the current release against public `@deepseek-ai/dsh@0.1.0-rc.6`.
+The published `1.5.0` package, annotated tag, checksummed GitHub Release, source version, and lockfile identify release commit `9d201d2`. Version `1.6.1` is the current release against public `@deepseek-ai/dsh@0.1.0-rc.6`.
 
-The `1.6.0` scope covers reliable active-session switching, direct transcript selection and clipboard delivery, turn-level visual hierarchy, and per-block disclosure interactions inside the existing fixed workbench.
+The `1.6.0` scope covers reliable active-session switching, direct transcript selection and clipboard delivery, turn-level visual hierarchy, and per-block disclosure interactions inside the existing fixed workbench. The `1.6.1` repair removes the redundant `/copy` command, clarifies the active-session count, and resumes stopped sessions from another workspace in-process on hosts that cannot hand off the terminal.
+
+## Version 1.6.1 repair
+
+The sidebar renders `Active sessions · N` to identify the manually maintained active-workspace list. A stopped session uses its immutable session cwd when it is resumed, so a Windows host does not need process replacement merely to switch projects. If in-process creation fails for a cross-workspace session, the existing host handoff is still attempted. Transcript drag selection remains the only copy command; `/copy` is not registered. The input contract is text-only: image blocks can render from durable attachments, but system clipboard image capture is not implemented.
 
 ## Version 1.6.0 transcript and session interaction
 
 Guarded `Alt+Left` and `Alt+Right`, `/switch`, and sidebar clicks all resolve through the same active-session path. The key binding is available only from an empty focused editor with no completion or overlay, so ordinary cursor movement and dialogs retain their input. `/switch` accepts next, previous, a displayed number, an exact id, or an exact title.
 
-Left-button dragging selects the rendered transcript directly. The selection owns terminal cells rather than raw ANSI offsets, includes both drag endpoints, preserves blank lines and wide graphemes, and resets after resize reflow. Releasing copies through the system clipboard, tmux forwarding, or OSC 52. `/copy` reads the latest assistant text from the active session log.
+Left-button dragging selects the rendered transcript directly. The selection owns terminal cells rather than raw ANSI offsets, includes both drag endpoints, preserves blank lines and wide graphemes, and resets after resize reflow. Releasing copies through the system clipboard, tmux forwarding, or OSC 52.
 
 User and assistant turns use separate headings with blank space between turns and above the editor. Thinking, tool, grouped-tool, diff, and context blocks expose `▶` and `▼` states and toggle when their header is clicked. Global detail shortcuts continue to apply across the transcript.
 

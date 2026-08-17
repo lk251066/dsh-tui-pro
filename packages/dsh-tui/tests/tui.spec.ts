@@ -4447,7 +4447,6 @@ describe('pi-tui chat lifecycle and transcript', () => {
       'assistant',
       'clear',
       'context',
-      'copy',
       'details',
       'effort',
       'exit',

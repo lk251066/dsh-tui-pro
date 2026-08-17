@@ -28,20 +28,20 @@ The 2026-08-15 repair checks and 2026-08-16 release verification produced these 
 
 The source checks passed on the reviewed commit, and the final integration checks used the anonymous public registry rather than a workspace link or local tarball.
 
-## 1.6.0 release verification
+## 1.6.1 release verification
 
-The `1.6.0` checks cover active-session switching through guarded keys, `/switch`, and sidebar clicks; direct forward and reverse transcript dragging; ANSI removal, blank rows, wide graphemes, resize reflow, wheel coexistence, local/tmux/OSC-52 clipboard delivery, and `/copy`; and turn headings plus clickable transcript disclosures. Public artifact, empty-profile, and real-PTY results are recorded after the source checks pass.
+The `1.6.1` checks cover active-session switching through guarded keys, `/switch`, and sidebar clicks; same-process resume from another workspace with host-handoff fallback; direct forward and reverse transcript dragging; ANSI removal, blank rows, wide graphemes, resize reflow, wheel coexistence, and local/tmux/OSC-52 clipboard delivery; and the absence of the removed `/copy` command. Public artifact, empty-profile, and real-PTY results are recorded after the source checks pass.
 
 Current source evidence:
 
 | Check | Result |
 | --- | --- |
 | `pnpm run typecheck` | Passed |
-| `pnpm run test` | Passed: 40 files, 456 tests |
+| `pnpm run test` | Passed: 39 files, 456 tests |
 | `pnpm run lint` | Passed with 39 warnings and no errors |
 | `pnpm run build` | Passed |
 | `git diff --check` | Passed |
-| `pnpm run pack:artifact` | Passed: 316 files in the `1.6.0` artifact |
+| `pnpm run pack:artifact` | Passed: 316 files in the `1.6.1` artifact |
 | Packed-artifact audit | Passed for exports, bundle metadata, patched editor, new clipboard/selection modules, and runtime dependencies |
 | Windows empty-profile installation | Passed against public dsh rc.6 using the packed tarball |
 | Linux empty-profile installation | Passed against public dsh rc.6 using the packed tarball |
@@ -177,7 +177,7 @@ Exercise these behaviors through the installed profile:
 24. Double Escape opens only the current-conversation checkpoint view while idle with an empty editor; older/newer navigation, branch creation, close, and original-session preservation all work.
 25. Guarded `Alt+Left` and `Alt+Right`, `/switch`, and left-clicking an active sidebar row open the same target session; ordinary editor cursor movement, completions, and overlays retain their input.
 26. Left-button transcript dragging includes both endpoint cells, preserves blank rows and wide graphemes, and copies without ANSI controls; reverse dragging, resize reflow, wheel scrolling, and non-left buttons behave as documented.
-27. Local, tmux, and SSH clipboard paths use system, tmux forwarding, and OSC 52 respectively; `/copy` copies only the latest assistant text in the active session.
+27. Local, tmux, and SSH clipboard paths use system, tmux forwarding, and OSC 52 respectively. The TUI accepts text paste only; image clipboard capture is not supported.
 28. `You` and `Assistant` headings remain distinct, the editor has a fixed preceding gap, and clicking thinking, tool, grouped-tool, diff, or context disclosure headers toggles only that block.
 29. `/context`, `/agents`, `/jobs`, and `/settings` cover the chat main area while the full frame and sidebar remain visible.
 

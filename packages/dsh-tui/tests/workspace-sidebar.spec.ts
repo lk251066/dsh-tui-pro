@@ -49,7 +49,7 @@ describe('WorkspaceSidebarComponent', () => {
     expect(text).toContain('Workspace')
     expect(text).toContain('deepseekharness')
     expect(text).toContain('feature/sideb')
-    expect(text).toContain('Active 1')
+    expect(text).toContain('Active sessions · 1')
     expect(text).toContain('Main session')
     expect(text).toContain('Current')
     expect(text).toContain('Status')

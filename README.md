@@ -4,11 +4,11 @@ Community-maintained interactive terminal UI plugin for [DeepSeek Harness](https
 
 ## Release status
 
-Version [`1.6.0`](https://www.npmjs.com/package/@lk251066/dsh-tui/v/1.6.0) is the current release. Its source, artifact, empty-profile installation, and real PTY evidence are recorded in [TESTING.md](TESTING.md).
+Version [`1.6.1`](https://www.npmjs.com/package/@lk251066/dsh-tui/v/1.6.1) is the current release. Its source, artifact, empty-profile installation, and real PTY evidence are recorded in [TESTING.md](TESTING.md).
 
 Do not use the existing `v1.0.0` GitHub tag; it predates the repaired source and bundle metadata. Install from npm or a verified GitHub Release.
 
-The `1.6.0` source adds reliable active-session switching, direct transcript selection and clipboard delivery, clearer conversation turns, and clickable thinking, tool, diff, and context disclosures inside the fixed workbench. See [REPAIR_PLAN.md](REPAIR_PLAN.md) for the release record.
+The `1.6.1` source adds cross-workspace in-process switching, clarifies the active-session count, and removes the redundant `/copy` command while retaining direct transcript selection. See [REPAIR_PLAN.md](REPAIR_PLAN.md) for the release record.
 
 ## Intended installation
 
@@ -29,7 +29,7 @@ The package itself owns the TUI plugin and its `cordis.patch.yml` profile layer.
 - Double Escape checkpoint browser for branching before an earlier turn in the current conversation
 - Enter steering, Tab next-turn queueing, and empty Up recall while the agent runs
 - `Alt+Left` and `Alt+Right`, `/switch`, and sidebar-click active-session switching
-- Direct transcript drag selection with automatic clipboard delivery and `/copy` for the latest assistant reply
+- Direct transcript drag selection with automatic clipboard delivery
 - Fixed bottom selectors for questions, approvals, models, reasoning effort, details, themes, permissions, renaming, goals, and queue actions
 - A fixed personal assistant entry with workspace-session tools
 - `/new` for the active project and `/new <path>` for another project
@@ -40,7 +40,9 @@ The package itself owns the TUI plugin and its `cordis.patch.yml` profile layer.
 
 Launching in a directory resumes its first manually ordered active project session. If that directory has no active session, dsh creates one and adds it to the workspace. Removing a session from the workspace retains its history.
 
-The TUI commands are `/help`, `/model`, `/effort`, `/clear`, `/details`, `/theme`, `/queue`, `/rename`, `/fork`, `/status`, `/context`, `/agents`, `/jobs`, `/settings`, `/export`, `/sessions`, `/switch`, `/copy`, `/new`, `/assistant`, `/exit`, and `/quit`. `/context`, `/agents`, `/jobs`, `/settings`, and `/sessions` use the chat main area while the frame and sidebar remain fixed. dsh-base may additionally provide `/feedback`, `/goal`, `/compact`, `/permission`, and `/plan`. `/palette`, `/reload`, `/fleet`, and `/memories` are not part of this bundle.
+The TUI commands are `/help`, `/model`, `/effort`, `/clear`, `/details`, `/theme`, `/queue`, `/rename`, `/fork`, `/status`, `/context`, `/agents`, `/jobs`, `/settings`, `/export`, `/sessions`, `/switch`, `/new`, `/assistant`, `/exit`, and `/quit`. `/context`, `/agents`, `/jobs`, `/settings`, and `/sessions` use the chat main area while the frame and sidebar remain fixed. dsh-base may additionally provide `/feedback`, `/goal`, `/compact`, `/permission`, and `/plan`. `/palette`, `/reload`, `/fleet`, and `/memories` are not part of this bundle.
+
+The TUI input path currently accepts text only. Terminal paste protocols deliver text, not image bytes, so copying an image and pressing Ctrl+V does not attach it to a prompt. Image blocks already stored in a session can be displayed, but image capture from the system clipboard is not implemented.
 
 ## Development
 

@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 The `v1.0.0` tag is not an installable public release: no npm package was published, and the repository-root tarball does not contain the required dsh bundle metadata. See [REPAIR_PLAN.md](REPAIR_PLAN.md) for the first verified release criteria.
 
+## [1.6.1] - 2026-08-17
+
+### Changed
+
+- Clarify the sidebar count as `Active sessions · N` and resume stopped sessions from another workspace in the current process when possible.
+- Remove the redundant `/copy` command; transcript drag selection remains the copy path.
+- Document that TUI input accepts text only and does not capture images from the system clipboard.
+
 ## [1.6.0] - 2026-08-17
 
 ### Added

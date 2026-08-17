@@ -64,7 +64,7 @@ export class SessionListComponent extends Container {
   override render(width: number): string[] {
     if (width <= 0) return []
     const lines = [
-      padToWidth(this.palette.bold(` Active ${this.items.length}`), width),
+      padToWidth(this.palette.bold(` Active sessions · ${this.items.length}`), width),
       this.palette.dim('─'.repeat(width)),
     ]
     if (this.items.length === 0) {

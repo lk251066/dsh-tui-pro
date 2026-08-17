@@ -26,7 +26,7 @@ describe('SessionListComponent', () => {
     list.setItems(items)
     const lines = list.render(44)
     const text = lines.join('\n')
-    expect(text).toContain('Active 3')
+    expect(text).toContain('Active sessions · 3')
     expect(text).toContain('Assistant · personal')
     expect(text).toContain('Main session · project')
     expect(text).toContain('Debug session · project')

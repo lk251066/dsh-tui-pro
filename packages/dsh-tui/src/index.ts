@@ -1345,8 +1345,14 @@ function createTuiChatInternal(
       return true
     },
     async openPersisted(sessionId, cwd): Promise<boolean> {
-      if (resolve(cwd) !== resolve(initialCwd)) return false
-      const handle = await ctx.agents.resume({ resumeSessionId: sessionId })
+      // Tool consumers resolve relative paths from the resumed agent's
+      // immutable session cwd, so cross-workspace sessions can resume in this
+      // process even on hosts that cannot replace themselves in place.
+      const handle = await ctx.agents.resume({ resumeSessionId: sessionId }).catch((error: unknown) => {
+        if (resolve(cwd) !== resolve(initialCwd)) return undefined
+        throw error
+      })
+      if (handle === undefined) return false
       if (isDisposed()) return true
       await workspaceSessions.add(handle.agent.session.id)
       if (isDisposed()) return true
@@ -1471,22 +1477,6 @@ function createTuiChatInternal(
     } catch (error: unknown) {
       if (!isDisposed()) appendNotice(`Copy failed: ${errorChain(error)}`, 'error')
     }
-  }
-
-  const copyLatestAssistantReply = async (): Promise<void> => {
-    const latest = agent.session.events.findLast(event => event.type === 'assistant/message')
-    const text = latest?.type === 'assistant/message'
-      ? latest.data.message.content
-        .filter(block => block.type === 'text')
-        .map(block => block.text)
-        .join('')
-        .trim()
-      : ''
-    if (text === '') {
-      appendNotice('There is no assistant reply to copy.', 'warning')
-      return
-    }
-    await writeClipboardText(text)
   }
 
   // Ctrl+C/Ctrl+D at an idle empty prompt require a second press within
@@ -2078,11 +2068,6 @@ function createTuiChatInternal(
       description: 'Switch among active workspace sessions',
       input: { hint: '[next|previous|number|title]' },
       handler: ({ rawInput }) => { runSessionSwitch(rawInput); return { kind: 'success' } },
-    })
-    commandCtx.commands.register({
-      name: 'copy',
-      description: 'Copy the latest assistant reply',
-      handler: async () => { await copyLatestAssistantReply(); return { kind: 'success' } },
     })
     commandCtx.commands.register({
       name: 'new',
