@@ -3121,22 +3121,26 @@ describe('pi-tui chat lifecycle and transcript', () => {
 
     // Each Tab applies one step immediately while the dialog stays open:
     // collapsed -> expanded -> hidden -> collapsed (wraparound).
+    let changed = result.terminal.output.length
     result.terminal.send('\t')
     await tick()
-    expect(result.terminal.output).toContain('Tool and context cards expanded.')
+    expect(result.terminal.output.slice(changed)).toMatch(/Tool cards\s+expanded/u)
+    changed = result.terminal.output.length
     result.terminal.send('\t')
     await tick()
-    expect(result.terminal.output).toContain('Tool cards hidden.')
+    expect(result.terminal.output.slice(changed)).toMatch(/Tool cards\s+hidden/u)
+    changed = result.terminal.output.length
     result.terminal.send('\t')
     await tick()
-    expect(result.terminal.output).toContain('Tool and context cards collapsed.')
+    expect(result.terminal.output.slice(changed)).toMatch(/Tool cards\s+collapsed/u)
 
     // The reasoning entry toggles the same way — the default is collapsed,
     // so the first Tab expands.
     result.terminal.send('\x1b[B')
+    changed = result.terminal.output.length
     result.terminal.send('\t')
     await tick()
-    expect(result.terminal.output).toContain('Reasoning expanded.')
+    expect(result.terminal.output.slice(changed)).toMatch(/Reasoning\s+shown/u)
 
     // Enter closes without further changes.
     const entered = result.terminal.output.length
@@ -4009,7 +4013,7 @@ describe('pi-tui chat lifecycle and transcript', () => {
     await dispose(result)
   })
 
-  it('/effort reports and sets only levels advertised by the selected model', async () => {
+  it('/effort opens the bottom selector and accepts only levels advertised by the selected model', async () => {
     const result = await setup({
       agentOptions: { provider: 'alpha', model: 'a1' },
       catalog: {
@@ -4031,10 +4035,11 @@ describe('pi-tui chat lifecycle and transcript', () => {
     result.terminal.send('/effort')
     result.terminal.send('\r')
     await vi.waitFor(() => {
-      expect(result.terminal.output).toContain('Reasoning effort: Low.')
-      expect(result.terminal.output).toContain('Available: low, high.')
+      expect(result.terminal.output).toContain('Reasoning effort · alpha/a1')
+      expect(result.terminal.output).toContain('low — current')
+      expect(result.terminal.output).toContain('High')
     })
-    result.terminal.send('/effort high')
+    result.terminal.send('\x1b[B')
     result.terminal.send('\r')
     await vi.waitFor(() => { expect(result.terminal.output).toContain('Reasoning effort: High.') })
     await result.ctx.systemPrompt.assemble(assembleContextFor(result.agent))
@@ -4044,6 +4049,10 @@ describe('pi-tui chat lifecycle and transcript', () => {
       () => Promise.resolve({ provider: 'seed', model: 'seed' }),
     )
     expect(request).toEqual({ provider: 'alpha', model: 'a1', reasoningEffort: ReasoningEffortId('high') })
+
+    result.terminal.send('/effort low')
+    result.terminal.send('\r')
+    await vi.waitFor(() => { expect(result.terminal.output).toContain('Reasoning effort: Low.') })
 
     result.terminal.send('/effort impossible')
     result.terminal.send('\r')

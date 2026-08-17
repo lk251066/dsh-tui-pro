@@ -422,6 +422,7 @@ function createTuiChatInternal(
   const workbenchRows = (): number => Math.max(0, runtime.terminal.rows - 2)
   const ui = new TUI(new FullScreenTerminal(runtime.terminal), resolved.showHardwareCursor)
   const todoContainer = new Container()
+  const mainOverlayContainer = new Container()
   const questionContainer = new Container()
   const mainHeader = new Container()
   const auxiliary = new Container()
@@ -747,6 +748,17 @@ function createTuiChatInternal(
               : {},
           })
       }
+      if (placement === 'main') {
+        mainOverlayContainer.clear()
+        mainOverlayContainer.addChild(component)
+        ui.setFocus(component)
+        return {
+          hide(): void {
+            mainOverlayContainer.clear()
+            ui.setFocus(editor)
+          },
+        }
+      }
       const modal = new InlineModalComponent(
         component,
         resolved.questionDialogWidth,
@@ -797,8 +809,8 @@ function createTuiChatInternal(
           onChoice,
           () => { void session.close() },
         ),
-        options: { width: 64, anchor: 'center', margin: 1 },
-      })
+        options: { width: 64, maxHeight: 12 },
+      }, 'inline')
       requestRender()
     },
   })
@@ -1123,6 +1135,7 @@ function createTuiChatInternal(
     preferredSidebarWidth: resolved.sidebarWidth,
     header: mainHeader,
     auxiliary,
+    main: mainOverlayContainer,
     dialog: questionContainer,
     input: inputArea,
     sidebar: persistentLayout.sidebar,
@@ -1431,8 +1444,8 @@ function createTuiChatInternal(
         },
         () => { void session.close() },
       ),
-      options: { width: resolved.detailsDialogWidth, anchor: 'center', margin: 1 },
-    })
+      options: { width: resolved.detailsDialogWidth, maxHeight: resolved.questionDialogMaxHeight },
+    }, 'inline')
     detailsOverlay = session
     void session.closed.then(() => {
       if (detailsOverlay === session) detailsOverlay = undefined
@@ -1495,8 +1508,8 @@ function createTuiChatInternal(
         applyTheme,
         () => { void session.close() },
       ),
-      options: { width: resolved.detailsDialogWidth, anchor: 'center', margin: 1 },
-    })
+      options: { width: resolved.detailsDialogWidth, maxHeight: resolved.questionDialogMaxHeight },
+    }, 'inline')
     themeOverlay = session
     void session.closed.then(() => {
       if (themeOverlay === session) themeOverlay = undefined
@@ -1769,8 +1782,8 @@ function createTuiChatInternal(
             renameSession,
             () => { void session.close() },
           ),
-          options: { width: 64, anchor: 'center', margin: 1 },
-        })
+          options: { width: 64, maxHeight: 10 },
+        }, 'inline')
         return { kind: 'success' }
       },
     })

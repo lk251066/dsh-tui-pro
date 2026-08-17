@@ -312,15 +312,19 @@ describe('multi-session switching (/new, /sessions)', () => {
       const firstOutput = harness.terminal.output.length
       submit(harness, '/effort')
       await tick()
-      expect(harness.terminal.output.slice(firstOutput)).toContain('Reasoning effort: High.')
-      expect(harness.terminal.output.slice(firstOutput)).toContain('Available: low, high.')
+      expect(harness.terminal.output.slice(firstOutput)).toContain('Reasoning effort · alpha/a1')
+      expect(harness.terminal.output.slice(firstOutput)).toContain('High')
+      expect(harness.terminal.output.slice(firstOutput)).toMatch(/a1\s+high/)
+      harness.terminal.send('\x1b')
+      await tick()
 
       await switchTo(harness, String(created[0]?.agent.session.id))
       const secondOutput = harness.terminal.output.length
       submit(harness, '/effort')
       await tick()
-      expect(harness.terminal.output.slice(secondOutput)).toContain('Reasoning effort: Max.')
-      expect(harness.terminal.output.slice(secondOutput)).toContain('Available: standard, max.')
+      expect(harness.terminal.output.slice(secondOutput)).toContain('Reasoning effort · beta/b1')
+      expect(harness.terminal.output.slice(secondOutput)).toContain('Max')
+      expect(harness.terminal.output.slice(secondOutput)).toMatch(/b1\s+max/)
     } finally {
       await disposeTuiTestHarness(harness)
     }
@@ -358,8 +362,8 @@ describe('multi-session switching (/new, /sessions)', () => {
         .not.toContain(SessionId(createdId))
 
       const history = harness.terminal.output.slice(harness.terminal.output.lastIndexOf('Sessions'))
-      expect(history).toContain(createdId)
-      expect(history).toContain('history · live')
+      expect(history).toContain('Untitled session')
+      expect(history).toContain('current · history')
     } finally {
       await disposeTuiTestHarness(harness)
     }
@@ -438,8 +442,11 @@ describe('multi-session switching (/new, /sessions)', () => {
       harness.terminal.output = ''
       await switchTo(harness, String(created[0]!.agent.session.id))
 
-      expect(harness.terminal.output).toContain('Idle')
-      expect(harness.terminal.output).not.toContain('Thinking')
+      const currentFrame = harness.terminal.output.slice(
+        harness.terminal.output.lastIndexOf('dsh DEEPSEEK HARNESS'),
+      )
+      expect(currentFrame).toContain('Idle')
+      expect(currentFrame).not.toContain('Thinking')
     } finally {
       await disposeTuiTestHarness(harness)
     }

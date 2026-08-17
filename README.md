@@ -4,11 +4,11 @@ Community-maintained interactive terminal UI plugin for [DeepSeek Harness](https
 
 ## Release status
 
-Version [`1.3.0`](https://www.npmjs.com/package/@lk251066/dsh-tui/v/1.3.0) is published on npm. Its [GitHub Release](https://github.com/lk251066/dsh-tui-pro/releases/tag/v1.3.0), annotated tag, and npm package identify release commit `8fca5ec`.
+Version `1.4.0` is the current release target. The previous public release is [`1.3.0`](https://www.npmjs.com/package/@lk251066/dsh-tui/v/1.3.0); publication of `1.4.0` requires the source, artifact, and PTY checks in [TESTING.md](TESTING.md).
 
 Do not use the existing `v1.0.0` GitHub tag; it predates the repaired source and bundle metadata. Install from npm or a verified GitHub Release.
 
-Version `1.3.0` keeps durable workspace sessions and the framed workbench from `1.2.0`, fixes settings and model-effort commands, isolates model selection per session, and routes mouse-wheel input to the transcript. See [REPAIR_PLAN.md](REPAIR_PLAN.md) for the release record.
+The `1.4.0` source renders short choices in the fixed bottom area without popup borders and makes `/sessions` replace only the left chat area while the frame and active-workspace sidebar stay fixed. See [REPAIR_PLAN.md](REPAIR_PLAN.md) for the release record.
 
 ## Intended installation
 
@@ -25,7 +25,8 @@ The package itself owns the TUI plugin and its `cordis.patch.yml` profile layer.
 - Alternate-screen terminal interface with a full outer frame
 - Persistent right-side active workspace sessions, current activity, and status sidebar
 - Internal transcript paging with fixed input and status areas
-- `/sessions` search across complete history, with direct activate, remove, and open actions
+- `/sessions` main-area browser across complete history, with direct activate, remove, and open actions
+- Fixed bottom selectors for questions, approvals, models, reasoning effort, details, themes, permissions, renaming, goals, and queue actions
 - A fixed personal assistant entry with workspace-session tools
 - `/new` for the active project and `/new <path>` for another project
 - Syntax highlighting, diff rendering, and Markdown rendering

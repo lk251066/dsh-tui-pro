@@ -28,6 +28,19 @@ The 2026-08-15 repair checks and 2026-08-16 release verification produced these 
 
 The source checks passed on the reviewed commit, and the final integration checks used the anonymous public registry rather than a workspace link or local tarball.
 
+## 1.4.0 interaction verification
+
+The `1.4.0` checks cover two distinct placements. Built-in short choices render without popup borders in the fixed bottom area, while `/sessions` replaces the left chat area and leaves the outer frame and right sidebar intact. Component and command tests cover model, effort, details, theme, approval, permission, rename, goal, queue, and session-history interactions.
+
+Current source evidence:
+
+| Check | Result |
+| --- | --- |
+| `pnpm run typecheck` | Passed |
+| `pnpm run test` | Passed: 37 files, 424 tests |
+| Main-area session-browser layout | Passed with outer-frame and sidebar assertions |
+| Bottom interaction rendering | Passed for built-in selectors and confirmations |
+
 ## 1.3.0 workbench verification
 
 The workbench uses `HeadlessTerminal` snapshots because pi-tui emits incremental ANSI updates rather than a complete screen on every render. Coverage includes alternate-buffer activation and restoration, zero scrollback growth while transcript rows append, the full outer frame, right-sidebar placement, fixed-bottom input, Page Up and Page Down transcript scrolling, session switching without remounting the workbench, queue retention after unrelated durable messages, and inline-dialog replacement of the editor.
@@ -115,7 +128,7 @@ Exercise these behaviors through the installed profile:
 2. Workspace shows the active project, full directory, and Git branch without terminal control characters.
 3. Status shows agent state, model, context percentage, input/output tokens, cache hit rate, queue depth, permission preset, and plan mode before and after a model turn.
 4. A second session created with `/new` appears under Active and switches without duplicate UI children; detached title and running-state changes update without first switching to that session.
-5. `/sessions` opens complete history; search, Up, Down, Enter, Tab, Space, and Escape perform their documented actions without sending text to the model.
+5. `/sessions` replaces only the left chat area with complete history; the outer frame and sidebar stay fixed, and search, Up, Down, Enter, Tab, Space, and Escape perform their documented actions without sending text to the model.
 6. Queue depth changes through steering insert, claim, discard, and unrelated durable transcript updates while the queue row remains visible.
 7. Approval, question, tool output, reasoning visibility, and compaction status render correctly.
 8. Removing an active session retains it in complete history, and adding it restores its sidebar entry without changing the log.
@@ -127,10 +140,11 @@ Exercise these behaviors through the installed profile:
 14. Repeated session switching preserves each transcript and input state.
 15. Normal exit disposes listeners and processes without an unhandled rejection.
 16. `/settings` renders the settings path without a `documentPath is not a function` error.
-17. `/effort` lists advertised levels, changes the selected level, and rejects an unavailable level.
+17. `/effort` opens a bottom selector for advertised levels, changes the selected level, and rejects an unavailable level.
 18. Switching between two live sessions preserves each session's model and reasoning selection.
 19. `/fork` adds the new session to Active and opens it; `/export <path>` creates that exact file.
 20. SGR and X10 wheel events move only transcript rows; editor text and cursor state remain unchanged.
+21. Questions, approvals, model, details, theme, permission, rename, goal, and queue choices render in the fixed bottom area without centered popup borders.
 
 `scripts/verify-interactive-pty.sh` drives the packed plugin through a Python standard-library PTY. The driver answers terminal capability queries, creates and switches sessions, opens the session picker, exercises command paths, and performs double-Ctrl+C shutdown. The captured ANSI stream is replayed through `@xterm/headless`; the check requires the compact title, every sidebar section, Workspace to the right of the separator, and the editor to the left. The repository snapshot suite remains the keyless evidence for stable rendered output.
 

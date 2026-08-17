@@ -1,12 +1,12 @@
 import { spawn } from 'node:child_process'
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
-import { dirname, isAbsolute, join, relative } from 'node:path'
+import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)))
 const packageManifest = JSON.parse(await readFile(join(repoRoot, 'packages/dsh-tui/package.json'), 'utf8'))
 const archive = join(repoRoot, 'packages', `lk251066-dsh-tui-${packageManifest.version}.tgz`)
-const testRoot = join(repoRoot, '.test-results', 'public-dsh-smoke')
+const testRoot = resolve(repoRoot, process.env.DSH_PUBLIC_SMOKE_ROOT ?? '.test-results/public-dsh-smoke')
 const hostRoot = join(testRoot, 'host')
 const dshHome = join(testRoot, 'home')
 const profile = 'tui-public-smoke'

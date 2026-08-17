@@ -50,6 +50,72 @@ export interface ModelDialogSelection {
   reasoningEffort: ReasoningEffortId | undefined
 }
 
+const PROVIDER_DEFAULT_EFFORT = '__provider_default__'
+
+/** Bottom selector over one model's advertised reasoning efforts. */
+export class EffortDialog implements Component {
+  private readonly list: SelectList
+  private readonly efforts = new Map<string, ReasoningEffortId | undefined>()
+
+  constructor(
+    private readonly model: string,
+    reasoning: LlmModelReasoningInfo,
+    current: ReasoningEffortId | undefined,
+    private readonly palette: Palette,
+    private readonly done: (effort: ReasoningEffortId | undefined) => void,
+    private readonly cancel: () => void,
+  ) {
+    const selected = current ?? reasoning.defaultEffort
+    const options: Array<{ value: string; effort: ReasoningEffortId | undefined; label: string }> = [
+      ...reasoning.defaultEffort === undefined
+        ? [{ value: PROVIDER_DEFAULT_EFFORT, effort: undefined, label: 'Provider default' }]
+        : [],
+      ...reasoning.efforts.map(effort => ({
+        value: effort.id,
+        effort: effort.id,
+        label: displayText(effort.name),
+      })),
+    ]
+    const items: SelectItem[] = options.map(option => {
+      this.efforts.set(option.value, option.effort)
+      return {
+        value: option.value,
+        label: option.label,
+        description: [
+          ...option.effort === undefined ? [] : [displayText(option.effort)],
+          ...option.effort === selected ? ['current'] : [],
+        ].join(' — '),
+      }
+    })
+    this.list = new SelectList(items, Math.max(1, items.length), dialogSelectTheme(palette))
+    const selectedIndex = options.findIndex(option => option.effort === selected)
+    this.list.setSelectedIndex(Math.max(0, selectedIndex))
+    this.list.onSelect = (item) => {
+      this.done(this.efforts.get(item.value))
+    }
+    this.list.onCancel = cancel
+  }
+
+  invalidate(): void {
+    this.list.invalidate()
+  }
+
+  handleInput(data: string): void {
+    if (matchesKey(data, Key.ctrl('c'))) this.cancel()
+    else this.list.handleInput(data)
+    this.invalidate()
+  }
+
+  render(width: number): string[] {
+    const innerWidth = Math.max(1, width - 4)
+    return renderBottomInteraction(`Reasoning effort · ${displayText(this.model)}`, [
+      ...this.list.render(innerWidth),
+      '',
+      this.palette.dim('↑/↓ move • Enter select • Esc cancel'),
+    ], width, this.palette)
+  }
+}
+
 /**
  * Format a provider/model target as its `provider/model` label.
  * @param target - The LLM target.
@@ -343,7 +409,35 @@ export function renderDialog(
   return lines
 }
 
-/** Keyboard model selector rendered as a bordered overlay, with a filter box and per-model reasoning-effort cycling. */
+/**
+ * Render a built-in interaction in the fixed bottom area without modal chrome.
+ * @param title - Interaction title.
+ * @param body - Selectable rows, supporting text, and key hints.
+ * @param width - Available main-column width.
+ * @param palette - Active semantic palette.
+ * @returns Full-width rows for the workbench's bottom interaction area.
+ */
+export function renderBottomInteraction(
+  title: string,
+  body: readonly string[],
+  width: number,
+  palette: Palette,
+): string[] {
+  const horizontalPadding = width >= 5 ? 2 : 0
+  const innerWidth = Math.max(1, width - horizontalPadding * 2)
+  const indent = ' '.repeat(horizontalPadding)
+  const lines = [
+    '',
+    `${indent}${palette.bold(palette.accent(displayText(title)))}`,
+    '',
+  ]
+  for (const line of body) {
+    lines.push(`${indent}${truncateToWidth(line, innerWidth, '')}`)
+  }
+  return lines
+}
+
+/** Keyboard model selector for the bottom interaction area, with filtering and per-model reasoning-effort cycling. */
 export class ModelDialog implements Component {
   private list: SelectList
   private readonly filter = new Input()
@@ -512,7 +606,7 @@ export class ModelDialog implements Component {
     this.filter.focused = true
     const results = this.filteredItems()
     const filterContent = truncateToWidth(this.filter.render(innerWidth).join(''), innerWidth, '')
-    return renderDialog('Select model', [
+    return renderBottomInteraction('Select model', [
       filterContent,
       '',
       ...results.length === 0
@@ -591,11 +685,11 @@ export class DetailsDialog implements Component {
 
   render(width: number): string[] {
     const innerWidth = Math.max(1, width - 4)
-    return renderDialog('Transcript details', [
+    return renderBottomInteraction('Transcript details', [
       ...this.list.render(innerWidth),
       '',
       this.palette.dim('↑/↓ move • Tab toggle • Enter/Esc close'),
-    ], width, this.palette, { frame: 'topline' })
+    ], width, this.palette)
   }
 }
 
@@ -686,7 +780,7 @@ export class RenameDialog implements Component {
 
   render(width: number): string[] {
     const innerWidth = Math.max(1, width - 4)
-    return renderDialog('Rename session', [
+    return renderBottomInteraction('Rename session', [
       ...this.input.render(innerWidth),
       ...this.error === undefined ? [] : ['', this.palette.warning(displayText(this.error))],
       '',
@@ -757,7 +851,7 @@ export class ConfirmDialog implements Component {
         ...lines.slice(1).flatMap(bodyLine =>
           new Text(this.palette.warning(displayText(bodyLine)), 0, 0).render(innerWidth)),
       ]
-    return renderDialog(this.title, [
+    return renderBottomInteraction(this.title, [
       ...messageLines,
       '',
       ...this.list.render(innerWidth),
@@ -896,7 +990,7 @@ export class ApprovalDialog implements Component {
         : this.input.render(innerWidth).join('')
       body.push('', truncateToWidth(draft, innerWidth, ''))
     }
-    return renderDialog('Approval', [
+    return renderBottomInteraction('Approval', [
       ...body,
       '',
       this.palette.dim(hint),
@@ -965,11 +1059,11 @@ export class ThemeDialog implements Component {
 
   render(width: number): string[] {
     const innerWidth = Math.max(1, width - 4)
-    return renderDialog('Theme', [
+    return renderBottomInteraction('Theme', [
       ...this.list.render(innerWidth),
       '',
       this.palette.dim('↑/↓ move • Tab preview • Enter keep • Esc restore'),
-    ], width, this.palette, { frame: 'topline' })
+    ], width, this.palette)
   }
 }
 
@@ -1037,7 +1131,7 @@ export function summarizeResumeCandidate(
 export type ResumeScope = 'active' | 'all'
 
 /**
- * Full-viewport keyboard selector over detached, preflighted resume summaries.
+ * Main-area keyboard browser over detached, preflighted resume summaries.
  *
  * Two scopes over one candidate set: `all` (the default) lists complete
  * history; `active` lists the personal assistant and user-maintained workspace

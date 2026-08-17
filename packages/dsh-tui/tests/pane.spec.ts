@@ -3,11 +3,13 @@ import {
   ApprovalDialog,
   ConfirmDialog,
   DetailsDialog,
+  EffortDialog,
   ModelDialog,
   StaticDialog,
   ThemeDialog,
 } from '../src/components/dialogs.ts'
 import { createPalette } from '../src/components/theme.ts'
+import { ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 
 /** Color-disabled palette: frames render plain text, so glyphs assert exactly. */
 const plain = createPalette(false, 'dark')
@@ -27,16 +29,16 @@ describe('browse dialogs render the Claude Code pane form', () => {
     expect(lines.join('\n')).not.toContain('│')
   })
 
-  it('DetailsDialog: single top rule instead of the rounded frame', () => {
+  it('DetailsDialog: renders in the bottom interaction area without a frame', () => {
     const dialog = new DetailsDialog('collapsed', false, plain, vi.fn(), vi.fn())
     const joined = dialog.render(60).join('\n')
     expect(joined).toContain('Transcript details')
-    expect(joined).toContain('─'.repeat(60))
     expect(joined).not.toContain('╭')
     expect(joined).not.toContain('╰')
+    expect(joined).not.toContain('│')
   })
 
-  it('ThemeDialog: single top rule instead of the rounded frame', () => {
+  it('ThemeDialog: renders in the bottom interaction area without a frame', () => {
     const dialog = new ThemeDialog(
       [{ name: 'deepseek', description: 'Adaptive', dark: false }],
       'deepseek',
@@ -46,9 +48,9 @@ describe('browse dialogs render the Claude Code pane form', () => {
     )
     const joined = dialog.render(60).join('\n')
     expect(joined).toContain('Theme')
-    expect(joined).toContain('─'.repeat(60))
     expect(joined).not.toContain('╭')
     expect(joined).not.toContain('╰')
+    expect(joined).not.toContain('│')
   })
 
   it('the rule takes the accent color and the title is bold', () => {
@@ -59,8 +61,15 @@ describe('browse dialogs render the Claude Code pane form', () => {
   })
 })
 
-describe('strong-interruption dialogs keep the rounded frame', () => {
-  it('ModelDialog renders the round border', () => {
+describe('built-in choices use the unframed bottom interaction form', () => {
+  const expectBottomInteraction = (joined: string, title: string): void => {
+    expect(joined).toContain(`  ${title}`)
+    expect(joined).not.toContain('╭')
+    expect(joined).not.toContain('╰')
+    expect(joined).not.toContain('│')
+  }
+
+  it('ModelDialog renders without popup chrome', () => {
     const dialog = new ModelDialog(
       [{ provider: 'deepseek', model: 'chat', modelName: 'Chat' }],
       undefined,
@@ -70,21 +79,39 @@ describe('strong-interruption dialogs keep the rounded frame', () => {
       vi.fn(),
     )
     const joined = dialog.render(60).join('\n')
-    expect(joined).toContain('╭ Select model')
-    expect(joined).toContain('╰')
+    expectBottomInteraction(joined, 'Select model')
   })
 
-  it('ApprovalDialog renders the round border', () => {
+  it('EffortDialog renders the current model and choices without popup chrome', () => {
+    const dialog = new EffortDialog(
+      'deepseek/chat',
+      {
+        efforts: [
+          { id: ReasoningEffortId('low'), name: 'Low' },
+          { id: ReasoningEffortId('high'), name: 'High' },
+        ],
+        defaultEffort: ReasoningEffortId('low'),
+      },
+      undefined,
+      plain,
+      vi.fn(),
+      vi.fn(),
+    )
+    const joined = dialog.render(64).join('\n')
+    expectBottomInteraction(joined, 'Reasoning effort · deepseek/chat')
+    expect(joined).toContain('Low')
+    expect(joined).toContain('current')
+  })
+
+  it('ApprovalDialog renders without popup chrome', () => {
     const dialog = new ApprovalDialog('bash', undefined, 'rm -rf /tmp', plain, vi.fn(), vi.fn())
     const joined = dialog.render(64).join('\n')
-    expect(joined).toContain('╭ Approval')
-    expect(joined).toContain('╰')
+    expectBottomInteraction(joined, 'Approval')
   })
 
-  it('ConfirmDialog renders the round border', () => {
+  it('ConfirmDialog renders without popup chrome', () => {
     const dialog = new ConfirmDialog('Full access', 'single-line message', plain, vi.fn(), vi.fn())
     const joined = dialog.render(64).join('\n')
-    expect(joined).toContain('╭ Full access')
-    expect(joined).toContain('╰')
+    expectBottomInteraction(joined, 'Full access')
   })
 })

@@ -6,9 +6,15 @@ This document is the source of truth for making `@lk251066/dsh-tui` independentl
 
 Ship one package: `@lk251066/dsh-tui`. Its package manifest already defines `dsh.bundle.patch`, so the repository will not create or publish a separate `@lk251066/dsh-tui-bundle` compatibility package.
 
-The published `1.3.0` package, annotated tag, checksummed GitHub Release, source version, and lockfile identify release commit `8fca5ec`. The package passes Windows and Linux empty-profile installation and real PTY evidence against public `@deepseek-ai/dsh@0.1.0-rc.6`.
+The published `1.3.0` package, annotated tag, checksummed GitHub Release, source version, and lockfile identify release commit `8fca5ec`. Version `1.4.0` is the current release target and must pass the same Windows and Linux empty-profile installation and real PTY evidence against public `@deepseek-ai/dsh@0.1.0-rc.6`.
 
-The `1.3.0` scope is limited to command correctness and visible workbench behavior: settings getter access, model-effort selection, per-session model state, explicit export paths, fork activation, removal of unavailable commands, settled thinking and diff presentation, and mouse-wheel transcript scrolling.
+The `1.4.0` scope is limited to interaction placement: short choices use the fixed bottom area without popup borders, while complete session history replaces only the left chat area and preserves the frame and active-workspace sidebar.
+
+## Version 1.4.0 interaction placement
+
+Built-in short choices use the fixed bottom interaction area. Questions, approvals, model and reasoning-effort selection, transcript details, themes, permission confirmation, renaming, goal actions, and queue actions do not open centered popups.
+
+`/sessions` is intentionally different because complete history needs a searchable browser. It replaces the left chat area while open, keeps the full outer frame and right active-workspace sidebar visible, and restores the current transcript and editor on close.
 
 ## Version 1.1.0 terminal workbench
 

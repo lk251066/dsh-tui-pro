@@ -24,6 +24,8 @@ export interface WorkbenchShellOptions {
   readonly header: Component
   /** Session-owned rows rendered above the fixed input or dialog area. */
   readonly auxiliary: Component
+  /** Active main-area browser; when non-empty it replaces chat chrome and transcript. */
+  readonly main: Component
   /** Active inline dialog; when non-empty it replaces the editor area. */
   readonly dialog: Component
   /** Working state, editor, prompt context, and notices fixed to the bottom. */
@@ -129,6 +131,7 @@ export class WorkbenchShellComponent implements Component {
     this.options.header.invalidate()
     this.transcript.invalidate()
     this.options.auxiliary.invalidate()
+    this.options.main.invalidate()
     this.options.dialog.invalidate()
     this.options.input.invalidate()
     this.options.sidebar.invalidate()
@@ -184,6 +187,12 @@ export class WorkbenchShellComponent implements Component {
   }
 
   private renderMain(width: number, height: number): string[] {
+    const browser = this.options.main.render(width)
+    if (browser.length > 0) {
+      const visible = browser.slice(0, height)
+      while (visible.length < height) visible.push('')
+      return visible
+    }
     const sections = this.mainSections(width, height)
     const transcript = this.renderTranscript(width, sections.transcriptRows)
 

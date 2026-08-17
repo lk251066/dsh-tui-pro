@@ -15,6 +15,7 @@ function createWorkbench(options: {
   readonly header?: string
   readonly transcript?: string
   readonly auxiliary?: string
+  readonly main?: string
   readonly input?: string
   readonly sidebar?: string
   readonly sidebarWidth?: number
@@ -25,6 +26,7 @@ function createWorkbench(options: {
     header: new Text(options.header ?? 'header', 0, 0),
     transcript: new Text(options.transcript ?? 'chat', 0, 0),
     auxiliary: new Text(options.auxiliary ?? 'queue', 0, 0),
+    main: new Text(options.main ?? '', 0, 0),
     dialog: new Text('', 0, 0),
     input: new Text(options.input ?? 'dsh >', 0, 0),
     sidebar: new Text(options.sidebar ?? 'Workspace\nSessions\nStatus', 0, 0),
@@ -113,6 +115,7 @@ describe('WorkbenchShellComponent', () => {
       header: new Text('header', 0, 0),
       transcript: new Text('chat', 0, 0),
       auxiliary: new Text('', 0, 0),
+      main: new Text('', 0, 0),
       dialog: new Text('question\ncontrols', 0, 0),
       input: new Text('dsh >', 0, 0),
       sidebar: new Text('Status', 0, 0),
@@ -122,6 +125,20 @@ describe('WorkbenchShellComponent', () => {
     expect(output).toContain('question')
     expect(output).toContain('controls')
     expect(output).not.toContain('dsh >')
+  })
+
+  it('lets a main-area browser replace chat while the sidebar and outer frame stay fixed', () => {
+    const lines = createWorkbench({ rows: 8, main: 'Sessions\nsearch\nitem 1\nitem 2' }).render(100).map(stripSgr)
+    const content = lines.slice(1, -1)
+    const main = content.map(line => line.slice(1, line.indexOf('│', 1)).trim())
+    const sidebar = content.map(line => line.slice(line.indexOf('│', 1) + 1, -1).trim())
+
+    expect(main).toEqual(['Sessions', 'search', 'item 1', 'item 2', '', ''])
+    expect(main).not.toContain('header')
+    expect(main).not.toContain('dsh >')
+    expect(sidebar).toEqual(['Workspace', 'Sessions', 'Status', '', '', ''])
+    expect(lines[0]).toBe(`┌${'─'.repeat(98)}┐`)
+    expect(lines[7]).toBe(`└${'─'.repeat(98)}┘`)
   })
 
   it('hides the sidebar when the terminal cannot preserve usable main and sidebar widths', () => {

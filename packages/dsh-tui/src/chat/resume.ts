@@ -328,7 +328,7 @@ export function createResumeController(deps: ResumeControllerDeps): ResumeContro
           picker = new ResumePicker(
             scanned,
             resolved.maxResumeOptions,
-            () => host.viewport.rows,
+            () => Math.max(1, host.viewport.rows - 2),
             palette,
             (candidate) => { openSession(candidate, session) },
             (candidate) => {
@@ -352,12 +352,10 @@ export function createResumeController(deps: ResumeControllerDeps): ResumeContro
           return picker
         },
         options: {
-          width: '100%',
+          width: resolved.questionDialogWidth,
           maxHeight: '100%',
-          anchor: 'top-left',
-          margin: 0,
         },
-      })
+      }, 'main')
       resumeOverlay = session
       // Closing the picker — Escape, supersession, disposal — aborts the scan:
       // the borrowed-log pass over a large store must not outlive its overlay.

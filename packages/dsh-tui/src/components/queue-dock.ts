@@ -13,7 +13,7 @@ import {
   type Component,
   type SelectItem,
 } from '@earendil-works/pi-tui'
-import { renderDialog } from './dialogs.ts'
+import { renderBottomInteraction } from './dialogs.ts'
 import { dialogSelectTheme, type Palette } from './theme.ts'
 import { displayText } from './text.ts'
 
@@ -108,7 +108,7 @@ export class QueueDialog implements Component {
 
   render(width: number): string[] {
     const innerWidth = Math.max(1, width - 4)
-    return renderDialog('Queued messages', [
+    return renderBottomInteraction('Queued messages', [
       ...this.list.render(innerWidth),
       '',
       this.palette.dim('Enter edit • Del delete • Esc close'),

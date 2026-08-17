@@ -120,8 +120,8 @@ export function createQueueDock(deps: QueueDockDeps): QueueDockController {
           },
           () => { void session.close() },
         ),
-        options: { width: 76, anchor: 'center', margin: 1 },
-      })
+        options: { width: 76, maxHeight: 16 },
+      }, 'inline')
       deps.requestRender()
     },
     pendingCount(): number {

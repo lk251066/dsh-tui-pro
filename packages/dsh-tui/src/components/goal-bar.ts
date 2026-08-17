@@ -14,7 +14,7 @@ import {
   type Component,
   type SelectItem,
 } from '@earendil-works/pi-tui'
-import { renderDialog } from './dialogs.ts'
+import { renderBottomInteraction } from './dialogs.ts'
 import { dialogSelectTheme, type Palette } from './theme.ts'
 
 /** The folded-goal slice the bar renders (see `foldGoal` in dsh-goal). */
@@ -109,7 +109,7 @@ export class GoalActionsDialog implements Component {
 
   render(width: number): string[] {
     const innerWidth = Math.max(1, width - 4)
-    return renderDialog('Goal', [
+    return renderBottomInteraction('Goal', [
       this.headline,
       '',
       ...this.list.render(innerWidth),

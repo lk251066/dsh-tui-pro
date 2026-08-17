@@ -4,7 +4,7 @@ Interactive terminal UI plugin and profile bundle for [DeepSeek Harness](https:/
 
 ## Release status
 
-Version [`1.3.0`](https://www.npmjs.com/package/@lk251066/dsh-tui/v/1.3.0) is published on npm. Its [GitHub Release](https://github.com/lk251066/dsh-tui-pro/releases/tag/v1.3.0), annotated tag, and npm package identify release commit `8fca5ec`.
+Version `1.4.0` is the current release target. The previous public release is [`1.3.0`](https://www.npmjs.com/package/@lk251066/dsh-tui/v/1.3.0); publication follows the checks in [TESTING.md](../../TESTING.md).
 
 ## Installation
 
@@ -40,9 +40,9 @@ After successful installation and profile validation:
 dsh --profile tui
 ```
 
-The bundled profile opens the active project session for the current directory. If the directory has no active session, it creates one and adds it to the workspace. The TUI enters the terminal alternate screen and renders a full outer frame. Transcript, tool output, dialogs, and editor occupy the left inner area; a right sidebar keeps Workspace, Active, Current, and Status fixed while Page Up and Page Down scroll only the active transcript. Stopping the TUI restores the invoking terminal and its scrollback.
+The bundled profile opens the active project session for the current directory. If the directory has no active session, it creates one and adds it to the workspace. The TUI enters the terminal alternate screen and renders a full outer frame. Transcript, tool output, and editor occupy the left inner area; a right sidebar keeps Workspace, Active, Current, and Status fixed while Page Up, Page Down, and the mouse wheel scroll only the active transcript. Short choices replace the fixed bottom input area without popup borders. Stopping the TUI restores the invoking terminal and its scrollback.
 
-Use `/sessions` to search complete history. Up and Down select a row, Enter opens it, Tab switches between complete history and the active list, and Space adds or removes a project session from the active workspace list. Removing membership never deletes the session log. Use `/assistant` for the fixed personal assistant session.
+Use `/sessions` to replace the left chat area with complete history while the outer frame and right sidebar remain fixed. Up and Down select a row, Enter opens it, Tab switches between complete history and the active list, and Space adds or removes a project session from the active workspace list. Escape returns to the transcript. Removing membership never deletes the session log. Use `/assistant` for the fixed personal assistant session.
 
 The TUI owns these commands: `/help`, `/model`, `/effort`, `/clear`, `/details`, `/theme`, `/queue`, `/rename`, `/fork`, `/status`, `/context`, `/agents`, `/jobs`, `/settings`, `/export`, `/exit`, `/quit`, `/sessions`, `/new`, and `/assistant`. `/effort` only accepts reasoning levels advertised by the selected model; model and effort selections are independent for each live session. dsh-base may add `/feedback`, `/goal`, `/compact`, `/permission`, and `/plan`. The bundle does not provide `/palette`, `/reload`, `/fleet`, or `/memories`.
 

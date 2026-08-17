@@ -1,5 +1,11 @@
 # Terminal Workbench
 
+## 1.4.0 changes
+
+Built-in choices now use the fixed bottom interaction area without popup borders. This applies to questions, approvals, model and reasoning-effort selection, transcript details, themes, permissions, session renaming, goal actions, and queue actions. The transcript stays visible above the selector and the right sidebar remains fixed.
+
+`/sessions` is a main-area browser rather than a bottom selector. It replaces only the left chat area while open, so complete history has room for search and session details without covering the outer frame or the active-workspace sidebar. Escape returns to the same session transcript and editor.
+
 ## 1.3.0 changes
 
 The workbench remains in the terminal alternate screen with a fixed outer frame, fixed sidebar, and fixed editor. Keyboard Page Up/Page Down and mouse-wheel input scroll only the transcript; input never receives wheel escape sequences. The transcript renders user messages before the assistant response, settled thinking as a duration summary when hidden, and tool/diff cards with their configured visibility and colored change counts.

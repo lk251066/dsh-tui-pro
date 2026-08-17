@@ -65,8 +65,10 @@ describe('Shift+Tab permission ring', () => {
     terminal.send('\x1b[Z')
     await new Promise(resolve => setTimeout(resolve, 25))
     expect(terminal.output).toContain('Full access')
-    expect(terminal.output).toContain('WARNING: danger-full-access disables all permission checks')
-    expect(terminal.output).toContain('sandbox or container')
+    expect(terminal.output).toContain('WARNING: danger-full-access disables all')
+    expect(terminal.output).toContain('permission checks')
+    expect(terminal.output).toContain('inside a sandbox')
+    expect(terminal.output).toContain('or container')
     expect(applied).toEqual([])
 
     // Escape the confirmation: nothing applied.

@@ -12,6 +12,7 @@ import { errorChain, LlmError, type ReasoningEffortId } from '@deepseek-ai/dsh-l
 import type { TuiOverlaySession } from '../extension/types.ts'
 import { displayText } from '../components/text.ts'
 import {
+  EffortDialog,
   ModelDialog,
   readModelChoices,
   targetLabel,
@@ -162,10 +163,8 @@ export function createModelController(deps: ModelControllerDeps): ModelControlle
       options: {
         width: resolved.modelDialogWidth,
         maxHeight: resolved.modelDialogMaxHeight,
-        anchor: 'center',
-        margin: 1,
       },
-    })
+    }, 'inline')
     modelOverlay = session
     void session.closed.then(() => {
       if (modelOverlay === session) modelOverlay = undefined
@@ -209,6 +208,35 @@ export function createModelController(deps: ModelControllerDeps): ModelControlle
     selectModel(selected)
   }
 
+  const showEffortSelector = (selected: ModelChoice): void => {
+    const reasoning = selected.reasoning
+    /* v8 ignore next -- callers reject models without reasoning choices. */
+    if (reasoning === undefined) return
+    void modelOverlay?.close()
+    const session = overlayManager.open({
+      create: () => new EffortDialog(
+        targetLabel(selected),
+        reasoning,
+        target.current?.reasoningEffort,
+        palette,
+        (effort) => {
+          void session.close()
+          selectModel(selected, { effort })
+        },
+        () => { void session.close() },
+      ),
+      options: {
+        width: resolved.modelDialogWidth,
+        maxHeight: resolved.modelDialogMaxHeight,
+      },
+    }, 'inline')
+    modelOverlay = session
+    void session.closed.then(() => {
+      if (modelOverlay === session) modelOverlay = undefined
+    })
+    deps.requestRender()
+  }
+
   const handleReasoningEffortCommand = async (raw: string): Promise<void> => {
     const current = target.current
     if (current === undefined) {
@@ -230,12 +258,7 @@ export function createModelController(deps: ModelControllerDeps): ModelControlle
     const argument = raw.trim()
     const available = reasoning.efforts.map(effort => effort.id)
     if (argument === '') {
-      const currentEffort = current.reasoningEffort ?? reasoning.defaultEffort
-      deps.appendNotice([
-        `Reasoning effort: ${targetReasoningLabel(selected, currentEffort) ?? 'Default'}.`,
-        `Available: ${available.join(', ')}.`,
-        'Set it with /effort <level>.',
-      ].join('\n'))
+      showEffortSelector(selected)
       return
     }
     const match = reasoning.efforts.find(effort => effort.id === argument)

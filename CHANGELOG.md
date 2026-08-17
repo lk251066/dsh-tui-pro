@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 The `v1.0.0` tag is not an installable public release: no npm package was published, and the repository-root tarball does not contain the required dsh bundle metadata. See [REPAIR_PLAN.md](REPAIR_PLAN.md) for the first verified release criteria.
 
+## [1.4.0] - 2026-08-17
+
+### Changed
+
+- Render built-in questions, approvals, model and reasoning-effort choices, transcript details, themes, permissions, renaming, goal actions, and queue actions in the fixed bottom interaction area without popup borders.
+- Make `/sessions` replace only the left chat area while preserving the full-screen frame and persistent active-workspace sidebar.
+- Make bare `/effort` open the same keyboard-selectable bottom interaction used by other short choices.
+
 ## [1.3.0] - 2026-08-17
 
 ### Added
@@ -141,5 +149,5 @@ The published npm package, annotated `v1.0.1` tag, and checksummed GitHub Releas
 
 - **Repository**: https://github.com/lk251066/dsh-tui-pro
 - **NPM Package**: https://www.npmjs.com/package/@lk251066/dsh-tui
-- **GitHub Release**: https://github.com/lk251066/dsh-tui-pro/releases/tag/v1.0.2
+- **GitHub Release**: https://github.com/lk251066/dsh-tui-pro/releases/tag/v1.4.0
 - **Plugin Catalog**: ready for submission using [PLUGIN_SUBMISSION.md](PLUGIN_SUBMISSION.md)

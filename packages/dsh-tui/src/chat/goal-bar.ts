@@ -104,8 +104,8 @@ export function createGoalBar(deps: GoalBarDeps): GoalBarController {
           },
           () => { void session.close() },
         ),
-        options: { width: 56, anchor: 'center', margin: 1 },
-      })
+        options: { width: 56, maxHeight: 12 },
+      }, 'inline')
       overlay = session
       void session.closed.then(() => {
         if (overlay === session) overlay = undefined
