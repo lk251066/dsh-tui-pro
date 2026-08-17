@@ -49,6 +49,7 @@ import {
   formatStatusDuration,
   type StepPosition,
 } from '../chat/timing.ts'
+import { stripTerminalControls } from './transcript-selection.ts'
 
 /** Concatenate the text of every block of one type, separated by blank lines. */
 function textBlocks(content: readonly ContentBlock[], type: 'text' | 'reasoning'): string {
@@ -287,11 +288,6 @@ export function renderDiff(
 }
 
 /**
- * Prefix marker for echoed user input (the Claude Code `>` quote convention).
- */
-const USER_PROMPT_MARKER = '> '
-
-/**
  * Identity segments of the condensed one-line header: the product version,
  * the active model label, the working directory, and the session title when
  * one is set. An empty `model`/`version` omits that segment from the line.
@@ -455,11 +451,8 @@ export class ImageBlockComponent extends Container {
 }
 
 /**
- * A user or steering prompt in the transcript. Every body line carries the
- * Claude Code `>` quote marker in the accent color and the text renders as
- * plain echo (no markdown styling, the way Claude Code quotes input back), so
- * a terminal drag-select copies the prompt verbatim. Image blocks render
- * inline beneath the text through {@link ImageBlockComponent}.
+ * A user or steering prompt with one stable role header and plain echoed text.
+ * Image blocks render inline beneath the text through {@link ImageBlockComponent}.
  */
 export class UserMessageComponent extends Container {
   constructor(
@@ -469,11 +462,8 @@ export class UserMessageComponent extends Container {
     loadImage?: (attachmentId: string) => Promise<Uint8Array | undefined>,
   ) {
     super()
-    // Every source line carries the marker; wrap continuation lines flow
-    // flush-left (Text re-wraps per render width).
-    const marker = palette.accent(USER_PROMPT_MARKER)
-    const lines = displayText(text).split('\n').map(line => `${marker}${line}`)
-    this.addChild(new Text(lines.join('\n'), 0, 0))
+    this.addChild(new Text(palette.underline(palette.bold(palette.accent('You'))), 0, 0))
+    if (text !== '') this.addChild(new Text(displayText(text), 0, 0))
     const loader: (attachmentId: string) => Promise<Uint8Array | undefined>
       = loadImage === undefined ? () => Promise.resolve(undefined) : loadImage
     for (const image of images) {
@@ -489,8 +479,8 @@ export class UserMessageComponent extends Container {
 
 /**
  * Children of a settled assistant message: optional reasoning block then the
- * response text. Assistant prose carries no role header (the Claude Code
- * convention — tool cards and markers already band the message). A settled
+ * response text. The first visible step in a turn carries the Assistant role
+ * header; later steps are continuations. A settled
  * step folds its reasoning to one dim `∴ Thinking` line unless expanded
  * (Claude Code's default), while a streaming step keeps the reasoning live;
  * a folded continuation with no visible body renders nothing at all, so
@@ -511,15 +501,19 @@ function assistantMessageChildren(
   const foldsReasoning = settled && reasoning !== '' && !showReasoning
   if (foldedContinuation && !showsReasoning && !foldsReasoning && text === '') return []
   const children: Component[] = [new Spacer(1)]
+  if (!foldedContinuation) {
+    children.push(new Text(palette.underline(palette.bold(palette.accent('Assistant'))), 0, 0))
+  }
   const duration = thinkingMs === undefined ? '' : ` for ${formatStatusDuration(thinkingMs)}`
+  const reasoningLines = reasoning === '' ? 0 : reasoning.split('\n').length
   if (foldsReasoning) {
     children.push(new Text(palette.italic(palette.dim(
-      `${THINKING_GLYPH} Thinking${duration} ${shortcutHint('ctrl+r', 'expand')}`,
+      `▶ Thinking${duration} · ${String(reasoningLines)} lines ${shortcutHint('ctrl+r', 'expand')}`,
     )), 0, 0))
   } else if (showsReasoning) {
     children.push(
       new Text(palette.italic(palette.dim(
-        `${THINKING_GLYPH} Thinking${settled ? duration : '…'}`,
+        `▼ ${THINKING_GLYPH} Thinking${settled ? duration : '…'}${settled ? ` ${shortcutHint('ctrl+r', 'collapse')}` : ''}`,
       )), 0, 0),
       new Markdown(reasoning, 0, 0, mdTheme, { color: value => palette.dim(value), italic: true }),
     )
@@ -614,6 +608,14 @@ export class StreamingAssistantComponent extends Container {
     this.rebuild()
   }
 
+  /** Toggle this step's settled reasoning when its disclosure row is clicked. */
+  clickTranscriptRow(row: number, width: number): boolean {
+    const line = stripTerminalControls(this.render(width)[row] ?? '')
+    if (!line.includes('Thinking')) return false
+    this.setShowReasoning(!this.showReasoning)
+    return true
+  }
+
   /**
    * Mark this step as a folded continuation of its turn: no `Assistant` header,
    * and no output at all while the step has no visible body. Used while tool
@@ -633,7 +635,7 @@ export class StreamingAssistantComponent extends Container {
   hasVisibleBody(): boolean {
     const content = this.presentedContent()
     return textBlocks(content, 'text').trim() !== ''
-      || (this.showReasoning && textBlocks(content, 'reasoning').trim() !== '')
+      || textBlocks(content, 'reasoning').trim() !== ''
   }
 
   /** The settled content when available, otherwise the streamed blocks in model order. */
@@ -833,6 +835,13 @@ export class ToolCardComponent extends CachedCardComponent {
     this.dropLines()
   }
 
+  /** Toggle this card only when its disclosure header row is clicked. */
+  clickTranscriptRow(row: number, _width: number): boolean {
+    if (row !== 1 || this.visibility === 'hidden') return false
+    this.setVisibility(this.visibility === 'expanded' ? 'collapsed' : 'expanded')
+    return true
+  }
+
   protected renderLines(width: number): string[] {
     // Hidden renders nothing — not even the leading gap — so the transcript
     // keeps only the conversation, the way Codex hides tool calls.
@@ -904,7 +913,8 @@ export class ToolCardComponent extends CachedCardComponent {
     // The header is a single card row: collapse an embedded newline in a
     // model-authored label to an inline escape so it cannot break onto extra
     // rows and collide with the body lines that follow.
-    const headerText = `${glyph} ${displayInlineText(label)}${duration}`
+    const disclosure = this.visibility === 'expanded' ? '▼' : '▶'
+    const headerText = `${disclosure} ${glyph} ${displayInlineText(label)}${duration}`
     const header = truncateToWidth(headerText, Math.max(1, width - 2), '')
     // The blank first row is the card's own paragraph gap (no external Spacer),
     // so the hidden state removes the gap together with the card.
@@ -1109,6 +1119,13 @@ export class CollapsedToolGroupComponent extends CachedCardComponent {
     return this.members
   }
 
+  /** Toggle this group only when its summary row is clicked. */
+  clickTranscriptRow(row: number, _width: number): boolean {
+    if (row !== 1 || this.visibility === 'hidden') return false
+    this.setVisibility(this.visibility === 'expanded' ? 'collapsed' : 'expanded')
+    return true
+  }
+
   /**
    * Add one more adjacent member call and re-render the summary.
    * @param card - The later foldable call's card, already registered with the
@@ -1216,12 +1233,12 @@ export class CollapsedToolGroupComponent extends CachedCardComponent {
       // Verbose mode lists every member under the summary header; the members
       // render through their own cached-card contract, so this stays a plain
       // concatenation of their rows.
-      return ['', this.summaryRow(glyph), ...this.members.flatMap(card => card.render(width))]
+      return ['', `▼ ${this.summaryRow(glyph)}`, ...this.members.flatMap(card => card.render(width))]
     }
     // One card row: the summary, the newest pending call's label as the
     // activity hint, and the expand shortcut — a single terminal row.
     const row = [
-      this.summaryRow(glyph),
+      `▶ ${this.summaryRow(glyph)}`,
       ...(pending === undefined ? [] : [this.palette.dim(` · ${displayInlineText(pending.label())}`)]),
       this.palette.dim(` ${shortcutHint('ctrl+o', 'expand')}`),
     ].join('')
@@ -1293,8 +1310,15 @@ export class ContextCardComponent extends CachedCardComponent {
     this.dropLines()
   }
 
+  /** Toggle this context block from its disclosure header. */
+  clickTranscriptRow(row: number, _width: number): boolean {
+    if (row !== 0) return false
+    this.setExpanded(!this.expanded)
+    return true
+  }
+
   protected renderLines(width: number): string[] {
-    const header = this.palette.dim(`Context · ${displayText(this.label)}`)
+    const header = this.palette.dim(`${this.expanded ? '▼' : '▶'} Context · ${displayText(this.label)}`)
     // Emptiness is decided on the stripped text: styling a blank body would yield
     // one escape-only row, which reads as a stray blank line under the header.
     const stripped = stripReminderFrame(this.text)

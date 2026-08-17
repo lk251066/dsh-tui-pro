@@ -120,6 +120,7 @@ import {
   StatusCardComponent,
   PromptContextComponent,
   RenameDialog,
+  SessionSwitchDialog,
   targetLabel,
   ThemeDialog,
   type DetailsSelection,
@@ -176,6 +177,7 @@ import { createResumeController } from './chat/resume.ts'
 import { createRewindController } from './chat/rewind.ts'
 import type { TuiResumeHost, TuiRuntime } from './runtime.ts'
 import { WorkspaceFileSearch } from './chat/file-autocomplete.ts'
+import { copyText } from './clipboard.ts'
 
 export { TuiPromptService } from './prompt.ts'
 export { renderSkillInvocation } from './chat/skill-invocation.ts'
@@ -679,6 +681,7 @@ function createTuiChatInternal(
   // The right sidebar owns live working status; the main input area stays quiet.
   const workingLine = new WorkingLineComponent(palette, now)
   const editorFrame = new FramedEditorComponent(editor)
+  inputArea.addChild(workingLine)
   inputArea.addChild(editorFrame)
   inputArea.addChild(promptContext)
   ui.setFocus(editor)
@@ -1137,7 +1140,6 @@ function createTuiChatInternal(
     workspaceSessions,
     terminalRows: workbenchRows,
     now,
-    activity: workingLine,
   })
   sessionLayout = persistentLayout
   workbench = new WorkbenchShellComponent(palette, {
@@ -1149,6 +1151,7 @@ function createTuiChatInternal(
     dialog: questionContainer,
     input: inputArea,
     sidebar: persistentLayout.sidebar,
+    sidebarSessionAt: (row, width) => persistentLayout.sidebar.sessionAtRow(row, width),
     transcript: registry.active().channel.chat,
   })
   ui.addChild(workbench)
@@ -1376,17 +1379,114 @@ function createTuiChatInternal(
     },
   })
 
-  const cycleActiveSession = (offset: -1 | 1): void => {
-    const ids = [
+  const activeSessionIds = (): SessionId[] => [
       ASSISTANT_SESSION_ID,
       ...workspaceSessions.list().map(item => item.sessionId),
     ].filter((sessionId, index, all) => all.indexOf(sessionId) === index)
+
+  const activateSession = (sessionId: SessionId): void => {
+    if (sessionId === agent.session.id) return
+    if (sessionId === ASSISTANT_SESSION_ID) assistant.open()
+    else resume.openSession(sessionId)
+  }
+
+  const cycleActiveSession = (offset: -1 | 1): void => {
+    const ids = activeSessionIds()
     if (ids.length <= 1) return
     const current = Math.max(0, ids.indexOf(agent.session.id))
     const next = ids[(current + offset + ids.length) % ids.length]
     if (next === undefined || next === agent.session.id) return
-    if (next === ASSISTANT_SESSION_ID) assistant.open()
-    else resume.openSession(next)
+    activateSession(next)
+  }
+
+  let switchOverlay: TuiOverlaySession | undefined
+  const showSessionSwitcher = (): void => {
+    const items = sessionLayout?.sessionList.getItems() ?? []
+    if (items.length <= 1) {
+      showTransientNotice('No other active session.')
+      return
+    }
+    void switchOverlay?.close()
+    const session = overlayManager.open({
+      create: () => new SessionSwitchDialog(
+        items.map(item => ({
+          id: item.id,
+          title: item.title,
+          workspace: item.workspace,
+          status: item.status,
+          current: item.isActive,
+        })),
+        palette,
+        (id) => {
+          void session.close()
+          activateSession(SessionId(id))
+        },
+        () => { void session.close() },
+      ),
+      options: { width: resolved.detailsDialogWidth, maxHeight: resolved.questionDialogMaxHeight },
+    }, 'inline')
+    switchOverlay = session
+    void session.closed.then(() => {
+      if (switchOverlay === session) switchOverlay = undefined
+    })
+    requestRender()
+  }
+
+  const runSessionSwitch = (rawInput: string): void => {
+    const argument = rawInput.trim()
+    if (argument === '') {
+      showSessionSwitcher()
+      return
+    }
+    const normalized = argument.toLowerCase()
+    if (normalized === 'next') {
+      cycleActiveSession(1)
+      return
+    }
+    if (normalized === 'previous' || normalized === 'prev') {
+      cycleActiveSession(-1)
+      return
+    }
+    const items = sessionLayout?.sessionList.getItems() ?? []
+    const index = /^\d+$/u.test(argument) ? Number.parseInt(argument, 10) - 1 : -1
+    const byIndex = index >= 0 ? items[index] : undefined
+    const exact = items.filter(item => item.id === argument || item.title.toLowerCase() === normalized)
+    const selected = byIndex ?? (exact.length === 1 ? exact[0] : undefined)
+    if (selected === undefined) {
+      appendNotice(
+        exact.length > 1
+          ? `Active session title "${displayText(argument)}" is ambiguous; use its number.`
+          : `Unknown active session "${displayText(argument)}". Use /switch to list active sessions.`,
+        'warning',
+      )
+      return
+    }
+    activateSession(SessionId(selected.id))
+  }
+
+  const writeClipboardText = async (text: string): Promise<void> => {
+    try {
+      const method = await copyText(text, runtime.terminal)
+      if (!isDisposed()) showTransientNotice(`Copied ${String(text.length)} characters via ${method}.`)
+    } catch (error: unknown) {
+      if (!isDisposed()) appendNotice(`Copy failed: ${errorChain(error)}`, 'error')
+    }
+  }
+
+  const copyLatestAssistantReply = async (): Promise<void> => {
+    const latest = agent.session.events.findLast(event => event.type === 'assistant/message')
+    const text = latest?.type === 'assistant/message'
+      ? latest.data.message.content
+        .filter(block => block.type === 'text')
+        .map(block => block.text)
+        .join('')
+        .trim()
+      : ''
+    if (text === '') {
+      appendNotice('There is no assistant reply to copy.', 'warning')
+      return
+    }
+    await writeClipboardText(text)
   }
 
   // Ctrl+C/Ctrl+D at an idle empty prompt require a second press within
@@ -1652,7 +1752,7 @@ function createTuiChatInternal(
     channel.chat.addChild(new Text(palette.bold(palette.accent('Keyboard shortcuts')), 0, 0))
     channel.chat.addChild(new Text([
       'Enter send/steer • Tab queue while running • Shift/Alt+Enter newline • Up/Down prompt history',
-      'Esc cancel turn; double Esc edits a checkpoint • Ctrl+PageUp/PageDown switch active sessions',
+      'Esc cancel turn; double Esc edits a checkpoint • Alt+Left/Right switch active sessions',
       'Ctrl+O cycle cards (collapse/expand/hide) • Ctrl+R toggle reasoning • Ctrl+L redraw',
       'Shift+Tab cycle permission preset • Ctrl+G goal actions • Ctrl+C cancel/clear/exit • Ctrl+D exit',
       '',
@@ -1974,6 +2074,17 @@ function createTuiChatInternal(
       handler: () => { resume.showSessions(); return { kind: 'success' } },
     })
     commandCtx.commands.register({
+      name: 'switch',
+      description: 'Switch among active workspace sessions',
+      input: { hint: '[next|previous|number|title]' },
+      handler: ({ rawInput }) => { runSessionSwitch(rawInput); return { kind: 'success' } },
+    })
+    commandCtx.commands.register({
+      name: 'copy',
+      description: 'Copy the latest assistant reply',
+      handler: async () => { await copyLatestAssistantReply(); return { kind: 'success' } },
+    })
+    commandCtx.commands.register({
       name: 'new',
       description: 'Start a fresh session in this or another project and switch to it',
       input: { hint: '[project path]' },
@@ -2197,17 +2308,23 @@ function createTuiChatInternal(
 
     const mouse = terminalMouseInput(data)
     if (mouse !== undefined) {
-      if (mouse === 'wheel-up') workbench?.scrollByRows(runtime.terminal.columns, 3)
-      else if (mouse === 'wheel-down') workbench?.scrollByRows(runtime.terminal.columns, -3)
-      if (mouse !== 'mouse') requestRender()
+      const result = workbench?.handleMouse(mouse, runtime.terminal.columns)
+      if (result?.sessionId !== undefined) activateSession(SessionId(result.sessionId))
+      if (result?.copiedText !== undefined) {
+        void writeClipboardText(result.copiedText)
+      }
+      if (result?.consumed === true) requestRender()
       return { consume: true }
     }
 
-    if (matchesKey(data, Key.ctrl(Key.pageUp))) {
+    const fastSessionSwitch = editor.focused
+      && editor.getText() === ''
+      && !editor.isShowingAutocomplete()
+    if (fastSessionSwitch && matchesKey(data, 'alt+left')) {
       cycleActiveSession(-1)
       return { consume: true }
     }
-    if (matchesKey(data, Key.ctrl(Key.pageDown))) {
+    if (fastSessionSwitch && matchesKey(data, 'alt+right')) {
       cycleActiveSession(1)
       return { consume: true }
     }

@@ -14,7 +14,6 @@
  */
 
 import {
-  Container,
   Spacer,
   Text,
   type Component,
@@ -58,6 +57,7 @@ import {
   transcriptToolCallIds,
 } from './helpers.ts'
 import type { TuiTerminalLike } from './terminal.ts'
+import { TranscriptContainer } from '../components/transcript-container.ts'
 
 /**
  * Low-signal read/search tools whose adjacent calls collapse into one summary
@@ -165,7 +165,7 @@ export interface SessionChannelDeps {
 /** One session's chat channel as seen by its host chrome. */
 export interface SessionChannel {
   /** Transcript container the host mounts once in its chrome. */
-  readonly chat: Container
+  readonly chat: TranscriptContainer
   /** Todo strip component (mounted by the host inside `todoContainer`). */
   readonly todo: TodoComponent
   /** Live token totals for the prompt footer and diagnostics. */
@@ -241,7 +241,7 @@ export interface SessionChannel {
  */
 export function createSessionChannel(deps: SessionChannelDeps): SessionChannel {
   const { ctx, agent, resolved, palette, mdTheme } = deps
-  const chat = new Container()
+  const chat = new TranscriptContainer()
   const todo = new TodoComponent(palette)
   let streaming: StreamingAssistantComponent | undefined
   let completedStreaming: StreamingAssistantComponent | undefined
@@ -352,19 +352,15 @@ export function createSessionChannel(deps: SessionChannelDeps): SessionChannel {
   let lastOutputAt: number | undefined
 
   /**
-   * Re-derive hidden-mode folding for one turn: the first step with a visible
-   * body owns the turn's single Assistant header, every other step renders as a
-   * headerless continuation (empty ones render nothing). Any other visibility
-   * restores the per-step headers.
+   * Re-derive one Assistant header per turn. The first step with a visible body
+   * owns it; every later step renders as a headerless continuation.
    */
   const applyTurnFolding = (turn: number): void => {
     const steps = assistantSteps.get(turn)
     if (steps === undefined) return
     let headerSeen = false
     for (const step of steps) {
-      if (deps.toolsVisibility() !== 'hidden') {
-        step.setFoldedContinuation(false)
-      } else if (!headerSeen && step.hasVisibleBody()) {
+      if (!headerSeen && step.hasVisibleBody()) {
         headerSeen = true
         step.setFoldedContinuation(false)
       } else {

@@ -1681,6 +1681,7 @@ describe('pi-tui chat lifecycle and transcript', () => {
     const result = await setup({
       contextWindow: 100,
       contextTokens: 42,
+      terminalRows: 80,
       // Short cwd: the footer clips its right (context/tools) segment first,
       // and the default worktree path would swallow it at 88 columns.
       cwd: '/opt',
@@ -2813,9 +2814,9 @@ describe('pi-tui chat lifecycle and transcript', () => {
     expect(result.terminal.output).toContain('nested result')
     expect(result.terminal.output).toContain('[future-block]')
     expect(result.terminal.output).toContain('[content]')
-    // User input echoes as plain text (Claude Code `>` quote in the accent
-    // color): the markdown source shows verbatim, fences included.
-    expect(result.terminal.output).toMatch(/\x1b\[95m> \x1b\[39m# Heading/)
+    // User input uses the turn-level `You` heading and keeps the markdown
+    // source verbatim, fences included.
+    expect(result.terminal.output).toContain('\x1b[4m\x1b[1m\x1b[95mYou')
     expect(result.terminal.output).toContain('```ts')
     // Assistant fenced code renders through the syntax highlighter: keywords
     // take the accent role and numbers the warning role rather than one flat
@@ -4446,6 +4447,7 @@ describe('pi-tui chat lifecycle and transcript', () => {
       'assistant',
       'clear',
       'context',
+      'copy',
       'details',
       'effort',
       'exit',
@@ -4461,6 +4463,7 @@ describe('pi-tui chat lifecycle and transcript', () => {
       'sessions',
       'settings',
       'status',
+      'switch',
       'theme',
     ])
     const handler = vi.fn(({ rawInput }: CommandInvocation) => ({

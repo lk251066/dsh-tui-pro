@@ -7,28 +7,71 @@ import type { Terminal } from '@earendil-works/pi-tui'
 
 const ENTER_ALTERNATE_SCREEN = '\x1b[?1049h\x1b[H\x1b[?7l'
 const LEAVE_ALTERNATE_SCREEN = '\x1b[?7h\x1b[?1049l'
-const ENABLE_MOUSE_REPORTING = '\x1b[?1000h\x1b[?1006h'
-const DISABLE_MOUSE_REPORTING = '\x1b[?1006l\x1b[?1000l'
+const ENABLE_MOUSE_REPORTING = '\x1b[?1002h\x1b[?1006h'
+const DISABLE_MOUSE_REPORTING = '\x1b[?1006l\x1b[?1002l'
 
-/** Mouse input decoded before it can reach the prompt editor. */
-export type TerminalMouseInput = 'wheel-up' | 'wheel-down' | 'mouse'
+/** Mouse buttons named independently of the terminal protocol's numeric codes. */
+export type TerminalMouseButton = 'left' | 'middle' | 'right' | 'none'
+
+/** One decoded terminal mouse event, using one-based terminal coordinates. */
+export interface TerminalMouseEvent {
+  readonly kind: 'press' | 'move' | 'release' | 'wheel'
+  readonly button: TerminalMouseButton
+  readonly column: number
+  readonly row: number
+  readonly shift: boolean
+  readonly alt: boolean
+  readonly ctrl: boolean
+  /** Positive values move toward older transcript rows. */
+  readonly wheelRows: number
+}
+
+function mouseButton(code: number): TerminalMouseButton {
+  switch (code & 3) {
+    case 0: return 'left'
+    case 1: return 'middle'
+    case 2: return 'right'
+    default: return 'none'
+  }
+}
+
+function decodedMouse(code: number, column: number, row: number, released: boolean): TerminalMouseEvent {
+  const wheel = (code & 64) !== 0
+  const moved = (code & 32) !== 0
+  return {
+    kind: wheel ? 'wheel' : released ? 'release' : moved ? 'move' : 'press',
+    button: released ? 'none' : mouseButton(code),
+    column,
+    row,
+    shift: (code & 4) !== 0,
+    alt: (code & 8) !== 0,
+    ctrl: (code & 16) !== 0,
+    wheelRows: wheel ? ((code & 1) === 0 ? 3 : -3) : 0,
+  }
+}
 
 /**
  * Decode SGR or legacy X10 mouse input emitted while mouse reporting is active.
  * @param data - One complete input sequence from pi-tui's stdin buffer.
- * @returns The wheel direction, another mouse event, or `undefined` for keyboard input.
+ * @returns The structured mouse event, or `undefined` for keyboard input.
  */
-export function terminalMouseInput(data: string): TerminalMouseInput | undefined {
-  const sgr = /^\x1b\[<(\d+);\d+;\d+[Mm]$/u.exec(data)
+export function terminalMouseInput(data: string): TerminalMouseEvent | undefined {
+  const sgr = /^\x1b\[<(\d+);(\d+);(\d+)([Mm])$/u.exec(data)
   if (sgr !== null) {
-    const button = Number.parseInt(sgr[1] ?? '', 10)
-    if ((button & 64) === 0) return 'mouse'
-    return (button & 1) === 0 ? 'wheel-up' : 'wheel-down'
+    return decodedMouse(
+      Number.parseInt(sgr[1] ?? '', 10),
+      Number.parseInt(sgr[2] ?? '', 10),
+      Number.parseInt(sgr[3] ?? '', 10),
+      sgr[4] === 'm',
+    )
   }
   if (data.length === 6 && data.startsWith('\x1b[M')) {
-    const button = data.charCodeAt(3) - 32
-    if ((button & 64) === 0) return 'mouse'
-    return (button & 1) === 0 ? 'wheel-up' : 'wheel-down'
+    return decodedMouse(
+      data.charCodeAt(3) - 32,
+      data.charCodeAt(4) - 32,
+      data.charCodeAt(5) - 32,
+      false,
+    )
   }
   return undefined
 }

@@ -1,5 +1,13 @@
 # Terminal Workbench
 
+## 1.6.0 changes
+
+Active-session switching now uses guarded `Alt+Left` and `Alt+Right`, the `/switch` command, and direct sidebar clicks. The old `Ctrl+PageUp` and `Ctrl+PageDown` bindings are removed so they cannot conflict with transcript navigation or terminal key handling.
+
+Left-button dragging selects transcript cells directly and copies plain text on release. Selection preserves multi-line blank rows and complete wide graphemes, coexists with wheel scrolling, and clears when a terminal resize changes line wrapping. Clipboard delivery supports the local system, tmux forwarding, and OSC 52; `/copy` copies the latest assistant text reply.
+
+Conversation turns now use separate `You` and `Assistant` headings with consistent blank space before the editor. Thinking, tool, grouped-tool, diff, and context headers show disclosure markers and respond to clicks. The existing restrained running-state animation remains above the input without moving the fixed sidebar.
+
 ## 1.5.0 changes
 
 Running input now has two explicit paths. Enter sends immediate steering for the current turn, while Tab queues text for the next turn. Empty Up recalls the latest real Enter or Tab submission, and resubmitting an unchanged queued item replaces it instead of creating a duplicate. Queued session-reference context is applied with the queued turn rather than injected into the turn already running.

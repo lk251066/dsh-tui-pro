@@ -2,9 +2,9 @@
 
 ## Submission status
 
-Version `1.5.0` is the current release. Its source, artifact, public-host, PTY, npm, tag, and GitHub Release records identify the same release.
+Version `1.6.0` is the current release target. Its source, artifact, public-host, PTY, npm, tag, and GitHub Release records must identify the same release before this checklist is complete.
 
-The public repository now carries the `dsh-plugin` GitHub topic, which is dshfind's official submission mechanism. dshfind synchronizes that topic daily at 10:17 China Standard Time. Its current public snapshot does not yet contain `lk251066/dsh-tui-pro`; the next successful site sync is required before its listing URL can be verified.
+The public repository carries the `dsh-plugin` GitHub topic, which is dshfind's official submission mechanism. The current listing is <https://dshfind.com/zh/plugins/lk251066/dsh-tui-pro>; it must show the `1.6.0` release after publication.
 
 The repair and acceptance evidence are tracked in [REPAIR_PLAN.md](REPAIR_PLAN.md). Catalog publication remains a separate submission action.
 
@@ -17,7 +17,7 @@ The repair and acceptance evidence are tracked in [REPAIR_PLAN.md](REPAIR_PLAN.m
 | License | MIT |
 | Repository | <https://github.com/lk251066/dsh-tui-pro> |
 | npm | <https://www.npmjs.com/package/@lk251066/dsh-tui> |
-| Release target | <https://github.com/lk251066/dsh-tui-pro/releases/tag/v1.5.0> |
+| Release target | <https://github.com/lk251066/dsh-tui-pro/releases/tag/v1.6.0> |
 | dshfind submission | <https://github.com/topics/dsh-plugin> |
 
 `@lk251066/dsh-tui` is the only supported package name. It owns both the TUI plugin and its `cordis.patch.yml` layer through the `dsh.bundle.patch` manifest field.
@@ -45,7 +45,7 @@ dsh plugin --profile tui add @lk251066/dsh-tui
 - [x] The same checks pass on the release commit and registry package.
 - [x] The packed TUI starts, opens commands, creates and switches sessions, and shuts down cleanly through a real PTY.
 - [x] User-visible behavior has keyless snapshot coverage and reproducible terminal evidence.
-- [x] The `1.5.0` npm version, GitHub tag, GitHub Release, and release commit agree.
+- [ ] The `1.6.0` npm version, GitHub tag, GitHub Release, and release commit agree after publication.
 - [x] The public installation command succeeds without the development workspace or `.tarballs/` directory.
 
 ## Public links
@@ -53,5 +53,6 @@ dsh plugin --profile tui add @lk251066/dsh-tui
 - Repository: <https://github.com/lk251066/dsh-tui-pro>
 - Issues: <https://github.com/lk251066/dsh-tui-pro/issues>
 - npm package: <https://www.npmjs.com/package/@lk251066/dsh-tui>
-- Release target: <https://github.com/lk251066/dsh-tui-pro/releases/tag/v1.5.0>
+- Release target: <https://github.com/lk251066/dsh-tui-pro/releases/tag/v1.6.0>
+- dshfind listing: <https://dshfind.com/zh/plugins/lk251066/dsh-tui-pro>
 - dshfind discovery source: <https://github.com/topics/dsh-plugin>

@@ -4,7 +4,7 @@ Interactive terminal UI plugin and profile bundle for [DeepSeek Harness](https:/
 
 ## Release status
 
-Version [`1.5.0`](https://www.npmjs.com/package/@lk251066/dsh-tui/v/1.5.0) is the current release. Its source, artifact, empty-profile installation, and real PTY evidence are recorded in [TESTING.md](../../TESTING.md).
+Version [`1.6.0`](https://www.npmjs.com/package/@lk251066/dsh-tui/v/1.6.0) is the current release. Its source, artifact, empty-profile installation, and real PTY evidence are recorded in [TESTING.md](../../TESTING.md).
 
 ## Installation
 
@@ -44,11 +44,15 @@ The bundled profile opens the active project session for the current directory. 
 
 Use `/sessions` to replace the left chat area with complete history while the outer frame and right sidebar remain fixed. Up and Down select a row, Enter opens it, Tab switches between complete history and the active list, and Space adds or removes a project session from the active workspace list. Escape returns to the transcript. Removing membership never deletes the session log. Use `/assistant` for the fixed personal assistant session.
 
-Use `Ctrl+PageUp` and `Ctrl+PageDown` to cycle the active workspace sessions without opening a browser. A stopped session in the same workspace resumes in the current process; a session in another workspace is handed to the dsh host. Persisted session titles are shown before a stopped session is opened.
+Use `Alt+Left` and `Alt+Right` from an empty editor to cycle active workspace sessions without opening a browser. Use `/switch` for the bottom selector, or `/switch next`, `/switch previous`, `/switch <number>`, and `/switch <exact title>` for direct switching. Clicking an active row in the right sidebar opens it. A stopped session in the same workspace resumes in the current process; a session in another workspace is handed to the dsh host. Persisted session titles are shown before a stopped session is opened.
+
+Drag directly across transcript text with the left mouse button to select and copy it. ANSI styles are removed from copied text, while Chinese and emoji graphemes remain intact. Local terminals use the system clipboard; tmux uses its clipboard forwarding; SSH and other unsupported local clipboard paths use OSC 52. `/copy` copies the latest text reply from the current assistant session. The mouse wheel continues to scroll transcript history while mouse reporting is active.
+
+Conversation turns use `You` and `Assistant` headings instead of message bubbles. Thinking, individual tool calls, grouped tool calls, diffs, and injected context show `▶` or `▼`; click their header to expand or collapse that block. `Ctrl+O` and `Ctrl+R` remain the global visibility controls.
 
 While the agent is running, Enter sends the editor text as immediate steering and Tab queues it for the next turn. Empty Up recalls the latest Enter or Tab submission; resubmitting the same queued text replaces that queue entry. Double Escape opens checkpoints from the current conversation only when the agent is idle and the editor is empty. Left or Escape selects an older checkpoint, Right selects a newer one, Enter creates and activates a branch before the selected turn, and `Ctrl+C` or `q` closes the view. This is separate from `/sessions`, which browses complete session history.
 
-The TUI owns these commands: `/help`, `/model`, `/effort`, `/clear`, `/details`, `/theme`, `/queue`, `/rename`, `/fork`, `/status`, `/context`, `/agents`, `/jobs`, `/settings`, `/export`, `/exit`, `/quit`, `/sessions`, `/new`, and `/assistant`. `/context`, `/agents`, `/jobs`, `/settings`, and `/sessions` replace the left main area and preserve the outer frame and active-workspace sidebar. `/effort` only accepts reasoning levels advertised by the selected model; model and effort selections are independent for each live session. dsh-base may add `/feedback`, `/goal`, `/compact`, `/permission`, and `/plan`. The bundle does not provide `/palette`, `/reload`, `/fleet`, or `/memories`.
+The TUI owns these commands: `/help`, `/model`, `/effort`, `/clear`, `/details`, `/theme`, `/queue`, `/rename`, `/fork`, `/status`, `/context`, `/agents`, `/jobs`, `/settings`, `/export`, `/exit`, `/quit`, `/sessions`, `/switch`, `/copy`, `/new`, and `/assistant`. `/context`, `/agents`, `/jobs`, `/settings`, and `/sessions` replace the left main area and preserve the outer frame and active-workspace sidebar. `/effort` only accepts reasoning levels advertised by the selected model; model and effort selections are independent for each live session. dsh-base may add `/feedback`, `/goal`, `/compact`, `/permission`, and `/plan`. The bundle does not provide `/palette`, `/reload`, `/fleet`, or `/memories`.
 
 Use `/new` for another session in the active project. Use the whole command remainder as a project path, including spaces:
 

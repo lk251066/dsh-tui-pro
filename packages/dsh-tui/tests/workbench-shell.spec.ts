@@ -1,5 +1,6 @@
-import { Text, visibleWidth } from '@earendil-works/pi-tui'
+import { Text, visibleWidth, type Component } from '@earendil-works/pi-tui'
 import { describe, expect, it } from 'vitest'
+import { TranscriptContainer } from '../src/components/transcript-container.ts'
 import { WorkbenchShellComponent } from '../src/components/workbench-shell.ts'
 import { createPalette } from '../src/components/theme.ts'
 
@@ -14,22 +15,25 @@ function createWorkbench(options: {
   readonly rows?: number
   readonly header?: string
   readonly transcript?: string
+  readonly transcriptComponent?: Component
   readonly auxiliary?: string
   readonly main?: string
   readonly input?: string
   readonly sidebar?: string
   readonly sidebarWidth?: number
+  readonly sidebarSessionAt?: (row: number, width: number) => string | undefined
 } = {}): WorkbenchShellComponent {
   return new WorkbenchShellComponent(palette, {
     terminalRows: () => options.rows ?? 8,
     preferredSidebarWidth: options.sidebarWidth,
     header: new Text(options.header ?? 'header', 0, 0),
-    transcript: new Text(options.transcript ?? 'chat', 0, 0),
+    transcript: options.transcriptComponent ?? new Text(options.transcript ?? 'chat', 0, 0),
     auxiliary: new Text(options.auxiliary ?? 'queue', 0, 0),
     main: new Text(options.main ?? '', 0, 0),
     dialog: new Text('', 0, 0),
     input: new Text(options.input ?? 'dsh >', 0, 0),
     sidebar: new Text(options.sidebar ?? 'Workspace\nSessions\nStatus', 0, 0),
+    sidebarSessionAt: options.sidebarSessionAt,
   })
 }
 
@@ -63,7 +67,7 @@ describe('WorkbenchShellComponent', () => {
     const sidebar = content.map(line => line.slice(line.indexOf('│', 1) + 1, -1).trim())
 
     expect(plain).toHaveLength(8)
-    expect(main).toEqual(['header', '', 'row 10', 'row 11', 'queue', 'dsh >'])
+    expect(main).toEqual(['header', '', 'row 11', '', 'queue', 'dsh >'])
     expect(sidebar).toEqual(['Workspace', 'Sessions', 'Status', '', '', ''])
   })
 
@@ -75,7 +79,7 @@ describe('WorkbenchShellComponent', () => {
     const scrolled = workbench.render(100).map(stripSgr)
     const content = scrolled.slice(1, -1)
     expect(content.map(line => line.slice(1, line.indexOf('│', 1)).trim()))
-      .toEqual(['header', '', 'row 8', 'row 9', 'queue', 'dsh >'])
+      .toEqual(['header', '', 'row 10', '', 'queue', 'dsh >'])
     expect(content.map(line => line.slice(line.indexOf('│', 1) + 1, -1).trim()))
       .toEqual(['Workspace', 'Sessions', 'Status', '', '', ''])
 
@@ -90,12 +94,131 @@ describe('WorkbenchShellComponent', () => {
 
     workbench.scrollByRows(100, 1)
     const older = workbench.render(100).map(stripSgr).join('\n')
-    expect(older).toContain('row 9')
     expect(older).toContain('row 10')
     expect(older).not.toContain('row 11')
 
     workbench.scrollByRows(100, -1)
     expect(workbench.render(100).map(stripSgr).join('\n')).toContain('row 11')
+  })
+
+  it('selects transcript text by mouse drag while preserving the fixed workbench', () => {
+    const workbench = createWorkbench({ rows: 9, transcript: 'alpha\nbeta', auxiliary: 'queue', input: 'dsh >' })
+
+    expect(workbench.handleMouse({
+      kind: 'press', button: 'left', column: 2, row: 4,
+      shift: false, alt: false, ctrl: false, wheelRows: 0,
+    }, 100)).toEqual({ consumed: true })
+    expect(workbench.handleMouse({
+      kind: 'move', button: 'left', column: 6, row: 5,
+      shift: false, alt: false, ctrl: false, wheelRows: 0,
+    }, 100)).toEqual({ consumed: true })
+    expect(workbench.render(100).join('\n')).toContain('\x1b[7m')
+    expect(workbench.handleMouse({
+      kind: 'release', button: 'none', column: 6, row: 5,
+      shift: false, alt: false, ctrl: false, wheelRows: 0,
+    }, 100)).toEqual({ consumed: true, copiedText: 'alpha\nbeta' })
+
+    const plain = workbench.render(100).map(stripSgr)
+    expect(plain[0]).toBe(`┌${'─'.repeat(98)}┐`)
+    expect(plain.some(line => line.includes('Workspace'))).toBe(true)
+    expect(plain.some(line => line.includes('dsh >'))).toBe(true)
+  })
+
+  it('includes the character cells at both ends of forward and reverse drags', () => {
+    const forward = createWorkbench({ rows: 8, transcript: 'alpha' })
+    forward.handleMouse({
+      kind: 'press', button: 'left', column: 2, row: 4,
+      shift: false, alt: false, ctrl: false, wheelRows: 0,
+    }, 100)
+    forward.handleMouse({
+      kind: 'move', button: 'left', column: 6, row: 4,
+      shift: false, alt: false, ctrl: false, wheelRows: 0,
+    }, 100)
+    expect(forward.handleMouse({
+      kind: 'release', button: 'none', column: 6, row: 4,
+      shift: false, alt: false, ctrl: false, wheelRows: 0,
+    }, 100)).toEqual({ consumed: true, copiedText: 'alpha' })
+
+    const reverse = createWorkbench({ rows: 8, transcript: 'alpha' })
+    reverse.handleMouse({
+      kind: 'press', button: 'left', column: 6, row: 4,
+      shift: false, alt: false, ctrl: false, wheelRows: 0,
+    }, 100)
+    reverse.handleMouse({
+      kind: 'move', button: 'left', column: 2, row: 4,
+      shift: false, alt: false, ctrl: false, wheelRows: 0,
+    }, 100)
+    expect(reverse.handleMouse({
+      kind: 'release', button: 'none', column: 2, row: 4,
+      shift: false, alt: false, ctrl: false, wheelRows: 0,
+    }, 100)).toEqual({ consumed: true, copiedText: 'alpha' })
+  })
+
+  it('clears cell-based selection when a resize reflows the transcript', () => {
+    const workbench = createWorkbench({ rows: 8, transcript: 'alpha beta gamma' })
+    workbench.render(100)
+    workbench.handleMouse({
+      kind: 'press', button: 'left', column: 2, row: 4,
+      shift: false, alt: false, ctrl: false, wheelRows: 0,
+    }, 100)
+    workbench.handleMouse({
+      kind: 'move', button: 'left', column: 6, row: 4,
+      shift: false, alt: false, ctrl: false, wheelRows: 0,
+    }, 100)
+    expect(workbench.render(100).join('\n')).toContain('\x1b[7m')
+
+    expect(workbench.render(80).join('\n')).not.toContain('\x1b[7m')
+  })
+
+  it('resolves a sidebar click without starting a transcript selection', () => {
+    const workbench = createWorkbench({ sidebarSessionAt: row => row === 0 ? 'assistant' : undefined })
+
+    expect(workbench.handleMouse({
+      kind: 'press', button: 'left', column: 68, row: 2,
+      shift: false, alt: false, ctrl: false, wheelRows: 0,
+    }, 100)).toEqual({ consumed: true, sessionId: 'assistant' })
+  })
+
+  it('ignores non-left presses for transcript and sidebar actions', () => {
+    const workbench = createWorkbench({ sidebarSessionAt: row => row === 0 ? 'assistant' : undefined })
+    expect(workbench.handleMouse({
+      kind: 'press', button: 'right', column: 2, row: 4,
+      shift: false, alt: false, ctrl: false, wheelRows: 0,
+    }, 100)).toEqual({ consumed: false })
+    expect(workbench.handleMouse({
+      kind: 'press', button: 'middle', column: 68, row: 2,
+      shift: false, alt: false, ctrl: false, wheelRows: 0,
+    }, 100)).toEqual({ consumed: false })
+  })
+
+  it('routes a transcript click to the disclosure block under that row', () => {
+    class Disclosure implements Component {
+      expanded = false
+      invalidate(): void {}
+      render(): string[] { return this.expanded ? ['▼ Details', 'full body'] : ['▶ Details'] }
+      clickTranscriptRow(row: number): boolean {
+        if (row !== 0) return false
+        this.expanded = !this.expanded
+        return true
+      }
+    }
+    const disclosure = new Disclosure()
+    const transcript = new TranscriptContainer()
+    transcript.addChild(disclosure)
+    const workbench = createWorkbench({ rows: 9, transcriptComponent: transcript })
+
+    workbench.handleMouse({
+      kind: 'press', button: 'left', column: 3, row: 4,
+      shift: false, alt: false, ctrl: false, wheelRows: 0,
+    }, 100)
+    expect(workbench.handleMouse({
+      kind: 'release', button: 'none', column: 3, row: 4,
+      shift: false, alt: false, ctrl: false, wheelRows: 0,
+    }, 100)).toEqual({ consumed: true })
+
+    expect(disclosure.expanded).toBe(true)
+    expect(workbench.render(100).map(stripSgr).join('\n')).toContain('▼ Details')
+    expect(workbench.render(100).map(stripSgr).join('\n')).toContain('full body')
   })
 
   it('replaces only the active transcript', () => {

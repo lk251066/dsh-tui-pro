@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 The `v1.0.0` tag is not an installable public release: no npm package was published, and the repository-root tarball does not contain the required dsh bundle metadata. See [REPAIR_PLAN.md](REPAIR_PLAN.md) for the first verified release criteria.
 
+## [1.6.0] - 2026-08-17
+
+### Added
+
+- Add `/switch` with selector, relative, numbered, id, and exact-title targets, plus direct sidebar click switching.
+- Add direct transcript drag selection, system/tmux/OSC-52 clipboard delivery, and `/copy` for the latest assistant reply.
+- Add clickable disclosure markers to thinking, tool, grouped-tool, diff, and context blocks.
+
+### Changed
+
+- Replace active-session `Ctrl+PageUp` and `Ctrl+PageDown` with guarded `Alt+Left` and `Alt+Right`.
+- Render conversation turns with distinct `You` and `Assistant` headings and fixed spacing above the editor.
+- Enable button-motion mouse reporting so selection and wheel scrolling coexist in the fixed transcript viewport.
+
 ## [1.5.0] - 2026-08-17
 
 ### Added

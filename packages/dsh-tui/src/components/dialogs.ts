@@ -50,6 +50,60 @@ export interface ModelDialogSelection {
   reasoningEffort: ReasoningEffortId | undefined
 }
 
+/** One active assistant or project session shown by the fast switcher. */
+export interface SessionSwitchChoice {
+  readonly id: string
+  readonly title: string
+  readonly workspace: string
+  readonly status: 'idle' | 'running' | 'stopped'
+  readonly current: boolean
+}
+
+/** Bottom selector for switching among the persistent sidebar's active sessions. */
+export class SessionSwitchDialog implements Component {
+  private readonly list: SelectList
+
+  constructor(
+    choices: readonly SessionSwitchChoice[],
+    private readonly palette: Palette,
+    done: (id: string) => void,
+    cancel: () => void,
+  ) {
+    const items: SelectItem[] = choices.map(choice => ({
+      value: choice.id,
+      label: displayText(choice.title),
+      description: [
+        displayText(choice.workspace),
+        choice.status,
+        ...choice.current ? ['current'] : [],
+      ].join(' · '),
+    }))
+    this.list = new SelectList(items, Math.max(1, Math.min(8, items.length)), dialogSelectTheme(palette))
+    this.list.setSelectedIndex(Math.max(0, choices.findIndex(choice => choice.current)))
+    this.list.onSelect = item => { done(item.value) }
+    this.list.onCancel = cancel
+  }
+
+  invalidate(): void {
+    this.list.invalidate()
+  }
+
+  handleInput(data: string): void {
+    if (matchesKey(data, Key.ctrl('c'))) this.list.onCancel?.()
+    else this.list.handleInput(data)
+    this.invalidate()
+  }
+
+  render(width: number): string[] {
+    const innerWidth = Math.max(1, width - 4)
+    return renderBottomInteraction('Switch active session', [
+      ...this.list.render(innerWidth),
+      '',
+      this.palette.dim('↑/↓ move • Enter switch • Esc cancel'),
+    ], width, this.palette)
+  }
+}
+
 const PROVIDER_DEFAULT_EFFORT = '__provider_default__'
 
 /** Bottom selector over one model's advertised reasoning efforts. */

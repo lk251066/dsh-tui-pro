@@ -33,9 +33,9 @@ describe('FullScreenTerminal mouse lifecycle', () => {
 
     fullScreen.start(() => {}, () => {})
     expect(terminal.output).toContain('\x1b[?1049h')
-    expect(terminal.output).toContain('\x1b[?1000h\x1b[?1006h')
+    expect(terminal.output).toContain('\x1b[?1002h\x1b[?1006h')
     fullScreen.stop()
-    expect(terminal.output).toContain('\x1b[?1006l\x1b[?1000l')
+    expect(terminal.output).toContain('\x1b[?1006l\x1b[?1002l')
     expect(terminal.output.indexOf('\x1b[?1006l')).toBeLessThan(terminal.output.indexOf('\x1b[?1049l'))
   })
 
@@ -46,16 +46,35 @@ describe('FullScreenTerminal mouse lifecycle', () => {
 
     expect(() => { fullScreen.start(() => {}, () => {}) }).toThrow('raw mode failed')
     expect(terminal.output).toContain('\x1b[?1049l')
-    expect(terminal.output).not.toContain('\x1b[?1000h')
+    expect(terminal.output).not.toContain('\x1b[?1002h')
   })
 
-  it('decodes SGR and X10 wheel events while classifying other mouse input', () => {
-    expect(terminalMouseInput('\x1b[<64;10;4M')).toBe('wheel-up')
-    expect(terminalMouseInput('\x1b[<65;10;4M')).toBe('wheel-down')
-    expect(terminalMouseInput('\x1b[<68;10;4M')).toBe('wheel-up')
-    expect(terminalMouseInput(`\x1b[M${String.fromCharCode(96, 42, 37)}`)).toBe('wheel-up')
-    expect(terminalMouseInput(`\x1b[M${String.fromCharCode(97, 42, 37)}`)).toBe('wheel-down')
-    expect(terminalMouseInput('\x1b[<0;10;4M')).toBe('mouse')
+  it('decodes SGR press, drag, release, modifiers, and wheel events', () => {
+    expect(terminalMouseInput('\x1b[<0;10;4M')).toEqual({
+      kind: 'press', button: 'left', column: 10, row: 4,
+      shift: false, alt: false, ctrl: false, wheelRows: 0,
+    })
+    expect(terminalMouseInput('\x1b[<36;11;5M')).toEqual({
+      kind: 'move', button: 'left', column: 11, row: 5,
+      shift: true, alt: false, ctrl: false, wheelRows: 0,
+    })
+    expect(terminalMouseInput('\x1b[<0;11;5m')).toEqual({
+      kind: 'release', button: 'none', column: 11, row: 5,
+      shift: false, alt: false, ctrl: false, wheelRows: 0,
+    })
+    expect(terminalMouseInput('\x1b[<88;12;6M')).toEqual({
+      kind: 'wheel', button: 'left', column: 12, row: 6,
+      shift: false, alt: true, ctrl: true, wheelRows: 3,
+    })
+    expect(terminalMouseInput('\x1b[<65;10;4M')?.wheelRows).toBe(-3)
+  })
+
+  it('decodes legacy X10 coordinates and wheel direction', () => {
+    expect(terminalMouseInput(`\x1b[M${String.fromCharCode(96, 42, 37)}`)).toEqual({
+      kind: 'wheel', button: 'left', column: 10, row: 5,
+      shift: false, alt: false, ctrl: false, wheelRows: 3,
+    })
+    expect(terminalMouseInput(`\x1b[M${String.fromCharCode(97, 42, 37)}`)?.wheelRows).toBe(-3)
     expect(terminalMouseInput('x')).toBeUndefined()
   })
 })

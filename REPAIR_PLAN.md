@@ -6,9 +6,17 @@ This document is the source of truth for making `@lk251066/dsh-tui` independentl
 
 Ship one package: `@lk251066/dsh-tui`. Its package manifest already defines `dsh.bundle.patch`, so the repository will not create or publish a separate `@lk251066/dsh-tui-bundle` compatibility package.
 
-The published `1.4.0` package, annotated tag, checksummed GitHub Release, source version, and lockfile identify release commit `61344cc`. Version `1.5.0` is the current release and passes Windows and Linux empty-profile installation plus real PTY evidence against public `@deepseek-ai/dsh@0.1.0-rc.6`.
+The published `1.5.0` package, annotated tag, checksummed GitHub Release, source version, and lockfile identify release commit `9d201d2`. Version `1.6.0` is the current release target against public `@deepseek-ai/dsh@0.1.0-rc.6`.
 
-The `1.5.0` scope covers interaction routing inside the existing fixed workbench: running input has direct-steer and next-turn queue paths, the current conversation has checkpoint branching, active workspace sessions have keyboard cycling and durable titles, and information views replace only the left chat area while preserving the frame and sidebar.
+The `1.6.0` scope covers reliable active-session switching, direct transcript selection and clipboard delivery, turn-level visual hierarchy, and per-block disclosure interactions inside the existing fixed workbench.
+
+## Version 1.6.0 transcript and session interaction
+
+Guarded `Alt+Left` and `Alt+Right`, `/switch`, and sidebar clicks all resolve through the same active-session path. The key binding is available only from an empty focused editor with no completion or overlay, so ordinary cursor movement and dialogs retain their input. `/switch` accepts next, previous, a displayed number, an exact id, or an exact title.
+
+Left-button dragging selects the rendered transcript directly. The selection owns terminal cells rather than raw ANSI offsets, includes both drag endpoints, preserves blank lines and wide graphemes, and resets after resize reflow. Releasing copies through the system clipboard, tmux forwarding, or OSC 52. `/copy` reads the latest assistant text from the active session log.
+
+User and assistant turns use separate headings with blank space between turns and above the editor. Thinking, tool, grouped-tool, diff, and context blocks expose `▶` and `▼` states and toggle when their header is clicked. Global detail shortcuts continue to apply across the transcript.
 
 ## Version 1.5.0 interaction routing
 

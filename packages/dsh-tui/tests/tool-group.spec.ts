@@ -56,7 +56,7 @@ describe('CollapsedToolGroupComponent', () => {
     for (const member of cards) settle(member)
     const group = new CollapsedToolGroupComponent(cards, palette)
     expect(group.render(80)[1]).toBe(
-      `${TOOL_SETTLED()} Read 2 files · searched 1 pattern · listed 1 dir (ctrl+o to expand)`,
+      `▶ ${TOOL_SETTLED()} Read 2 files · searched 1 pattern · listed 1 dir (ctrl+o to expand)`,
     )
   })
 
@@ -109,6 +109,19 @@ describe('CollapsedToolGroupComponent', () => {
       expect(rendered.split(`${TOOL_SETTLED()} ${name}`).length - 1).toBe(1)
     }
     expect(rendered.split('⎿ output line').length - 1).toBe(3)
+  })
+
+  it('toggles the group from its disclosure row without changing unrelated rows', () => {
+    const cards = [card('read'), card('grep'), card('glob')]
+    for (const member of cards) settle(member)
+    const group = new CollapsedToolGroupComponent(cards, palette)
+
+    expect(group.clickTranscriptRow(0, 80)).toBe(false)
+    expect(group.clickTranscriptRow(1, 80)).toBe(true)
+    expect(group.render(80)[1]).toContain('▼')
+    expect(group.render(80).join('\n')).toContain('⎿ output line')
+    expect(group.clickTranscriptRow(1, 80)).toBe(true)
+    expect(group.render(80)[1]).toContain('▶')
   })
 
   it('hidden renders nothing', () => {

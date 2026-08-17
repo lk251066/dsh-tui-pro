@@ -47,6 +47,20 @@ export class SessionListComponent extends Container {
     this.items = items
   }
 
+  /** Current rows in the same order presented by the active-session navigator. */
+  getItems(): readonly SessionListItem[] {
+    return this.items
+  }
+
+  /** Resolve one rendered row to its active-session item. */
+  itemAtRow(row: number): SessionListItem | undefined {
+    const { start, end } = this.visibleWindow()
+    const itemIndex = start + row - 2
+    return row >= 2 && itemIndex >= start && itemIndex < end
+      ? this.items[itemIndex]
+      : undefined
+  }
+
   override render(width: number): string[] {
     if (width <= 0) return []
     const lines = [
@@ -58,13 +72,7 @@ export class SessionListComponent extends Container {
       return lines
     }
 
-    const visibleItems = Math.max(1, this.options.maxRows() - lines.length)
-    const activeIndex = Math.max(0, this.items.findIndex(item => item.isActive))
-    const start = Math.max(0, Math.min(
-      activeIndex - Math.floor(visibleItems / 2),
-      this.items.length - visibleItems,
-    ))
-    const end = Math.min(this.items.length, start + visibleItems)
+    const { start, end } = this.visibleWindow()
 
     for (let index = start; index < end; index++) {
       const item = this.items[index]
@@ -88,5 +96,15 @@ export class SessionListComponent extends Container {
       lines.push(this.palette.dim(padToWidth(`  ↓ ${this.items.length - end} more`, width)))
     }
     return lines.slice(0, this.options.maxRows())
+  }
+
+  private visibleWindow(): { readonly start: number; readonly end: number } {
+    const visibleItems = Math.max(1, this.options.maxRows() - 2)
+    const activeIndex = Math.max(0, this.items.findIndex(item => item.isActive))
+    const start = Math.max(0, Math.min(
+      activeIndex - Math.floor(visibleItems / 2),
+      this.items.length - visibleItems,
+    ))
+    return { start, end: Math.min(this.items.length, start + visibleItems) }
   }
 }

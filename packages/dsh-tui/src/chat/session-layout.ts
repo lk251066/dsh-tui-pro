@@ -4,7 +4,6 @@
  */
 
 import { SessionId } from '@deepseek-ai/dsh-session'
-import type { Component } from '@earendil-works/pi-tui'
 import { SessionListComponent, type SessionListItem } from '../components/session-list.ts'
 import type { Palette } from '../components/theme.ts'
 import { displayText } from '../components/text.ts'
@@ -40,8 +39,6 @@ export interface SessionLayoutDeps {
   terminalRows(): number
   /** Current wall-clock time used for session activity labels. */
   now(): number
-  /** Live active-agent activity rendered in the sidebar. */
-  activity: Component
 }
 
 function formatAge(ageMs: number): string {
@@ -90,7 +87,6 @@ export function createSessionLayout(deps: SessionLayoutDeps): SessionLayoutContr
   })
   const sidebar = new WorkspaceSidebarComponent(deps.palette, sessionList, {
     terminalRows: deps.terminalRows,
-    activity: deps.activity,
   })
 
   const refresh = (): void => {

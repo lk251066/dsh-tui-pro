@@ -413,7 +413,7 @@ describe('multi-session switching (/new, /sessions)', () => {
     }
   })
 
-  it('cycles active workspace sessions with Ctrl+PageUp and Ctrl+PageDown', async () => {
+  it('cycles active workspace sessions with Alt+Left and Alt+Right only from an empty editor', async () => {
     const { harness, created } = await switchHarness()
     try {
       submit(harness, '/new')
@@ -422,15 +422,70 @@ describe('multi-session switching (/new, /sessions)', () => {
 
       // Move from the newly activated project session back to the startup
       // session, then return to the project session.
-      harness.terminal.send('\x1b[5;5~')
+      harness.terminal.send('\x1b[1;3D')
       await tick()
       submit(harness, 'message on main')
       expect(harness.agent.sentMessages.at(-1)?.content).toEqual([{ type: 'text', text: 'message on main' }])
 
-      harness.terminal.send('\x1b[6;5~')
+      harness.terminal.send('\x1b[1;3C')
       await tick()
       submit(harness, 'message on branch')
       expect(created[0]?.followups).toEqual(['message on branch'])
+
+      harness.terminal.send('draft text')
+      harness.terminal.send('\x1b[1;3D')
+      harness.terminal.send('\r')
+      await tick()
+      expect(created[0]?.followups).toEqual(['message on branch', 'draft text'])
+    } finally {
+      await disposeTuiTestHarness(harness)
+    }
+  })
+
+  it('/switch selects active sessions directly and opens the bottom selector without an argument', async () => {
+    const { harness, created } = await switchHarness()
+    try {
+      submit(harness, '/new')
+      await tick()
+      expect(created).toHaveLength(1)
+
+      submit(harness, '/switch previous')
+      await tick()
+      submit(harness, 'message on main')
+      expect(harness.agent.sentMessages.at(-1)?.content).toEqual([{ type: 'text', text: 'message on main' }])
+
+      submit(harness, '/switch next')
+      await tick()
+      submit(harness, 'message on branch')
+      expect(created[0]?.followups).toEqual(['message on branch'])
+
+      submit(harness, '/switch')
+      await tick()
+      expect(harness.terminal.output).toContain('Switch active session')
+      expect(harness.terminal.output).toContain('Enter switch')
+      harness.terminal.send('\x1b')
+    } finally {
+      await disposeTuiTestHarness(harness)
+    }
+  })
+
+  it('switches through a direct click on an active sidebar session', async () => {
+    const { harness, created } = await switchHarness()
+    try {
+      submit(harness, '/new')
+      await tick()
+      expect(created).toHaveLength(1)
+
+      // At 88 columns the sidebar begins at column 57. Its first project row
+      // is the original main session, immediately below the assistant row.
+      harness.terminal.send('\x1b[<0;60;10M')
+      await tick()
+      submit(harness, 'message after sidebar click')
+
+      expect(harness.agent.sentMessages.at(-1)?.content).toEqual([
+        { type: 'text', text: 'message after sidebar click' },
+      ])
+      expect(created[0]?.followups).toEqual([])
     } finally {
       await disposeTuiTestHarness(harness)
     }
@@ -527,7 +582,8 @@ describe('multi-session switching (/new, /sessions)', () => {
       expect(harness.terminal.output.slice(before)).not.toContain('logged while away')
       // Remounting the second slot replays the whole log from the session.
       await switchTo(harness, String(secondSession!.id))
-      expect(harness.terminal.output).toContain('> logged while away')
+      expect(harness.terminal.output).toContain('You')
+      expect(harness.terminal.output).toContain('logged while away')
       // The remounted slot owns input routing again.
       submit(harness, 'after remount')
       await tick()

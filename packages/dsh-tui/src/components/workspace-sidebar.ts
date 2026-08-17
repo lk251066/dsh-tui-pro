@@ -35,8 +35,6 @@ export interface WorkspaceSidebarState {
 export interface WorkspaceSidebarOptions {
   /** Current terminal height in rows. */
   readonly terminalRows: () => number
-  /** Live activity line shared with the active agent. */
-  readonly activity: Component
 }
 
 function padToWidth(value: string, width: number): string {
@@ -100,8 +98,24 @@ export class WorkspaceSidebarComponent implements Component {
 
   invalidate(): void {}
 
+  /** Resolve a visible sidebar row to the session rendered on that row. */
+  sessionAtRow(rowIndex: number, width: number): string | undefined {
+    const layout = this.layout(width)
+    if (layout === undefined) return undefined
+    const sourceRow = rowIndex + layout.crop
+    return this.sessionList.itemAtRow(sourceRow - layout.sessionStart)?.id
+  }
+
   render(width: number): string[] {
-    if (width <= 0) return []
+    return this.layout(width)?.lines ?? []
+  }
+
+  private layout(width: number): {
+    readonly lines: string[]
+    readonly sessionStart: number
+    readonly crop: number
+  } | undefined {
+    if (width <= 0) return undefined
     const { state, palette } = this
     const cwd = displayText(state.cwd)
     const workspace = workspaceLabel(cwd)
@@ -118,12 +132,9 @@ export class WorkspaceSidebarComponent implements Component {
       padToWidth(` ${palette.bold(palette.accent(workspace))}${state.branch === undefined ? '' : palette.dim(` · ${state.branch}`)}`, width),
       padToWidth(palette.dim(` ${cwd}`), width),
     ]
-    const activity = this.options.activity.render(width)
     const currentLines = [
       ...sectionTitle('Current', width, palette),
-      ...(activity.length > 0
-        ? activity.map(line => padToWidth(` ${line}`, width))
-        : [padToWidth(` ${statusGlyph} ${statusLabel}`, width)]),
+      padToWidth(` ${statusGlyph} ${statusLabel}`, width),
     ]
     const statusLines = [
       ...sectionTitle('Status', width, palette),
@@ -140,10 +151,16 @@ export class WorkspaceSidebarComponent implements Component {
       '',
       ...this.sessionList.render(width),
     ]
+    const sessionStart = workspaceLines.length + 1
     const bottomLines = ['', ...currentLines, '', ...statusLines]
     const height = Math.max(1, Math.floor(this.options.terminalRows()))
     const filler = Math.max(0, height - topLines.length - bottomLines.length)
     const combined = [...topLines, ...Array.from({ length: filler }, () => ''), ...bottomLines]
-    return combined.slice(Math.max(0, combined.length - height)).map(line => padToWidth(line, width))
+    const crop = Math.max(0, combined.length - height)
+    return {
+      lines: combined.slice(crop).map(line => padToWidth(line, width)),
+      sessionStart,
+      crop,
+    }
   }
 }

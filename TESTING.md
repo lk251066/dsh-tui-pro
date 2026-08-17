@@ -28,6 +28,25 @@ The 2026-08-15 repair checks and 2026-08-16 release verification produced these 
 
 The source checks passed on the reviewed commit, and the final integration checks used the anonymous public registry rather than a workspace link or local tarball.
 
+## 1.6.0 release verification
+
+The `1.6.0` checks cover active-session switching through guarded keys, `/switch`, and sidebar clicks; direct forward and reverse transcript dragging; ANSI removal, blank rows, wide graphemes, resize reflow, wheel coexistence, local/tmux/OSC-52 clipboard delivery, and `/copy`; and turn headings plus clickable transcript disclosures. Public artifact, empty-profile, and real-PTY results are recorded after the source checks pass.
+
+Current source evidence:
+
+| Check | Result |
+| --- | --- |
+| `pnpm run typecheck` | Passed |
+| `pnpm run test` | Passed: 40 files, 456 tests |
+| `pnpm run lint` | Passed with 39 warnings and no errors |
+| `pnpm run build` | Passed |
+| `git diff --check` | Passed |
+| `pnpm run pack:artifact` | Passed: 316 files in the `1.6.0` artifact |
+| Packed-artifact audit | Passed for exports, bundle metadata, patched editor, new clipboard/selection modules, and runtime dependencies |
+| Windows empty-profile installation | Passed against public dsh rc.6 using the packed tarball |
+| Linux empty-profile installation | Passed against public dsh rc.6 using the packed tarball |
+| Linux real PTY | Passed command paths, button-motion mouse reporting, session switching, copy handling, export, frame/sidebar rendering, and shutdown |
+
 ## 1.5.0 interaction verification
 
 The `1.5.0` checks cover three distinct placements and two input paths. Built-in short choices render without popup borders in the fixed bottom area; `/context`, `/agents`, `/jobs`, `/settings`, and `/sessions` replace the left chat area; and double Escape uses the current conversation's checkpoint view. Enter steers a running turn, Tab queues the next turn, and empty Up recalls the latest submission. Component and command tests cover these paths, active-session cycling, persisted titles, handoff locking, and frame/sidebar preservation.
@@ -156,8 +175,11 @@ Exercise these behaviors through the installed profile:
 22. While running, Enter steers and Tab queues; empty Up recalls the latest real submission and a duplicate queued submission replaces the existing item.
 23. Tab does not queue empty text, slash or file completion text, or a submission while idle; queued session references are applied when the queued turn starts.
 24. Double Escape opens only the current-conversation checkpoint view while idle with an empty editor; older/newer navigation, branch creation, close, and original-session preservation all work.
-25. `Ctrl+PageUp` and `Ctrl+PageDown` cycle the active workspace in both CSI forms; same-workspace resume, cross-workspace handoff, duplicate-open locking, and persisted stopped-session titles work.
-26. `/context`, `/agents`, `/jobs`, and `/settings` cover the chat main area while the full frame and sidebar remain visible.
+25. Guarded `Alt+Left` and `Alt+Right`, `/switch`, and left-clicking an active sidebar row open the same target session; ordinary editor cursor movement, completions, and overlays retain their input.
+26. Left-button transcript dragging includes both endpoint cells, preserves blank rows and wide graphemes, and copies without ANSI controls; reverse dragging, resize reflow, wheel scrolling, and non-left buttons behave as documented.
+27. Local, tmux, and SSH clipboard paths use system, tmux forwarding, and OSC 52 respectively; `/copy` copies only the latest assistant text in the active session.
+28. `You` and `Assistant` headings remain distinct, the editor has a fixed preceding gap, and clicking thinking, tool, grouped-tool, diff, or context disclosure headers toggles only that block.
+29. `/context`, `/agents`, `/jobs`, and `/settings` cover the chat main area while the full frame and sidebar remain visible.
 
 `scripts/verify-interactive-pty.sh` drives the packed plugin through a Python standard-library PTY. The driver answers terminal capability queries, creates and switches sessions, opens the session picker, exercises command paths, and performs double-Ctrl+C shutdown. The captured ANSI stream is replayed through `@xterm/headless`; the check requires the compact title, every sidebar section, Workspace to the right of the separator, and the editor to the left. The repository snapshot suite remains the keyless evidence for stable rendered output.
 
