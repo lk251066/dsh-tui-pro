@@ -1,22 +1,34 @@
 /**
- * Non-destructive current-session rewind: choose a completed user turn,
- * branch immediately before it, and restore its prompt for editing.
+ * Current-session rewind with replacement semantics: choose a completed user
+ * turn, branch immediately before it, swap the branch in for the current
+ * session in the active set, and restore its prompt for editing. The source
+ * log stays on disk (append-only), so `/sessions` can recover it.
  * @module @lk251066/dsh-tui/chat/rewind
  */
 
 import { randomUUID } from 'node:crypto'
-import type { Agent } from '@deepseek-ai/dsh-agent'
+import type { Agent, AgentHandle } from '@deepseek-ai/dsh-agent'
 import { errorChain } from '@deepseek-ai/dsh-llm'
 import { SessionId, type SessionEvent } from '@deepseek-ai/dsh-session'
 import { contentText } from '../components/content.ts'
 import { RewindDialog, type RewindPoint } from '../components/rewind-dialog.ts'
 import type { ChannelNotice, ChatChannelDeps } from './channel.ts'
 
+/** Fixed personal-assistant identity; rewinding it would discard its scoped capabilities. */
+const ASSISTANT_SESSION_ID = SessionId('assistant')
+
 /** Collaborators required by the current-session rewind controller. */
 export interface RewindControllerDeps extends ChatChannelDeps, ChannelNotice {
   readonly agent: Agent
-  /** Add and open the branch, then restore the selected prompt into its editor. */
-  activate(agent: Agent, prompt: string): Promise<void>
+  /**
+   * Consume and open the branch, then restore the selected prompt into its editor.
+   * The branch REPLACES the source session in the active set: the host removes
+   * `source` from the workspace list and the live-slot registry and disposes
+   * its agent when it owns the handle; the source log stays on disk for
+   * `/sessions`. `handle` owns the branch agent for later replacement or
+   * rollback.
+   */
+  activate(handle: AgentHandle, prompt: string, source: SessionId): Promise<void>
 }
 
 /** Current-session rewind operations used by the double-Escape input route. */
@@ -67,6 +79,10 @@ export function createRewindController(deps: RewindControllerDeps): RewindContro
   return {
     show(): void {
       if (deps.agent.status !== 'idle') return
+      if (deps.agent.session.id === ASSISTANT_SESSION_ID) {
+        deps.appendNotice('The assistant conversation cannot be rewound. Use /fork to create a project branch.', 'warning')
+        return
+      }
       const points = rewindPoints(deps.agent.session.events)
       if (points.length === 0) {
         deps.appendNotice('No completed user turn is available to rewind.', 'warning')
@@ -91,7 +107,7 @@ export function createRewindController(deps: RewindControllerDeps): RewindContro
                   seedLength: point.cut,
                 },
               })
-              if (!deps.isDisposed()) await deps.activate(handle.agent, point.prompt)
+              await deps.activate(handle, point.prompt, source.id)
             }
             void branch().catch((error: unknown) => {
               if (!deps.isDisposed()) deps.appendNotice(`Rewind failed: ${errorChain(error)}`, 'error')

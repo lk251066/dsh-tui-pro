@@ -10,11 +10,17 @@ import type { Context } from '@deepseek-ai/cordis'
 import { SessionId, type SessionId as SessionIdType } from '@deepseek-ai/dsh-session'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { defineTool } from '@deepseek-ai/dsh-tools'
-import type { Agent } from '@deepseek-ai/dsh-agent'
+import type { Agent, AgentHandle } from '@deepseek-ai/dsh-agent'
 import type { ChannelRegistry } from './channel-registry.ts'
 import type { TuiSessionSlot } from '../index.ts'
 import { ASSISTANT_SESSION_ID } from './assistant.ts'
 import type { WorkspaceSessions } from './workspace-sessions.ts'
+
+/** Central TUI ownership transfer for an agent created by a session workflow. */
+export type AdoptOwnedAgent = (
+  handle: AgentHandle,
+  options?: { readonly activate?: boolean; readonly ensureWorkspace?: boolean },
+) => Promise<void>
 
 function formatAge(ageMs: number): string {
   const minutes = Math.floor(ageMs / 60_000)
@@ -35,6 +41,7 @@ export function installAssistantTools(
   agentCtx: Context,
   registry: ChannelRegistry<TuiSessionSlot>,
   workspaceSessions: WorkspaceSessions,
+  adoptOwnedAgent: AdoptOwnedAgent,
 ): void {
   agentCtx.inject(['tools'], (toolCtx) => {
     const ensureLive = async (sessionId: SessionIdType, activate: boolean): Promise<Agent> => {
@@ -47,9 +54,13 @@ export function installAssistantTools(
         return current.agent
       }
       const existing = agentCtx.agents.get(sessionId)
-      const agent = existing ?? (await agentCtx.agents.resume({ resumeSessionId: sessionId })).agent
-      registry.adopt(agent, activate)
-      return agent
+      if (existing !== undefined) {
+        registry.adopt(existing, activate)
+        return existing
+      }
+      const handle = await agentCtx.agents.resume({ resumeSessionId: sessionId })
+      await adoptOwnedAgent(handle, { activate })
+      return handle.agent
     }
 
     toolCtx.tools.register(defineTool({
@@ -147,8 +158,7 @@ export function installAssistantTools(
         if (!(await stat(cwd)).isDirectory()) throw new Error(`Not a project directory: ${cwd}`)
         const sessionId = SessionId(`session-${randomUUID()}`)
         const handle = await agentCtx.agents.create({ sessionId, seed: [], meta: { cwd } })
-        await workspaceSessions.add(sessionId)
-        registry.adopt(handle.agent, false)
+        await adoptOwnedAgent(handle, { activate: false })
         return { sessionId: String(sessionId), cwd }
       },
     }))

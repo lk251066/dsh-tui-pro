@@ -63,7 +63,7 @@ export interface TuiHarnessOptions {
     resolveModelInfo?: (
       provider: string,
       model: string,
-    ) => Promise<Pick<LlmResolvedModelInfo, 'context' | 'reasoning'>>
+    ) => Promise<Pick<LlmResolvedModelInfo, 'context' | 'reasoning' | 'inputModalities'>>
   }
   /** Provide a fake `sessionPersistence` service so resume surfaces can list sessions. */
   sessionPersistence?: {

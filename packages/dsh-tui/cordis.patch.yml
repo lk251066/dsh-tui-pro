@@ -42,6 +42,9 @@
       config:
         backend: json
 
+    - id: tui-memory
+      name: '@lk251066/dsh-tui/memory'
+
     - id: workspace
       name: '@deepseek-ai/dsh-workspace'
 

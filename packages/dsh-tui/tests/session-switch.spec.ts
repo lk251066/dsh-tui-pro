@@ -14,6 +14,7 @@ import {
   type TuiHarness,
   type TuiHarnessOptions,
 } from './harness.ts'
+import { ASSISTANT_SESSION_ID } from '../src/chat/assistant.ts'
 
 /**
  * The `/new` + `/sessions` multi-session flow, driven through the production
@@ -92,6 +93,7 @@ interface CreatedAgentRecord {
   followups: string[]
   cwd: string | undefined
   disposed: number
+  setup: boolean
 }
 
 async function tick(): Promise<void> {
@@ -167,9 +169,22 @@ async function switchHarness(cwd = '/workspace', options: SwitchHarnessOptions =
         cancel() {},
         whenIdle: () => Promise.resolve(),
       } as unknown as Agent
-      harness.ctx.agents.register(agent)
-      created.push({ agent, followups, cwd: options.meta?.cwd, disposed: 0 })
-      return { agent, dispose: async () => {} }
+      const disposeAgent = harness.ctx.agents.register(agent)
+      const record: CreatedAgentRecord = {
+        agent,
+        followups,
+        cwd: options.meta?.cwd,
+        disposed: 0,
+        setup: options.setup !== undefined,
+      }
+      created.push(record)
+      return {
+        agent,
+        async dispose() {
+          record.disposed += 1
+          disposeAgent()
+        },
+      }
     },
     async resume(_ownerCtx, options) {
       if (resumeError !== undefined) throw resumeError
@@ -204,7 +219,13 @@ async function switchHarness(cwd = '/workspace', options: SwitchHarnessOptions =
       } as unknown as Agent
       mutateResumedAgent?.(agent, resumed.length + 1)
       const disposeAgent = harness.ctx.agents.register(agent)
-      const record = { agent, followups, cwd: prepared.meta.cwd, disposed: 0 }
+      const record = {
+        agent,
+        followups,
+        cwd: prepared.meta.cwd,
+        disposed: 0,
+        setup: options.setup !== undefined,
+      }
       resumed.push(record)
       return {
         agent,
@@ -345,6 +366,100 @@ describe('multi-session switching (/new, /sessions)', () => {
       harness.terminal.send('\r')
       await tick()
       expect(created[0]?.followups).toEqual(['second request to revise'])
+    } finally {
+      await disposeTuiTestHarness(harness)
+    }
+  })
+
+  it('double Escape replaces the current session instead of accumulating branches', async () => {
+    const { harness, created } = await switchHarness()
+    try {
+      // Three completed turns give three consecutive rewinds a checkpoint each.
+      appendUser(harness.session, 'first request')
+      harness.session.append('step/end', { turn: 1, step: 1 })
+      harness.session.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
+      for (const [turn, text] of [[2, 'second request'], [3, 'third request']] as const) {
+        harness.session.append('turn/start', {
+          turn,
+          trigger: { kind: 'message', source: { kind: 'user' } },
+        })
+        appendUser(harness.session, text)
+        harness.session.append('step/end', { turn, step: 1 })
+        harness.session.append('turn/end', { turn, reason: { kind: 'completed' } })
+      }
+      const workspace = () => harness.ctx.workspaceRegistry.list().flatMap(entry => entry.sessionIds)
+      expect(workspace()).toEqual([SessionId('main-session')])
+
+      const rewindOnce = async (): Promise<void> => {
+        harness.terminal.send('\x1b')
+        await tick()
+        harness.terminal.send('\x1b')
+        await tick()
+        // Enter picks the newest checkpoint; the restored prompt fills the
+        // editor, so clear it before the next rewind.
+        harness.terminal.send('\r')
+        await tick()
+        await tick()
+      }
+      const clearEditor = async (): Promise<void> => {
+        harness.terminal.send('\x03')
+        await tick()
+      }
+
+      await rewindOnce()
+      expect(created).toHaveLength(1)
+      // The rewound-away session leaves Active; the branch takes its place.
+      expect(workspace()).toEqual([created[0]!.agent.session.id])
+
+      await clearEditor()
+      await rewindOnce()
+      expect(created).toHaveLength(2)
+      // The active list holds exactly one project session after each rewind,
+      // and the owned source agent is disposed.
+      expect(workspace()).toEqual([created[1]!.agent.session.id])
+      expect(created[0]?.disposed).toBe(1)
+      expect(harness.ctx.agents.get(created[0]!.agent.session.id)).toBeUndefined()
+
+      await clearEditor()
+      await rewindOnce()
+      expect(created).toHaveLength(3)
+      expect(workspace()).toEqual([created[2]!.agent.session.id])
+      expect(created[1]?.disposed).toBe(1)
+
+      // The last rewind restored the first turn's prompt for editing.
+      harness.terminal.send('\r')
+      await tick()
+      expect(created[2]?.followups).toEqual(['first request'])
+    } finally {
+      await disposeTuiTestHarness(harness)
+    }
+  })
+
+  it('restores the source and disposes the branch when rewind cannot update Active', async () => {
+    const { harness, created } = await switchHarness()
+    try {
+      appendUser(harness.session, 'request to revise')
+      harness.session.append('step/end', { turn: 1, step: 1 })
+      harness.session.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
+      const workspace = harness.ctx.workspaceRegistry.list()[0]!
+      vi.spyOn(workspace, 'detachSession').mockRejectedValueOnce(new Error('workspace detach failed'))
+
+      harness.terminal.send('\x1b')
+      await tick()
+      harness.terminal.send('\x1b')
+      await tick()
+      harness.terminal.send('\r')
+      await tick()
+
+      expect(created).toHaveLength(1)
+      expect(created[0]?.disposed).toBe(1)
+      expect(harness.ctx.agents.get(created[0]!.agent.session.id)).toBeUndefined()
+      expect(workspace.sessionIds).toContain(SessionId('main-session'))
+      expect(workspace.sessionIds).not.toContain(created[0]!.agent.session.id)
+      expect(harness.terminal.output).toContain('Rewind failed: workspace detach failed')
+
+      submit(harness, 'source remains usable')
+      expect(harness.agent.sentMessages.at(-1)?.content).toEqual([{ type: 'text', text: 'source remains usable' }])
     } finally {
       await disposeTuiTestHarness(harness)
     }
@@ -502,9 +617,9 @@ describe('multi-session switching (/new, /sessions)', () => {
       await tick()
       expect(created).toHaveLength(1)
 
-      // At 88 columns the sidebar begins at column 57. New sessions are first
-      // within one workspace, so the original main session is the third row.
-      harness.terminal.send('\x1b[<0;60;11M')
+      // The active workspace row follows the workspace heading and the newly
+      // created session, so the original main session is the next row.
+      harness.terminal.send('\x1b[<0;60;12M')
       await tick()
       submit(harness, 'message after sidebar click')
 
@@ -528,7 +643,7 @@ describe('multi-session switching (/new, /sessions)', () => {
 
       // Select the original session in the sidebar, then remove that current
       // session from the active workspace list with two immediate key presses.
-      harness.terminal.send('\x1b[<0;60;11M')
+      harness.terminal.send('\x1b[<0;60;12M')
       await tick()
       const workspace = harness.ctx.workspaceRegistry.list()[0]!
       const detach = vi.spyOn(workspace, 'detachSession')
@@ -604,7 +719,6 @@ describe('multi-session switching (/new, /sessions)', () => {
       await tick()
       expect(harness.terminal.output.slice(firstOutput)).toContain('Reasoning effort · alpha/a1')
       expect(harness.terminal.output.slice(firstOutput)).toContain('High')
-      expect(harness.terminal.output.slice(firstOutput)).toMatch(/a1\s+high/)
       harness.terminal.send('\x1b')
       await tick()
 
@@ -614,7 +728,6 @@ describe('multi-session switching (/new, /sessions)', () => {
       await tick()
       expect(harness.terminal.output.slice(secondOutput)).toContain('Reasoning effort · beta/b1')
       expect(harness.terminal.output.slice(secondOutput)).toContain('Max')
-      expect(harness.terminal.output.slice(secondOutput)).toMatch(/b1\s+max/)
     } finally {
       await disposeTuiTestHarness(harness)
     }
@@ -671,13 +784,23 @@ describe('multi-session switching (/new, /sessions)', () => {
       const before = harness.terminal.output.length
       // A turn lands in the second session's log while its channel is detached.
       appendUser(secondSession!, 'logged while away')
+      created[0]!.agent.status = 'running'
+      secondSession!.append('turn/start', { turn: 1, trigger: { kind: 'message', source: { kind: 'user' } } })
+      secondSession!.append('step/start', { turn: 1, step: 1 })
+      secondSession!.append('assistant/chunk', {
+        turn: 1,
+        step: 1,
+        chunk: { type: 'text-delta', index: 0, text: 'streamed while away' },
+      })
       await tick()
       expect(harness.terminal.output.slice(before)).not.toContain('logged while away')
       // Remounting the second slot replays the whole log from the session.
       await switchTo(harness, String(secondSession!.id))
       expect(harness.terminal.output).toContain('You')
       expect(harness.terminal.output).toContain('logged while away')
+      expect(harness.terminal.output).toContain('streamed while away')
       // The remounted slot owns input routing again.
+      created[0]!.agent.status = 'idle'
       submit(harness, 'after remount')
       await tick()
       expect(created[0]?.followups).toEqual(['after remount'])
@@ -791,6 +914,72 @@ describe('multi-session switching (/new, /sessions)', () => {
     }
   })
 
+  it('cold-reads the offline assistant row instead of pinning the fallback label', async () => {
+    const assistantHeader: SessionHeader = {
+      version: 0,
+      id: ASSISTANT_SESSION_ID,
+      createdAt: 1,
+      cwd: '/workspace',
+    }
+    const events: SessionEvent[] = [{
+      type: 'session/title',
+      seq: 0,
+      time: 2,
+      data: { title: 'Renamed assistant', messageSeqs: [], source: { kind: 'fallback' } },
+    }]
+    const terminal = new RecordingTerminal()
+    const harness = await createTuiTestHarness(terminal, vi.fn(), {
+      sessionPersistence: {
+        list: async () => [assistantHeader],
+        load: async () => ({ meta: assistantHeader, events }),
+      },
+    })
+    try {
+      await vi.waitFor(() => {
+        expect(terminal.output).toContain('Renamed assistant')
+      })
+    } finally {
+      await disposeTuiTestHarness(harness)
+    }
+  })
+
+  it('retries a stopped session whose title read returns nothing until the title lands', async () => {
+    const stoppedId = SessionId('eventually-titled')
+    const target: SessionHeader = { version: 0, id: stoppedId, createdAt: 1, cwd: '/workspace' }
+    let title: { readonly title: string } | undefined
+    const terminal = new RecordingTerminal()
+    const harness = await createTuiTestHarness(terminal, vi.fn(), {
+      mountSessionQuery: false,
+      sessionPersistence: {
+        list: async () => [target],
+        load: async () => ({ meta: target, events: [] }),
+      },
+      beforeMount(_session, ctx) {
+        const workspace = ctx.workspaceRegistry.list()[0]
+        if (workspace !== undefined) void workspace.attachSession(stoppedId)
+      },
+    })
+    try {
+      harness.ctx.provide('sessionQuery', {
+        listSessions: async () => [],
+        readTitleSnapshots: async () => [{
+          sessionId: stoppedId,
+          status: 'fulfilled',
+          value: { session: target, title },
+        }],
+      } as never)
+      // The title-less reads mark the id pending instead of dropping it; once
+      // the title exists, the bounded retry picks it up with no workspace
+      // change involved.
+      title = { title: 'Eventually titled' }
+      await vi.waitFor(() => {
+        expect(terminal.output).toContain('Eventually titled')
+      })
+    } finally {
+      await disposeTuiTestHarness(harness)
+    }
+  })
+
   it('cancels a pending stopped-title retry when the TUI is disposed', async () => {
     const stoppedId = SessionId('disposed-title-retry')
     const target: SessionHeader = { version: 0, id: stoppedId, createdAt: 1, cwd: '/workspace' }
@@ -843,6 +1032,31 @@ describe('multi-session switching (/new, /sessions)', () => {
       submit(harness, 'continue stopped work')
       await tick()
       expect(resumed[0]?.followups).toEqual(['continue stopped work'])
+    } finally {
+      await disposeTuiTestHarness(harness)
+    }
+  })
+
+  it('opens an assistant selected from history through its scoped setup path', async () => {
+    const target: SessionHeader = {
+      version: 0,
+      id: ASSISTANT_SESSION_ID,
+      createdAt: 1,
+      cwd: '/workspace',
+    }
+    const { harness, resumed } = await switchHarness('/workspace', {
+      sessionPersistence: {
+        list: async () => [target],
+        load: async () => ({ meta: target, events: [] }),
+      },
+    })
+    try {
+      await switchTo(harness, target.id)
+      await tick()
+
+      expect(resumed).toHaveLength(1)
+      expect(resumed[0]?.agent.session.id).toBe(ASSISTANT_SESSION_ID)
+      expect(resumed[0]?.setup).toBe(true)
     } finally {
       await disposeTuiTestHarness(harness)
     }
@@ -1005,6 +1219,78 @@ describe('multi-session switching (/new, /sessions)', () => {
     }
   })
 
+  it('refuses host handoff while a background session is running', async () => {
+    const target: SessionHeader = {
+      version: 0,
+      id: SessionId('handoff-blocked-by-background'),
+      createdAt: 1,
+      cwd: '/other-project',
+    }
+    const handoff = vi.fn(() => Promise.reject(new Error('must not run')))
+    const { harness, created } = await switchHarness('/workspace', {
+      resumeError: new Error('in-process resume unavailable'),
+      handoffResume: handoff,
+      sessionPersistence: {
+        list: async () => [target],
+        load: async () => ({ meta: target, events: [] }),
+      },
+    })
+    let background: Agent | undefined
+    try {
+      submit(harness, '/new')
+      await tick()
+      background = created[0]!.agent
+      await switchTo(harness, 'main-session')
+      background.status = 'running'
+      agentEvents(harness.ctx, background).emit('agent/status', { status: 'running' })
+
+      await switchTo(harness, target.id)
+      await tick()
+
+      expect(handoff).not.toHaveBeenCalled()
+      expect(harness.terminal.output).toContain(String(background.session.id))
+      expect(harness.terminal.output).toContain('wait for every live session before resume')
+    } finally {
+      if (background !== undefined) background.status = 'idle'
+      await disposeTuiTestHarness(harness)
+    }
+  })
+
+  it('flushes every live session before host handoff', async () => {
+    const target: SessionHeader = {
+      version: 0,
+      id: SessionId('handoff-flushes-live-sessions'),
+      createdAt: 1,
+      cwd: '/other-project',
+    }
+    const handoff = vi.fn(() => Promise.reject(new Error('test host retained process')))
+    const { harness, created } = await switchHarness('/workspace', {
+      resumeError: new Error('in-process resume unavailable'),
+      handoffResume: handoff,
+      sessionPersistence: {
+        list: async () => [target],
+        load: async () => ({ meta: target, events: [] }),
+      },
+    })
+    try {
+      submit(harness, '/new')
+      await tick()
+      await switchTo(harness, 'main-session')
+      const flush = vi.spyOn(harness.ctx.sessions, 'flush')
+
+      await switchTo(harness, target.id)
+      await tick()
+
+      expect(handoff).toHaveBeenCalledOnce()
+      expect(new Set(flush.mock.calls.map(([session]) => session.id))).toEqual(new Set([
+        harness.agent.session.id,
+        created[0]!.agent.session.id,
+      ]))
+    } finally {
+      await disposeTuiTestHarness(harness)
+    }
+  })
+
   it('clears the previous session activity when switching to an idle session', async () => {
     const { harness, created } = await switchHarness()
     try {
@@ -1023,11 +1309,8 @@ describe('multi-session switching (/new, /sessions)', () => {
       harness.terminal.output = ''
       await switchTo(harness, String(created[0]!.agent.session.id))
 
-      const currentFrame = harness.terminal.output.slice(
-        harness.terminal.output.lastIndexOf('dsh DEEPSEEK HARNESS'),
-      )
-      expect(currentFrame).toContain('Idle')
-      expect(currentFrame).not.toContain('Thinking')
+       expect(harness.terminal.output).toContain('Idle')
+       expect(harness.terminal.output).not.toContain('Thinking')
     } finally {
       await disposeTuiTestHarness(harness)
     }

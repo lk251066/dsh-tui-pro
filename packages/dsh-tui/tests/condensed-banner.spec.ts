@@ -14,7 +14,7 @@ const { version: TUI_VERSION } = JSON.parse(
   readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'package.json'), 'utf8'),
 ) as { version: string }
 
-const CONDENSED_NAME = 'dsh DEEPSEEK HARNESS'
+const CONDENSED_NAME = 'dsh v'
 
 async function setup(
   options: TuiHarnessOptions = {},
@@ -32,16 +32,13 @@ async function rows(terminal: HeadlessTerminal): Promise<string[]> {
 }
 
 describe('workbench identity header', () => {
-  it('renders one compact identity row for a fresh session', async () => {
+  it('renders the welcome screen for a fresh session', async () => {
     const result = await setup()
     const frame = await result.terminal.snapshot({ includeScrollback: true })
-    const headerRow = (await rows(result.terminal)).find(row => row.includes(CONDENSED_NAME))
-    expect(headerRow).toContain(`v${TUI_VERSION}`)
-    expect(headerRow).toContain('· deepseek-v4-flash')
-    expect(headerRow).toContain('/workspace')
-    expect(headerRow).toContain('— Coding agent ready.')
-    expect(frame).not.toContain('█')
-    expect(frame).not.toContain('/ commands · @ files · /resume sessions')
+    expect(frame).toContain('█')
+    expect(frame).toContain('Coding agent ready.')
+    expect(frame).toContain('/ commands · @ files · /sessions history')
+    expect(frame).not.toContain(CONDENSED_NAME)
     await disposeTuiTestHarness(result)
     await result.terminal.dispose()
   })
@@ -55,8 +52,8 @@ describe('workbench identity header', () => {
     const frame = await result.terminal.snapshot({ includeScrollback: true })
     const headerRow = (await rows(result.terminal)).find(row => row.includes(CONDENSED_NAME))
     expect(headerRow).toContain(`v${TUI_VERSION}`)
-    expect(headerRow).toContain('· deepseek-v4-flash')
-    expect(headerRow).toContain('/workspace')
+    expect(headerRow).not.toContain('deepseek-v4-flash')
+    expect(headerRow).not.toContain('/workspace')
     expect(frame).not.toContain('█')
     expect(frame).not.toContain('Coding agent ready.')
     expect(frame).toContain('restored prompt')
@@ -67,8 +64,7 @@ describe('workbench identity header', () => {
   it('keeps the compact identity when the first user message lands', async () => {
     const result = await setup({ omitWelcome: true })
     const before = await result.terminal.snapshot({ includeScrollback: true })
-    expect(before).toContain(CONDENSED_NAME)
-    expect(before).not.toContain('█')
+    expect(before).toContain('█')
     const frame = result.terminal.frames
     appendUser(result.session, 'first live message')
     await result.terminal.waitForFrame(frame)
@@ -99,10 +95,13 @@ describe('workbench identity header', () => {
   })
 
   it('omits the model segment when no target is selected', async () => {
-    const result = await setup({ agentOptions: {} })
+    const result = await setup({
+      agentOptions: {},
+      beforeMount(session) { appendUser(session, 'resume without a target') },
+    })
     const headerRow = (await rows(result.terminal)).find(row => row.includes(CONDENSED_NAME))
     expect(headerRow).toContain(`v${TUI_VERSION}`)
-    expect(headerRow).toContain('/workspace')
+    expect(headerRow).not.toContain('/workspace')
     expect(headerRow).not.toContain(' · ')
     await disposeTuiTestHarness(result)
     await result.terminal.dispose()
@@ -111,7 +110,7 @@ describe('workbench identity header', () => {
   it('keeps compact identity data on narrow terminals', async () => {
     const fresh = await setup({}, { columns: 40, rows: 24 })
     const freshFrame = await fresh.terminal.snapshot({ includeScrollback: true })
-    expect(freshFrame).toContain('dsh')
+    expect(freshFrame).toContain('DEEPSEEK')
     expect(freshFrame).toContain('Coding')
     expect(freshFrame).toContain('agent ready.')
     expect(freshFrame).not.toContain('█')
@@ -132,7 +131,10 @@ describe('workbench identity header', () => {
   })
 
   it('styles the compact name through the accent palette', async () => {
-    const result = await setup({ config: { theme: { color: true } } })
+    const result = await setup({
+      config: { theme: { color: true } },
+      beforeMount(session) { appendUser(session, 'styled resume') },
+    })
     const frame = await result.terminal.snapshot({ includeScrollback: true })
     const headerIndex = frame.split('\n').findIndex(line => line.includes(CONDENSED_NAME))
     expect(headerIndex).toBeGreaterThan(-1)

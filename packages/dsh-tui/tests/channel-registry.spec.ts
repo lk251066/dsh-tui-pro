@@ -124,6 +124,30 @@ describe('channel registry', () => {
     expect(registry.isActive(adopted)).toBe(false)
   })
 
+  it('remove drops a non-active slot through host teardown (rewind replacement)', () => {
+    const log: HostLog = { built: [], mounted: [], unmounted: [], disposed: [], switches: [], evictions: [] }
+    const registry = createChannelRegistry(recordingHost(log), fakeAgent('main'))
+    registry.adopt(fakeAgent('branch'))
+    // The adopt switched main→branch, so the rewound-away source is removable.
+    expect(registry.remove(SessionId('main'))).toBe(true)
+    expect(log.disposed).toEqual(['main'])
+    expect(registry.get(SessionId('main'))).toBeUndefined()
+    expect(registry.slots().map(slot => slot.label)).toEqual(['branch'])
+    // A removed session cannot be switched back to; a repeat remove is a no-op.
+    expect(registry.switchTo(SessionId('main'))).toBe(false)
+    expect(registry.remove(SessionId('main'))).toBe(false)
+    expect(log.disposed).toEqual(['main'])
+  })
+
+  it('remove refuses the active slot and unknown ids', () => {
+    const log: HostLog = { built: [], mounted: [], unmounted: [], disposed: [], switches: [], evictions: [] }
+    const registry = createChannelRegistry(recordingHost(log), fakeAgent('main'))
+    expect(registry.remove(SessionId('main'))).toBe(false)
+    expect(registry.remove(SessionId('missing'))).toBe(false)
+    expect(log.disposed).toEqual([])
+    expect(registry.active().label).toBe('main')
+  })
+
   it('evicts the least-recently-used idle slot when a ceiling is exceeded', () => {
     const log: HostLog = { built: [], mounted: [], unmounted: [], disposed: [], switches: [], evictions: [] }
     const registry = createChannelRegistry(recordingHost(log, 3), fakeAgent('main'))

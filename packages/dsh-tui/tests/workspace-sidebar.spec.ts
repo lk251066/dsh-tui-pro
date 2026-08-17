@@ -16,6 +16,7 @@ function createSidebar(rows = 32): WorkspaceSidebarComponent {
   sessions.setItems([{
     id: 'main',
     title: 'Main session',
+    workspace: 'deepseekharness',
     status: 'running',
     lastActivityAgo: 'now',
     isActive: true,
@@ -51,16 +52,16 @@ describe('WorkspaceSidebarComponent', () => {
     expect(text).toContain('feature/sideb')
     expect(text).toContain('Active sessions · 1')
     expect(text).toContain('Main session')
-    expect(text).toContain('Current')
+    expect(text).not.toContain('Current')
     expect(text).toContain('Status')
     expect(text).toContain('Running')
-    expect(text).toContain('deepseek-v4-flash')
-    expect(text).toContain('63%')
+    expect(text).not.toContain('deepseek-v4-flash')
+    expect(text).not.toContain('63%')
     expect(text).toContain('↑1.2k ↓987')
-    expect(text).toMatch(/Cache\s+80%/u)
-    expect(text).toMatch(/Queue\s+2/u)
-    expect(text).toMatch(/Perm\s+acceptEdits/u)
-    expect(text).toMatch(/Plan\s+on/u)
+    expect(text).toContain('cache 80%')
+    expect(text).not.toMatch(/Queue\s+2/u)
+    expect(text).toMatch(/Perm acceptEdits/u)
+    expect(text).toContain('plan on')
     expect(lines.every(line => visibleWidth(line) === 32)).toBe(true)
   })
 
@@ -69,13 +70,12 @@ describe('WorkspaceSidebarComponent', () => {
     const text = stripSgr(lines.join('\n'))
 
     expect(text).toContain('Idle')
-    expect(text).toContain('model unset')
-    expect(text).toContain('unknown')
+    expect(text).not.toContain('model unset')
     expect(text).toContain('↑0 ↓0')
     expect(text).not.toContain('Cache')
-    expect(text).toMatch(/Queue\s+0/u)
-    expect(text).toMatch(/Perm\s+unavailable/u)
-    expect(text).toMatch(/Plan\s+off/u)
+    expect(text).not.toMatch(/Queue\s+0/u)
+    expect(text).toMatch(/Perm unavailable/u)
+    expect(text).toContain('plan off')
     expect(lines.every(line => visibleWidth(line) === 24)).toBe(true)
     expect(lines).toHaveLength(24)
   })

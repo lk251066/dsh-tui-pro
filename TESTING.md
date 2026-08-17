@@ -2,7 +2,7 @@
 
 `@lk251066/dsh-tui` is a Cordis plugin and dsh profile bundle. Verification must cover the source tree, packed npm artifact, dsh profile composition, and interactive terminal behavior.
 
-## Current verification
+## Initial repair verification
 
 The 2026-08-15 repair checks and 2026-08-16 release verification produced these results:
 
@@ -27,6 +27,25 @@ The 2026-08-15 repair checks and 2026-08-16 release verification produced these 
 | GitHub Release artifact | Passed; downloaded npm tarball SHA-1 matches `dist.shasum`, with SHA-256 attached |
 
 The source checks passed on the reviewed commit, and the final integration checks used the anonymous public registry rather than a workspace link or local tarball.
+
+## 1.7.0 release verification
+
+The `1.7.0` checks cover owned agent adoption and rollback, rewind replacement, guarded terminal handoff, queued-message recovery, the simplified fixed workbench, clipboard image drafts, explicit vision-model checks, and durable per-session memory. The packed-artifact checks require the memory export and bundle row while preventing a duplicate attachment provider alongside dsh-base.
+
+Current source evidence:
+
+| Check | Result |
+| --- | --- |
+| `pnpm run typecheck` | Passed |
+| `pnpm run test` | Passed: 44 files, 521 tests |
+| `pnpm run lint` | Passed with 39 warnings and no errors |
+| `pnpm run build` | Passed |
+| `git diff --check` | Passed |
+| `pnpm run pack:artifact` | Passed: 325 files in the `1.7.0` artifact |
+| Packed-artifact audit | Passed for exports, bundle metadata, patched editor, runtime dependencies, and absence of source, tests, credentials, or a duplicate attachment provider |
+| Windows empty-profile installation | Passed against public dsh rc.6; `why`, `--dump-config`, module loading, and the expected non-TTY stop resolved `1.7.0` |
+| Linux empty-profile installation | Passed in a new WSL `/tmp` host and `DSH_HOME` against public dsh rc.6; `why` and `--dump-config` resolved `1.7.0` |
+| Linux real PTY | Passed welcome and compact headers, fixed layout, command paths, memory toggle, clipboard-image failure, session switching, export, and shutdown |
 
 ## 1.6.3 release verification
 
@@ -159,6 +178,7 @@ Verify the new tarball contains:
 - `package/lib/index.js`
 - declaration files at every path named by `exports`
 - `package/lib/workspace-agent-loop.js` and its declaration, used by the durable workspace startup layer
+- `package/lib/chat/memory.js` and its declaration, used by the per-session memory service
 - `package/cordis.patch.yml`
 - `package/README.md`
 - `package/LICENSE`
@@ -166,12 +186,14 @@ Verify the new tarball contains:
 - `package/node_modules/@earendil-works/pi-tui` with the patched `setPrompt()` editor API
 - bundled `get-east-asian-width` and `marked` runtime dependencies
 - the declared `@deepseek-ai/dsh-workspace` dependency and its bundle row
+- the `@lk251066/dsh-tui/memory` export and bundle row, plus the declared `@deepseek-ai/dsh-brand` and `zod` dependencies
+- no `@deepseek-ai/dsh-attachment-local` dependency or bundle row; the supported dsh-base composition already provides the single attachment service
 
 Reject an artifact that contains stale build output, a parent-directory archive member, or omits any required file.
 
 ## Clean-profile integration
 
-Use a temporary empty directory as `DSH_HOME`; do not reuse a developer profile or workspace link. The final local run used `D:\jyrh\jyrh\dsh-tui-pro\.test-results\tui-smoke-101`.
+Use a temporary empty directory as `DSH_HOME`; do not reuse a developer profile or workspace link. Keep each release run in a new test directory so prior profile state cannot satisfy the check.
 
 ```bash
 dsh plugin --profile tui-smoke add <absolute-path-to-new-tarball>
@@ -191,11 +213,11 @@ The TUI's Service Definition packages remain peers supplied by the dsh host. Plu
 Exercise these behaviors through the installed profile:
 
 1. Initial render reaches an editable prompt without an exception.
-2. Workspace shows the active project, full directory, and Git branch without terminal control characters.
-3. Status shows agent state, model, context percentage, input/output tokens, cache hit rate, queue depth, permission preset, and plan mode before and after a model turn.
+2. Workspace shows the active project and Git branch without terminal control characters; Active sessions are grouped by workspace without repeating the workspace on every session row.
+3. The bottom line shows cwd, branch, model, and context. Sidebar Status shows agent state, input/output tokens, cache hit rate, permission preset, and plan mode before and after a model turn.
 4. A second session created with `/new` appears under Active and switches without duplicate UI children; detached title and running-state changes update without first switching to that session.
 5. `/sessions` replaces only the left chat area with complete history; the outer frame and sidebar stay fixed, and search, Up, Down, Enter, Tab, Space, and Escape perform their documented actions without sending text to the model.
-6. Queue depth changes through steering insert, claim, discard, and unrelated durable transcript updates while the queue row remains visible.
+6. The queue dock changes through insert, claim, discard, Esc recovery, and unrelated durable transcript updates without a duplicate Queue row in the sidebar.
 7. Approval, question, tool output, reasoning visibility, and compaction status render correctly.
 8. Removing an active session retains it in complete history, and adding it restores its sidebar entry without changing the log.
 9. `sidebarWidth: 36` changes the right-sidebar width on a wide terminal; terminals below 65 columns hide the sidebar and retain the full-width main area.
@@ -210,17 +232,21 @@ Exercise these behaviors through the installed profile:
 18. Switching between two live sessions preserves each session's model and reasoning selection.
 19. `/fork` adds the new session to Active and opens it; `/export <path>` creates that exact file.
 20. SGR and X10 wheel events move only transcript rows; editor text and cursor state remain unchanged.
-21. Questions, approvals, model, details, theme, permission, rename, goal, and queue choices render in the fixed bottom area without centered popup borders.
-22. While running, Enter steers and Tab queues; empty Up recalls the latest real submission and a duplicate queued submission replaces the existing item.
+21. Questions, approvals, model, details, theme, permission, rename, and goal choices render in the fixed bottom area without centered popup borders.
+22. While running, Enter steers and Tab queues; empty Up recalls the latest real submission, a duplicate queued submission replaces the existing item, and empty-editor Esc restores the latest queue entry before cancelling.
 23. Tab does not queue empty text, slash or file completion text, or a submission while idle; queued session references are applied when the queued turn starts.
-24. Double Escape opens only the current-conversation checkpoint view while idle with an empty editor; older/newer navigation, branch creation, close, and original-session preservation all work.
+24. Double Escape opens only the current-conversation checkpoint view while idle with an empty editor; older/newer navigation, close, and source-to-branch Active replacement work, while the source log remains in complete history.
 25. Guarded `Alt+Left` and `Alt+Right`, `/switch`, and left-clicking an active sidebar row open the same target session; ordinary editor cursor movement, completions, and overlays retain their input.
 26. Left-button transcript dragging includes both endpoint cells, preserves blank rows and wide graphemes, and copies without ANSI controls; reverse dragging, resize reflow, wheel scrolling, and non-left buttons behave as documented.
-27. Local, tmux, and SSH clipboard paths use system, tmux forwarding, and OSC 52 respectively. The TUI accepts text paste only; image clipboard capture is not supported.
+27. Local, tmux, and SSH text-copy paths use system, tmux forwarding, and OSC 52 respectively. `Alt+V` reads PNG, JPEG, WebP, and GIF clipboard images through each supported platform adapter and keeps the session draft when the selected model lacks image input.
 28. `You` and `Assistant` headings remain distinct, the editor has a fixed preceding gap, and clicking thinking, tool, grouped-tool, diff, or context disclosure headers toggles only that block.
 29. `/context`, `/agents`, `/jobs`, and `/settings` cover the chat main area while the full frame and sidebar remain visible.
+30. A new untitled session shows the welcome view; after its first user message or title, the header becomes `dsh v{version} — {title}` without moving the transcript or sidebar.
+31. `/memory` reports the current session setting; `/memory on|off` persists it, installs or disposes memory tools and prompt sections, and keeps stored memories. The assistant defaults on and project sessions default off.
+32. `/queue` is absent from command help and autocomplete; Tab, Up, and Esc provide the complete queue interaction.
+33. Fork, rewind, resume, assistant recovery, workspace-attachment failure, and UI-adoption failure leave no unowned agent handle or unintended Active membership. The assistant rejects fork and rewind.
 
-`scripts/verify-interactive-pty.sh` drives the packed plugin through a Python standard-library PTY. The driver answers terminal capability queries, creates and switches sessions, opens the session picker, exercises command paths, and performs double-Ctrl+C shutdown. The captured ANSI stream is replayed through `@xterm/headless`; the check requires the compact title, every sidebar section, Workspace to the right of the separator, and the editor to the left. The repository snapshot suite remains the keyless evidence for stable rendered output.
+`scripts/verify-interactive-pty.sh` drives the packed plugin through a Python standard-library PTY. The driver answers terminal capability queries, exercises welcome and compact headers, memory status and toggles, clipboard-image failure, valid command paths, session creation and switching, history, export, and shutdown. The captured ANSI stream is replayed through `@xterm/headless`; the check requires the fixed outer frame, current sidebar sections, Workspace to the right of the separator, the editor to the left, and no duplicate attachment service. The repository snapshot suite remains the keyless evidence for stable rendered output.
 
 ## Registry verification
 

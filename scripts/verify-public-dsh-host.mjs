@@ -67,6 +67,7 @@ if (!why.includes(`@lk251066/dsh-tui@${packageManifest.version}`)) {
 
 const dump = await dsh('--profile', profile, '--dump-config')
 const bundledPlugins = [
+  '@deepseek-ai/dsh-attachment-local',
   '@deepseek-ai/dsh-session-projection-cache',
   '@deepseek-ai/dsh-session-reference',
   '@deepseek-ai/dsh-session-stats',
@@ -75,6 +76,7 @@ const bundledPlugins = [
   '@deepseek-ai/dsh-storage-json',
   '@deepseek-ai/dsh-tool-ask-user',
   '@deepseek-ai/dsh-workspace',
+  '@lk251066/dsh-tui/memory',
   '@lk251066/dsh-tui/workspace-agent-loop',
   '@lk251066/dsh-tui/prompt',
   '@lk251066/dsh-tui',

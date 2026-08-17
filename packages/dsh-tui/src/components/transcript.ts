@@ -291,17 +291,12 @@ export function renderDiff(
 }
 
 /**
- * Identity segments of the condensed one-line header: the product version,
- * the active model label, the working directory, and the session title when
- * one is set. An empty `model`/`version` omits that segment from the line.
+ * Identity segments of the condensed one-line header: the product version
+ * and the current session title.
  */
 export interface CondensedHeaderInfo {
   /** Package version rendered as `v{version}`. */
   readonly version: string
-  /** Active model label (empty omits the segment). */
-  readonly model: string
-  /** Formatted working-directory label (empty omits the segment). */
-  readonly cwd: string
   /** Session title appended as `— {title}`; `undefined`/empty omits it. */
   readonly title: string | undefined
 }
@@ -362,20 +357,15 @@ export class HeaderComponent implements Component {
   }
 
   /**
-   * The condensed identity row: `dsh DEEPSEEK HARNESS v{version} · {model}
-   * {cwd} — {title}` on one line — bold name, dim metadata, the title last.
+   * The condensed identity row: `dsh v{version} — {title}` on one line.
    * Static by design: no reveal clip and no shimmer, whichever animation
    * timers happen to run.
    */
   private renderCondensed(usable: number, info: CondensedHeaderInfo): string[] {
     const segments = [
       this.palette.bold(this.palette.accent('dsh')),
-      this.palette.bold('DEEPSEEK HARNESS'),
       /* v8 ignore next -- an empty version only follows a failed manifest read (index.ts swallows it). */
       ...info.version === '' ? [] : [this.palette.dim(`v${displayText(info.version)}`)],
-      ...info.model === '' ? [] : [this.palette.dim(`· ${displayText(info.model)}`)],
-      /* v8 ignore next -- formatCwd never returns an empty label ('cwd unset' stands in). */
-      ...info.cwd === '' ? [] : [this.palette.dim(displayText(info.cwd))],
       /* v8 ignore next -- a titled session never folds an empty title back through the header. */
       ...(info.title === undefined || info.title === '') ? [] : [this.palette.dim(`— ${displayText(info.title)}`)],
     ]

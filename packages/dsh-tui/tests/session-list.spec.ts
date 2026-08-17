@@ -27,11 +27,23 @@ describe('SessionListComponent', () => {
     const lines = list.render(44)
     const text = lines.join('\n')
     expect(text).toContain('Active sessions · 3')
-    expect(text).toContain('Assistant · personal')
-    expect(text).toContain('Main session · project')
-    expect(text).toContain('Debug session · project')
+    expect(text).toContain('personal')
+    expect(text).toContain('Assistant')
+    expect(text).toContain('project')
+    expect(text).toContain('Main session')
+    expect(text).toContain('Debug session')
+    expect(text.split('project')).toHaveLength(2)
     expect(text).not.toContain('\x1b[7m')
     expect(lines.every(line => visibleWidth(line) === 44)).toBe(true)
+  })
+
+  it('maps only rendered session rows to clickable items', () => {
+    const list = createList()
+    list.setItems(items)
+    expect(list.itemAtRow(2)).toBeUndefined()
+    expect(list.itemAtRow(3)?.id).toBe('assistant')
+    expect(list.itemAtRow(4)).toBeUndefined()
+    expect(list.itemAtRow(5)?.id).toBe('main')
   })
 
   it('centers a bounded window around the current session', () => {

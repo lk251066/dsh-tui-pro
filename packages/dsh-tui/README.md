@@ -4,7 +4,7 @@ Interactive terminal UI plugin and profile bundle for [DeepSeek Harness](https:/
 
 ## Release status
 
-Version [`1.6.3`](https://www.npmjs.com/package/@lk251066/dsh-tui/v/1.6.3) is the current release. Its source, artifact, empty-profile installation, and real PTY evidence are recorded in [TESTING.md](../../TESTING.md).
+Version [`1.7.0`](https://www.npmjs.com/package/@lk251066/dsh-tui/v/1.7.0) is the current release. Its source, artifact, empty-profile installation, and real PTY evidence are recorded in [TESTING.md](../../TESTING.md).
 
 ## Installation
 
@@ -40,7 +40,9 @@ After successful installation and profile validation:
 dsh --profile tui
 ```
 
-The bundled profile opens the active project session for the current directory. If the directory has no active session, it creates one and adds it to the workspace. The TUI enters the terminal alternate screen and renders a full outer frame. Transcript, tool output, and editor occupy the left inner area; a right sidebar keeps Workspace, Active, Current, and Status fixed while Page Up, Page Down, and the mouse wheel scroll only the active transcript. Short choices replace the fixed bottom input area without popup borders. Stopping the TUI restores the invoking terminal and its scrollback.
+The bundled profile opens the active project session for the current directory. If the directory has no active session, it creates one and adds it to the workspace. The TUI enters the terminal alternate screen and renders a full outer frame. Transcript, tool output, and editor occupy the left inner area; a right sidebar keeps Workspace, workspace-grouped Active sessions, and Status fixed while Page Up, Page Down, and the mouse wheel scroll only the active transcript. Short choices replace the fixed bottom input area without popup borders. Stopping the TUI restores the invoking terminal and its scrollback.
+
+New untitled conversations show the large welcome view. Existing conversations use the compact `dsh v{version} — {title}` header. The bottom status line contains cwd, branch, model, and context; the sidebar Status section contains agent state, plan mode, tokens, cache, and permission.
 
 Use `/sessions` to replace the left chat area with complete history while the outer frame and right sidebar remain fixed. Up and Down select a row, Enter opens it, Tab switches between complete history and the active list, and Space adds or removes a project session from the active workspace list. Escape returns to the transcript. Removing membership never deletes the session log. Use `/assistant` for the fixed personal assistant session.
 
@@ -48,13 +50,13 @@ Use `Alt+Left` and `Alt+Right` from an empty editor to cycle active workspace se
 
 Drag directly across transcript text with the left mouse button to select and copy it. ANSI styles are removed from copied text, while Chinese and emoji graphemes remain intact. Local terminals use the system clipboard; tmux uses its clipboard forwarding; SSH and other unsupported local clipboard paths use OSC 52. The mouse wheel continues to scroll transcript history while mouse reporting is active.
 
-The TUI input path currently accepts text only. Terminal paste protocols deliver text, not image bytes, so copying an image and pressing Ctrl+V does not attach it to a prompt. Image blocks already stored in a session are displayed through the attachment store with their original media type, but image capture from the system clipboard is not implemented.
+Press `Alt+V` to read an image from the system clipboard and add an `[Image #N]` placeholder to the active session draft. Each session keeps its own draft. Sending checks the selected model through dsh and proceeds only when that model explicitly advertises image input; a text-only or unknown model leaves the text and images in the editor. PNG, JPEG, WebP, and GIF are supported. Windows uses PowerShell, macOS requires `pngpaste`, and Linux uses `wl-paste` or `xclip`.
 
 Conversation turns use `You` and `Assistant` headings instead of message bubbles. Thinking, individual tool calls, grouped tool calls, diffs, and injected context show `▶` or `▼`; click their header to expand or collapse that block. `Ctrl+O` and `Ctrl+R` remain the global visibility controls.
 
-While the agent is running, Enter sends the editor text as immediate steering and Tab queues it for the next turn. Empty Up recalls the latest Enter or Tab submission; resubmitting the same queued text replaces that queue entry. Double Escape opens checkpoints from the current conversation only when the agent is idle and the editor is empty. Left or Escape selects an older checkpoint, Right selects a newer one, Enter creates and activates a branch before the selected turn, and `Ctrl+C` or `q` closes the view. This is separate from `/sessions`, which browses complete session history.
+While the agent is running, Enter sends the editor text as immediate steering and Tab queues it for the next turn. Empty Up recalls the latest Enter or Tab submission; resubmitting the same queued text replaces that queue entry. With an empty editor, Esc returns the latest queued message to the editor before a later Esc can cancel the running turn. Double Escape opens checkpoints from the current conversation only when the agent is idle and the editor is empty. Left or Escape selects an older checkpoint, Right selects a newer one, Enter branches the conversation to just before the selected turn and replaces the current session with that branch in the active list (the rewound-away log stays in complete history), and `Ctrl+C` or `q` closes the view. This is separate from `/sessions`, which browses complete session history.
 
-The TUI owns these commands: `/help`, `/model`, `/effort`, `/clear`, `/details`, `/theme`, `/queue`, `/rename`, `/fork`, `/status`, `/context`, `/agents`, `/jobs`, `/settings`, `/export`, `/exit`, `/quit`, `/sessions`, `/switch`, `/new`, and `/assistant`. `/context`, `/agents`, `/jobs`, `/settings`, and `/sessions` replace the left main area and preserve the outer frame and active-workspace sidebar. `/effort` only accepts reasoning levels advertised by the selected model; model and effort selections are independent for each live session. dsh-base may add `/feedback`, `/goal`, `/compact`, `/permission`, and `/plan`. The bundle does not provide `/palette`, `/reload`, `/fleet`, or `/memories`.
+The TUI owns these commands: `/help`, `/model`, `/effort`, `/clear`, `/details`, `/theme`, `/rename`, `/fork`, `/status`, `/context`, `/agents`, `/jobs`, `/settings`, `/memory`, `/export`, `/exit`, `/quit`, `/sessions`, `/switch`, `/new`, and `/assistant`. `/context`, `/agents`, `/jobs`, `/settings`, and `/sessions` replace the left main area and preserve the outer frame and active-workspace sidebar. `/effort` only accepts reasoning levels advertised by the selected model; model and effort selections are independent for each live session. `/memory` reports the current session setting, while `/memory on` and `/memory off` persist it. The fixed assistant defaults to memory on and project sessions default to off. Enabled sessions receive `memory_save` and `memory_search`; stored memories are shared so another enabled session can recall them. dsh-base may add `/feedback`, `/goal`, `/compact`, `/permission`, and `/plan`. The bundle does not provide `/queue`, `/palette`, `/reload`, `/fleet`, or `/memories`.
 
 Use `/new` for another session in the active project. Use the whole command remainder as a project path, including spaces:
 
@@ -75,9 +77,9 @@ The bundled `cordis.patch.yml` installs the TUI with these defaults:
     maxToolOutputLines: 6
 ```
 
-`sidebarWidth` sets the preferred right-sidebar width in terminal columns, defaults to 32, and accepts values of 24 or greater. The outer frame reserves one row and column on each edge. Below 65 total columns the sidebar hides so the main area remains usable. A height of at least 24 rows is recommended to keep Workspace, Sessions, Current, Status, and the editor visible together.
+`sidebarWidth` sets the preferred right-sidebar width in terminal columns, defaults to 32, and accepts values of 24 or greater. The outer frame reserves one row and column on each edge. Below 65 total columns the sidebar hides so the main area remains usable. A height of at least 24 rows is recommended to keep Workspace, Active sessions, Status, and the editor visible together.
 
-The package also exports `@lk251066/dsh-tui/prompt` and `@lk251066/dsh-tui/invariant` for its bundle composition. Treat the bundled patch as the supported entry path; direct manual profile composition must provide every service injected by the TUI.
+The package also exports `@lk251066/dsh-tui/prompt`, `@lk251066/dsh-tui/invariant`, and `@lk251066/dsh-tui/memory` for its bundle composition. Treat the bundled patch as the supported entry path; direct manual profile composition must provide every service injected by the TUI, including attachment storage and the memory storage domain.
 
 ## Runtime requirements
 

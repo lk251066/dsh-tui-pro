@@ -17,7 +17,7 @@ import time
 from pathlib import Path
 
 
-FRAME_MARKERS = (b"Workspace", b"Active", b"Status", b"Queue", b"Perm", b"Plan")
+FRAME_MARKERS = (b"Workspace", b"Active", b"Status", b"Perm", b"plan")
 FORBIDDEN_MARKERS = (
     b"fatal load failure",
     b"plugin tree failed to load",
@@ -37,7 +37,7 @@ INTERACTIONS = (
     (0.4, b"\x1b"),
     (0.2, b"/effort\r"),
     (0.5, b"/details collapsed reasoning off\r"),
-    (0.2, b"/theme dark\r"),
+    (0.2, b"/theme dracula\r"),
     (0.2, b"/rename PTY command audit\r"),
     (0.2, b"/context\r"),
     (0.4, b"\x1b"),
@@ -45,8 +45,11 @@ INTERACTIONS = (
     (0.4, b"\x1b"),
     (0.2, b"/jobs\r"),
     (0.4, b"\x1b"),
-    (0.2, b"/queue\r"),
-    (0.4, b"\x1b"),
+    (0.2, b"/memory\r"),
+    (0.2, b"/memory on\r"),
+    (0.2, b"/memory off\r"),
+    (0.2, b"\x1bv"),
+    (0.6, b"\x1b"),
     (0.2, b"/status\r"),
     (0.6, b"/export ../pty-export.md\r"),
     (0.3, b"\x1b[<64;10;4M"),

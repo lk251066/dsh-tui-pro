@@ -60,12 +60,17 @@ function workspaceOf(slot: TuiSessionSlot): string {
   return normalized.slice(normalized.lastIndexOf('/') + 1) || cwd
 }
 
-function itemOf(slot: TuiSessionSlot, activeId: SessionId, now: number): SessionListItem {
+function itemOf(
+  slot: TuiSessionSlot,
+  activeId: SessionId,
+  now: number,
+  persistedTitles: ReadonlyMap<SessionId, string>,
+): SessionListItem {
   const events = slot.agent.session.events
   const lastActivityAt = events.at(-1)?.time ?? slot.agent.session.header.createdAt
   return {
     id: String(slot.sessionId),
-    title: titleOf(slot) ?? displayText(String(slot.sessionId)),
+    title: titleOf(slot) ?? persistedTitles.get(slot.sessionId) ?? displayText(String(slot.sessionId)),
     workspace: workspaceOf(slot),
     status: slot.agent.status,
     lastActivityAgo: formatAge(Math.max(0, now - lastActivityAt)),
@@ -83,7 +88,7 @@ export function createSessionLayout(deps: SessionLayoutDeps): SessionLayoutContr
   const sessionList = new SessionListComponent(deps.palette, {
     // Workspace and status sections retain their rows; sessions consume the
     // remaining viewport and scroll around the selected item.
-    maxRows: () => Math.max(3, deps.terminalRows() - 19),
+    maxRows: () => Math.max(3, deps.terminalRows() - 12),
   })
   const sidebar = new WorkspaceSidebarComponent(deps.palette, sessionList, {
     terminalRows: deps.terminalRows,
@@ -95,12 +100,12 @@ export function createSessionLayout(deps: SessionLayoutDeps): SessionLayoutContr
     const assistantSlot = deps.registry.get(ASSISTANT_SESSION_ID)
     const assistant = assistantSlot === undefined
       ? stoppedItem(ASSISTANT_SESSION_ID, 'personal', activeId, persistedTitles.get(ASSISTANT_SESSION_ID) ?? 'Assistant')
-      : rememberTitle(persistedTitles, assistantSlot, itemOf(assistantSlot, activeId, now))
+      : rememberTitle(persistedTitles, assistantSlot, itemOf(assistantSlot, activeId, now, persistedTitles))
     const projects = deps.workspaceSessions.list().map(({ sessionId, workspace }) => {
       const slot = deps.registry.get(sessionId)
       return slot === undefined
         ? stoppedItem(sessionId, workspace.title, activeId, persistedTitles.get(sessionId))
-        : rememberTitle(persistedTitles, slot, itemOf(slot, activeId, now))
+        : rememberTitle(persistedTitles, slot, itemOf(slot, activeId, now, persistedTitles))
     })
     sessionList.setItems([assistant, ...projects])
   }

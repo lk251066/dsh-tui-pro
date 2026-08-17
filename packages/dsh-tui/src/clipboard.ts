@@ -27,13 +27,25 @@ function writeTmuxBuffer(text: string): Promise<void> {
       stdio: ['pipe', 'ignore', 'pipe'],
       windowsHide: true,
     })
+    let settled = false
+    const succeed = (): void => {
+      if (settled) return
+      settled = true
+      resolve()
+    }
+    const fail = (error: unknown): void => {
+      if (settled) return
+      settled = true
+      reject(error)
+    }
     let stderr = ''
     child.stderr.setEncoding('utf8')
     child.stderr.on('data', chunk => { stderr += String(chunk) })
-    child.once('error', reject)
+    child.once('error', fail)
+    child.stdin.once('error', fail)
     child.once('close', (code) => {
-      if (code === 0) resolve()
-      else reject(new Error(stderr.trim() || `tmux exited with code ${String(code)}`))
+      if (code === 0) succeed()
+      else fail(new Error(stderr.trim() || `tmux exited with code ${String(code)}`))
     })
     child.stdin.end(text)
   })

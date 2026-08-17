@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { Terminal } from '@earendil-works/pi-tui'
+import type { Agent } from '@deepseek-ai/dsh-agent'
+import { SessionId } from '@deepseek-ai/dsh-session'
 import type { ApprovalOutcome } from '@deepseek-ai/dsh-user-approval'
 import {
   createTuiTestHarness,
@@ -59,13 +61,13 @@ function ask(result: TuiHarness<FakeTerminal, (code: number) => void>, options: 
   toolName?: string
   callId?: string
   signal?: AbortSignal
-  agent?: 'owned' | 'other'
+  agent?: Agent | 'other'
 } = {}): Promise<ApprovalOutcome> {
   const otherAgent = { ...result.agent, id: 'other-agent' as never }
   return result.ctx.waterfall(
     'approval/request',
     {
-      agent: options.agent === 'other' ? otherAgent : result.agent,
+      agent: options.agent === 'other' ? otherAgent : options.agent ?? result.agent,
       toolName: options.toolName ?? 'bash',
       ...options.callId !== undefined ? { callId: options.callId as never } : {},
       ...options.signal !== undefined ? { signal: options.signal } : {},
@@ -166,6 +168,49 @@ describe('approval overlay', () => {
     // The overlay never opened for the foreign agent.
     expect(result.terminal.output).not.toContain('needs your approval')
     await disposeTuiTestHarness(result)
+  })
+
+  it('handles a nested subagent ask and sends feedback to that subagent', async () => {
+    const result = await setup()
+    const childSession = result.ctx.sessions.create(SessionId('approval-child'))
+    const grandchildSession = result.ctx.sessions.create(SessionId('approval-grandchild'))
+    const child = { ...result.agent, id: childSession.id, session: childSession } as Agent
+    const steer = vi.fn(result.agent.steer.bind(result.agent))
+    const followup = vi.fn(result.agent.followup.bind(result.agent))
+    const grandchild = {
+      ...result.agent,
+      id: grandchildSession.id,
+      session: grandchildSession,
+      status: 'running',
+      steer,
+      followup,
+    } as Agent
+    const disposeChild = result.ctx.agents.register(child)
+    const disposeGrandchild = result.ctx.agents.register(grandchild)
+    vi.spyOn(result.ctx.agents, 'isOwnedBy').mockImplementation((id, owner) =>
+      (id === child.id && owner === result.agent)
+      || (id === grandchild.id && owner === child))
+    try {
+      const outcome = ask(result, { agent: grandchild })
+      await tick()
+      expect(result.terminal.output).toContain('Subagent approval-grandchild')
+
+      result.terminal.send('\t')
+      await tick()
+      result.terminal.send('keep the change scoped')
+      result.terminal.send('\r')
+      await expect(outcome).resolves.toBe('allowed-once')
+      expect(steer).toHaveBeenCalledOnce()
+      expect(followup).not.toHaveBeenCalled()
+      expect(steer.mock.calls[0]?.[0].content).toEqual([
+        { type: 'text', text: '(approval feedback for bash): keep the change scoped' },
+      ])
+      expect(result.agent.steeredOptions).toHaveLength(1)
+    } finally {
+      disposeGrandchild()
+      disposeChild()
+      await disposeTuiTestHarness(result)
+    }
   })
 })
 

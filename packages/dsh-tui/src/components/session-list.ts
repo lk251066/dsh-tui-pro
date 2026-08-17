@@ -54,11 +54,10 @@ export class SessionListComponent extends Container {
 
   /** Resolve one rendered row to its active-session item. */
   itemAtRow(row: number): SessionListItem | undefined {
-    const { start, end } = this.visibleWindow()
-    const itemIndex = start + row - 2
-    return row >= 2 && itemIndex >= start && itemIndex < end
-      ? this.items[itemIndex]
-      : undefined
+    const visible = this.visibleRows()
+    const contentRow = row - 2
+    if (visible.hiddenBelow > 0 && contentRow === visible.rows.length - 1) return undefined
+    return visible.rows[contentRow]?.item
   }
 
   override render(width: number): string[] {
@@ -72,39 +71,60 @@ export class SessionListComponent extends Container {
       return lines
     }
 
-    const { start, end } = this.visibleWindow()
-
-    for (let index = start; index < end; index++) {
-      const item = this.items[index]
-      if (item === undefined) continue
+    const { rows, hiddenAbove, hiddenBelow } = this.visibleRows()
+    for (const row of rows) {
+      const item = row.item
+      if (item === undefined) {
+        lines.push(padToWidth(this.palette.bold(this.palette.dim(` ${row.workspace}`)), width))
+        continue
+      }
       const marker = item.status === 'running'
         ? this.palette.accent('●')
         : item.status === 'idle' ? this.palette.dim('○') : this.palette.dim('·')
       const active = item.isActive ? this.palette.bold('›') : ' '
       const age = item.lastActivityAgo
-      const label = `${item.title} · ${item.workspace}`
-      const titleWidth = Math.max(1, width - 6 - visibleWidth(age))
-      const title = truncateToWidth(label, titleWidth, '…')
+      const titleWidth = Math.max(1, width - 7 - visibleWidth(age))
+      const title = truncateToWidth(item.title, titleWidth, '…')
       const gap = ' '.repeat(Math.max(1, width - 5 - visibleWidth(title) - visibleWidth(age)))
       const titleLine = padToWidth(` ${active} ${marker} ${title}${gap}${this.palette.dim(age)}`, width)
 
       lines.push(titleLine)
     }
 
-    if (start > 0) lines[1] = this.palette.dim(padToWidth(`─ ↑ ${start}`, width))
-    if (end < this.items.length) {
-      lines.push(this.palette.dim(padToWidth(`  ↓ ${this.items.length - end} more`, width)))
+    if (hiddenAbove > 0) lines[1] = this.palette.dim(padToWidth(`─ ↑ ${hiddenAbove}`, width))
+    if (hiddenBelow > 0 && lines.length > 2) {
+      lines[lines.length - 1] = this.palette.dim(padToWidth(`  ↓ ${hiddenBelow} more`, width))
     }
     return lines.slice(0, this.options.maxRows())
   }
 
-  private visibleWindow(): { readonly start: number; readonly end: number } {
-    const visibleItems = Math.max(1, this.options.maxRows() - 2)
-    const activeIndex = Math.max(0, this.items.findIndex(item => item.isActive))
+  private visibleRows(): {
+    readonly rows: readonly { readonly workspace: string; readonly item?: SessionListItem }[]
+    readonly hiddenAbove: number
+    readonly hiddenBelow: number
+  } {
+    const grouped = new Map<string, SessionListItem[]>()
+    for (const item of this.items) {
+      const group = grouped.get(item.workspace)
+      if (group === undefined) grouped.set(item.workspace, [item])
+      else group.push(item)
+    }
+    const allRows: { workspace: string; item?: SessionListItem }[] = []
+    for (const [workspace, items] of grouped) {
+      allRows.push({ workspace })
+      for (const item of items) allRows.push({ workspace, item })
+    }
+    const budget = Math.max(1, this.options.maxRows() - 2)
+    const activeIndex = Math.max(0, allRows.findIndex(row => row.item?.isActive === true))
     const start = Math.max(0, Math.min(
-      activeIndex - Math.floor(visibleItems / 2),
-      this.items.length - visibleItems,
+      activeIndex - Math.floor(budget / 2),
+      allRows.length - budget,
     ))
-    return { start, end: Math.min(this.items.length, start + visibleItems) }
+    const end = Math.min(allRows.length, start + budget)
+    return {
+      rows: allRows.slice(start, end),
+      hiddenAbove: start,
+      hiddenBelow: allRows.length - end,
+    }
   }
 }

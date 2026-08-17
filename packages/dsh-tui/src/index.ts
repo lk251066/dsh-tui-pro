@@ -29,6 +29,7 @@ import {
   assembleContextFor,
   installModelSelection,
   type Agent,
+  type AgentHandle,
   type ModelSelectionRef,
   type AgentStatus,
 } from '@deepseek-ai/dsh-agent'
@@ -106,6 +107,7 @@ import { WorkbenchShellComponent } from './components/workbench-shell.ts'
 import { FullScreenTerminal, terminalMouseInput } from './full-screen-terminal.ts'
 import { NoticeSlotComponent, type NoticeKind } from './components/notice-slot.ts'
 import { WorkingLineComponent } from './components/working-line.ts'
+import { logoFullWidth, SHIMMER_INTERVAL_MS, SHIMMER_WIDTH } from './components/logo.ts'
 import { contextPressureLevel } from './chat/context-pressure.ts'
 import {
   compactTargetLabel,
@@ -161,6 +163,8 @@ import { createGoalBar, type GoalBarController } from './chat/goal-bar.ts'
 import { createPermissionController } from './chat/permission.ts'
 import { createQuestionQueue } from './chat/questions.ts'
 import { createQueueDock, replaceQueuedMessage, type QueueDockController } from './chat/queue-dock.ts'
+import { ImageDraft, pasteClipboardImage, type ImageAttachmentWriter } from './chat/image-draft.ts'
+import type { MemoryScopeDisposer, TuiMemoryService } from './chat/memory.ts'
 import { forkSession } from './chat/fork.ts'
 import {
   agentsLines,
@@ -367,10 +371,12 @@ export interface TuiSessionSlot extends SessionSlot {
   readonly channel: SessionChannel
   /** The goal dock (Ctrl+G actions) for this session. */
   readonly goalBar: GoalBarController
-  /** The steering queue dock (/queue sheet) for this session. */
+  /** The next-turn queue dock for this session. */
   readonly queueDock: QueueDockController
   /** Ordinary editor submissions in their real submission order. */
   readonly submissions: Array<{ readonly text: string; readonly messageId: MessageId }>
+  /** Persisted images waiting for this session's next user message. */
+  readonly imageDraft: ImageDraft
   /** Answers `approval/request` for this slot's agent only. */
   readonly approvals: ApprovalAnswerer
   /** Disposer for this agent's model-selection waterfall listeners. */
@@ -522,8 +528,6 @@ function createTuiChatInternal(
   /** Compact workbench identity read per render for session and model changes. */
   const condensedHeaderInfo = (): CondensedHeaderInfo => ({
     version: TUI_VERSION,
-    model: target.current === undefined ? '' : compactTargetLabel(target.current),
-    cwd: formattedCwd,
     title: sessionTitle ?? (agent.session.events.some(event => event.type === 'user/message')
       ? undefined
       : config.welcome),
@@ -532,8 +536,12 @@ function createTuiChatInternal(
     () => sessionTitle ?? config.welcome,
     palette,
     resolved.theme.color && resolved.theme.truecolor,
-    condensedHeaderInfo,
+    () => agent.session.events.some(event => event.type === 'user/message') || sessionTitle !== undefined
+      ? condensedHeaderInfo()
+      : undefined,
   )
+  let welcomeDelay: ReturnType<typeof setTimeout> | undefined
+  let welcomeShimmer: ReturnType<typeof setInterval> | undefined
   let branch = runtime.gitBranch?.(initialCwd) ?? gitBranch(initialCwd)
   const promptValues: TuiPromptValueHandle[] = [
     ctx.tuiPrompt.register('cwd', palette.bold(palette.accent(formattedCwd))),
@@ -641,7 +649,10 @@ function createTuiChatInternal(
     compactionStatusLine.setText(channel.isCompacting()
       ? palette.dim(`Context being compacted ${formatStatusDuration(renderTime - (channel.compactingStartedAt() ?? renderTime))}`)
       : occupancy !== undefined && contextPressureLevel(occupancy) === 'critical'
-        ? palette.error(`Context low · ${Math.round(occupancy)}% used · run /compact to free space`)
+        ? palette.error(
+            `Context low · ${Math.round(occupancy)}% used`
+            + (ctx.commands.list(agent).some(command => command.name === 'compact') ? ' · run /compact to free space' : ''),
+          )
         : '')
     // `${indicator}` owns the caret column and its trailing gap before the
     // cursor. The active status glyph replaces the `>` caret in place — same
@@ -855,6 +866,29 @@ function createTuiChatInternal(
    */
   const fileReferenceFibers = new Map<Context, Fiber>()
 
+  /** Memory tool registrations owned by each live session slot. */
+  const memoryScopes = new Map<SessionId, MemoryScopeDisposer>()
+
+  const memoryService = (): TuiMemoryService | undefined =>
+    ctx.get('memory') as TuiMemoryService | undefined
+
+  /** Match one live agent's tool scope to its persisted memory switch. */
+  const syncMemoryScope = (slotAgent: Agent): void => {
+    const memory = memoryService()
+    if (memory === undefined) return
+    const sessionId = slotAgent.session.id
+    const installed = memoryScopes.get(sessionId)
+    if (memory.isEnabled(sessionId)) {
+      if (installed === undefined) memoryScopes.set(sessionId, memory.installTools(slotAgent.ctx))
+      return
+    }
+    if (installed === undefined) return
+    memoryScopes.delete(sessionId)
+    void Promise.resolve(installed()).catch((error: unknown) => {
+      if (!isDisposed()) appendNotice(`Memory cleanup failed: ${errorChain(error)}`, 'warning')
+    })
+  }
+
   /**
    * Register the @-file reference prompt section on one agent's scope, or
    * return the existing fiber when that context already carries one.
@@ -965,6 +999,7 @@ function createTuiChatInternal(
     const slotTarget = slotAgent === initialAgent
       ? initialTargetRef
       : { current: initialTarget(slotAgent), assembled: undefined }
+    syncMemoryScope(slotAgent)
     return {
       sessionId: slotAgent.session.id,
       agent: slotAgent,
@@ -973,6 +1008,7 @@ function createTuiChatInternal(
       goalBar: slotGoalBar,
       queueDock: slotQueueDock,
       submissions: [],
+      imageDraft: new ImageDraft(),
       approvals: createApprovalAnswerer({
         ctx,
         resolved,
@@ -1032,6 +1068,11 @@ function createTuiChatInternal(
     slot.goalBar.dispose()
     slot.queueDock.dispose()
     slot.disposeTargetListeners()
+    const memoryScope = memoryScopes.get(slot.sessionId)
+    if (memoryScope !== undefined) {
+      memoryScopes.delete(slot.sessionId)
+      void Promise.resolve(memoryScope()).catch(() => {})
+    }
     for (const [context, registered] of fileReferenceFibers) {
       if (registered === slot.fileReferenceFiber) fileReferenceFibers.delete(context)
     }
@@ -1096,7 +1137,68 @@ function createTuiChatInternal(
 
   const workspaceSessions = createWorkspaceSessions(ctx)
 
-  if (agent.session.id === ASSISTANT_SESSION_ID) setupAssistant(agent.ctx, registry, workspaceSessions)
+  // Handles for agents this TUI created through the factory. A rewind
+  // replacement disposes its source agent through the recorded handle; agents
+  // without one (the config-created startup agent, live re-adoptions) stay
+  // registered and remain recoverable through `/sessions`.
+  const ownedAgentHandles = new Map<SessionId, AgentHandle>()
+
+  /**
+   * Consume one factory handle after publishing its workspace membership and
+   * TUI slot. A failed transfer removes only membership added by this call and
+   * disposes the handle before rejecting.
+   */
+  const adoptOwnedAgent = async (
+    handle: AgentHandle,
+    options: { readonly activate?: boolean; readonly ensureWorkspace?: boolean } = {},
+  ): Promise<void> => {
+    const sessionId = handle.agent.session.id
+    const activate = options.activate ?? true
+    const ensureWorkspace = options.ensureWorkspace ?? true
+    const previousActive = registry.activeId()
+    const alreadyMember = workspaceSessions.has(sessionId)
+    let added = false
+    try {
+      if (ensureWorkspace && !alreadyMember) {
+        await workspaceSessions.add(sessionId)
+        added = true
+      }
+      if (isDisposed()) throw new Error('TUI disposed during session activation')
+      registry.adopt(handle.agent, activate)
+      ownedAgentHandles.set(sessionId, handle)
+    } catch (error: unknown) {
+      const cleanupErrors: unknown[] = []
+      const adopted = registry.get(sessionId)?.agent === handle.agent
+      if (adopted) {
+        try {
+          if (activate) registry.switchTo(previousActive)
+          registry.remove(sessionId)
+        } catch (cleanupError: unknown) {
+          cleanupErrors.push(cleanupError)
+        }
+      }
+      if (added) {
+        try {
+          await workspaceSessions.remove(sessionId)
+        } catch (cleanupError: unknown) {
+          cleanupErrors.push(cleanupError)
+        }
+      }
+      try {
+        await handle.dispose()
+      } catch (cleanupError: unknown) {
+        cleanupErrors.push(cleanupError)
+      }
+      if (cleanupErrors.length > 0) {
+        throw new AggregateError([error, ...cleanupErrors], 'Session activation failed and rollback was incomplete.')
+      }
+      throw error
+    }
+  }
+
+  if (agent.session.id === ASSISTANT_SESSION_ID) {
+    setupAssistant(agent.ctx, registry, workspaceSessions, adoptOwnedAgent)
+  }
 
   /**
    * Start a fresh in-process session (`/new`) and switch to it. The
@@ -1109,11 +1211,12 @@ function createTuiChatInternal(
     const projectCwd = resolve(activeCwd(), requested === '' ? '.' : requested)
     const create = async (): Promise<void> => {
       if (disposed) return
-      const handle = await ctx.agents.create({ sessionId: freshId, seed: [], meta: { cwd: projectCwd } })
-      if (disposed) return
-      await workspaceSessions.add(handle.agent.session.id)
-      if (disposed) return
-      registry.adopt(handle.agent)
+      const handle = await ctx.agents.create({
+        sessionId: freshId,
+        seed: [],
+        meta: { cwd: projectCwd },
+      })
+      await adoptOwnedAgent(handle)
       showTransientNotice(`New session ${displayText(String(freshId))} in ${displayText(projectCwd)}.`)
     }
     const operation = requested === ''
@@ -1137,6 +1240,7 @@ function createTuiChatInternal(
     appendNotice,
     showTransientNotice,
     isDisposed,
+    adoptOwnedAgent,
   })
 
   // Every live session shares one workbench and swaps only its transcript.
@@ -1166,6 +1270,34 @@ function createTuiChatInternal(
   let stoppedTitleAbort: AbortController | undefined
   let stoppedTitleRetry: ReturnType<typeof setTimeout> | undefined
   let stoppedTitleRetryCount = 0
+  // Stopped sessions whose latest cold read returned no title. The title may
+  // still be in the persistence flush pipeline, so these ids earn a bounded
+  // retry plus re-reads on their later title/flush events instead of pinning
+  // the bare session id forever.
+  const pendingStoppedTitles = new Set<SessionId>()
+  let pendingTitleRetry: ReturnType<typeof setTimeout> | undefined
+  let pendingTitleRetryCount = 0
+  const schedulePendingTitleRetry = (): void => {
+    if (
+      pendingTitleRetry === undefined
+      && pendingStoppedTitles.size > 0
+      && pendingTitleRetryCount < STOPPED_TITLE_RETRY_LIMIT
+      && !isDisposed()
+    ) {
+      pendingTitleRetryCount += 1
+      pendingTitleRetry = setTimeout(() => {
+        pendingTitleRetry = undefined
+        refreshStoppedTitles()
+      }, STOPPED_TITLE_RETRY_DELAY_MS)
+    }
+  }
+  // A title/flush edge for a pending id means its title pipeline moved:
+  // re-read with a fresh retry budget.
+  const rereadPendingTitle = (sessionId: SessionId): void => {
+    if (!pendingStoppedTitles.has(sessionId)) return
+    pendingTitleRetryCount = 0
+    refreshStoppedTitles()
+  }
   const refreshStoppedTitles = (): void => {
     const query = currentSessionQuery()
     if (query === undefined) {
@@ -1183,8 +1315,16 @@ function createTuiChatInternal(
       return
     }
     stoppedTitleRetryCount = 0
-    const ids = workspaceSessions.list().map(item => item.sessionId).filter((sessionId, index, all) =>
-      registry.get(sessionId) === undefined && all.indexOf(sessionId) === index)
+    // The fixed assistant row joins the same cold read whenever no live slot
+    // folds its title from memory, so a user-renamed assistant keeps its
+    // title while offline.
+    const ids = [ASSISTANT_SESSION_ID, ...workspaceSessions.list().map(item => item.sessionId)]
+      .filter((sessionId, index, all) => registry.get(sessionId) === undefined && all.indexOf(sessionId) === index)
+    // Pending ids that gained a live slot or left the workspace no longer
+    // need cold retries.
+    for (const pending of [...pendingStoppedTitles]) {
+      if (!ids.includes(pending)) pendingStoppedTitles.delete(pending)
+    }
     if (ids.length === 0 || typeof query.readTitleSnapshots !== 'function') return
     const scan = ++stoppedTitleScan
     stoppedTitleAbort?.abort()
@@ -1193,21 +1333,36 @@ function createTuiChatInternal(
     void query.readTitleSnapshots(ids, controller.signal).then((results) => {
       if (isDisposed() || controller.signal.aborted || scan !== stoppedTitleScan) return
       const titles = new Map<SessionId, string>()
+      let resolvedPending = false
       for (const result of results) {
         if (result.status === 'fulfilled' && result.value.title !== undefined) {
           titles.set(result.sessionId, result.value.title.title)
+          if (pendingStoppedTitles.delete(result.sessionId)) resolvedPending = true
+        } else if (result.status === 'fulfilled') {
+          // No title yet: the flush pipeline may still deliver one.
+          pendingStoppedTitles.add(result.sessionId)
         }
       }
+      // Progress refills the retry budget; a permanently untitled session
+      // still exhausts it and then waits for its own title/flush edge.
+      if (resolvedPending) pendingTitleRetryCount = 0
       persistentLayout.setPersistedTitles(titles)
+      schedulePendingTitleRetry()
       requestRender()
     }, () => {})
   }
   // Mounted channels already request renders for their own events. Background
   // channels are detached, so wake the shared chrome when one of their rows
   // changes; updatePromptValues() then rebuilds the full live-session list.
-  const disposeBackgroundSessionEvents = ctx.on('session/event', (sourceSession) => {
+  const disposeBackgroundSessionEvents = ctx.on('session/event', (sourceSession, event) => {
     const slot = registry.slots().find(candidate => candidate.agent.session === sourceSession)
     if (slot !== undefined && !registry.isActive(slot)) requestRender()
+    if (event.type === 'session/title') rereadPendingTitle(sourceSession.id)
+  })
+  // A pending stopped session that is still live but slotless (LRU-evicted)
+  // delivers its title to persistence at the flush checkpoint; re-read there.
+  const disposeStoppedTitleFlush = ctx.on('session/flush', (flushed) => {
+    rereadPendingTitle(flushed.id)
   })
   const disposeQueuedReferenceTurns = ctx.on('session/event', (sourceSession, event) => {
     if (event.type !== 'turn/end') return
@@ -1226,9 +1381,14 @@ function createTuiChatInternal(
     const slot = registry.slots().find(candidate => candidate.agent === source)
     if (slot !== undefined && !registry.isActive(slot)) requestRender()
   })
+  const disposeOwnedAgentChanges = ctx.on('agent/disposed', ({ agent: source }) => {
+    const handle = ownedAgentHandles.get(source.session.id)
+    if (handle?.agent === source) ownedAgentHandles.delete(source.session.id)
+  })
   const disposeWorkspaceChanges = ctx.on('domain/changed', (change) => {
     if (change.domain === 'workspace') {
       stoppedTitleRetryCount = 0
+      pendingTitleRetryCount = 0
       refreshStoppedTitles()
       requestRender()
     }
@@ -1368,6 +1528,7 @@ function createTuiChatInternal(
       return true
     },
     async openPersisted(sessionId, cwd): Promise<boolean> {
+      if (sessionId === ASSISTANT_SESSION_ID) return assistant.open()
       // Tool consumers resolve relative paths from the resumed agent's
       // immutable session cwd, so cross-workspace sessions can resume in this
       // process even on hosts that cannot replace themselves in place.
@@ -1376,17 +1537,8 @@ function createTuiChatInternal(
         throw error
       })
       if (handle === undefined) return false
-      let adopted = false
-      try {
-        if (isDisposed()) return true
-        await workspaceSessions.add(handle.agent.session.id)
-        if (isDisposed()) return true
-        registry.adopt(handle.agent)
-        adopted = true
-        return true
-      } finally {
-        if (!adopted) await handle.dispose()
-      }
+      await adoptOwnedAgent(handle)
+      return true
     },
     ui,
     editor,
@@ -1394,6 +1546,19 @@ function createTuiChatInternal(
     requestRender,
     isDisposed,
     agentStatus,
+    handoffBlocker(): string | undefined {
+      const busy = ctx.agents.list().find(candidate => candidate.status !== 'idle')
+      if (busy !== undefined) {
+        return `Session "${busy.session.id}" is ${busy.status}; wait for every live session before resume.`
+      }
+      const compacting = registry.slots().find(slot => slot.channel.isCompacting())
+      return compacting === undefined
+        ? undefined
+        : `Session "${compacting.sessionId}" is compacting; wait for it before resume.`
+    },
+    async flushLiveSessions(): Promise<void> {
+      await Promise.all(ctx.agents.list().map(live => ctx.sessions.flush(live.session)))
+    },
   })
 
   const rewind = createRewindController({
@@ -1405,10 +1570,84 @@ function createTuiChatInternal(
     appendNotice,
     requestRender,
     isDisposed,
-    async activate(rewoundAgent, prompt): Promise<void> {
-      await workspaceSessions.add(rewoundAgent.session.id)
-      if (isDisposed()) return
-      registry.adopt(rewoundAgent)
+    async activate(handle, prompt, sourceId): Promise<void> {
+      const rewoundAgent = handle.agent
+      const sourceAgent = registry.get(sourceId)?.agent
+      if (sourceAgent === undefined) {
+        await handle.dispose()
+        throw new Error(`Rewind source "${sourceId}" is no longer live.`)
+      }
+      try {
+        await workspaceSessions.add(rewoundAgent.session.id)
+        if (isDisposed()) throw new Error('TUI disposed during rewind')
+        registry.adopt(rewoundAgent)
+        if (!await workspaceSessions.remove(sourceId)) {
+          throw new Error(`Rewind source "${sourceId}" is not in the active workspace.`)
+        }
+        if (!registry.remove(sourceId)) {
+          throw new Error(`Rewind source "${sourceId}" could not leave the live session set.`)
+        }
+      } catch (error: unknown) {
+        const cleanupErrors: unknown[] = []
+        if (!workspaceSessions.has(sourceId)) {
+          try {
+            await workspaceSessions.add(sourceId)
+          } catch (cleanupError: unknown) {
+            cleanupErrors.push(cleanupError)
+          }
+        }
+        if (registry.get(sourceId) === undefined) {
+          try {
+            registry.adopt(sourceAgent)
+          } catch (cleanupError: unknown) {
+            cleanupErrors.push(cleanupError)
+          }
+        } else if (!registry.switchTo(sourceId)) {
+          cleanupErrors.push(new Error('Rewind could not restore the source session.'))
+        }
+        if (registry.get(rewoundAgent.session.id)?.agent === rewoundAgent) {
+          try {
+            if (!registry.remove(rewoundAgent.session.id)) {
+              cleanupErrors.push(new Error('Rewind could not remove the failed branch session.'))
+            }
+          } catch (cleanupError: unknown) {
+            cleanupErrors.push(cleanupError)
+          }
+        }
+        if (workspaceSessions.has(rewoundAgent.session.id)) {
+          try {
+            await workspaceSessions.remove(rewoundAgent.session.id)
+          } catch (cleanupError: unknown) {
+            cleanupErrors.push(cleanupError)
+          }
+        }
+        try {
+          await handle.dispose()
+        } catch (cleanupError: unknown) {
+          cleanupErrors.push(cleanupError)
+        }
+        if (cleanupErrors.length > 0) {
+          throw new AggregateError([error, ...cleanupErrors], 'Rewind failed and rollback was incomplete.')
+        }
+        throw error
+      }
+      // Replacement, not accumulation: once the branch is active, the
+      // rewound-away session leaves the active workspace list and the
+      // live-slot registry, and its agent is disposed when this TUI owns its
+      // handle. The source log stays on disk, so /sessions can recover it.
+      ownedAgentHandles.set(rewoundAgent.session.id, handle)
+      for (const [messageId, pending] of queuedReferenceContexts) {
+        if (pending.agent.session.id === sourceId) queuedReferenceContexts.delete(messageId)
+      }
+      const sourceHandle = ownedAgentHandles.get(sourceId)
+      if (sourceHandle !== undefined) {
+        ownedAgentHandles.delete(sourceId)
+        // The branch is already active; a source teardown failure is a
+        // cleanup problem, not a rewind failure.
+        await sourceHandle.dispose().catch((error: unknown) => {
+          if (!isDisposed()) appendNotice(`Rewound session cleanup failed: ${errorChain(error)}`, 'warning')
+        })
+      }
       editor.setText(prompt)
       requestRender()
     },
@@ -1421,7 +1660,7 @@ function createTuiChatInternal(
 
   const activateSession = (sessionId: SessionId): void => {
     if (sessionId === agent.session.id) return
-    if (sessionId === ASSISTANT_SESSION_ID) assistant.open()
+    if (sessionId === ASSISTANT_SESSION_ID) void assistant.open()
     else resume.openSession(sessionId)
   }
 
@@ -1653,12 +1892,7 @@ function createTuiChatInternal(
 
   const setReasoning = (show: boolean): void => {
     showReasoning = show
-    const activeStreaming = channel.detachStreaming()
     rebuildTranscript(false)
-    /* v8 ignore next -- the non-streaming command path is covered; this branch preserves an active stream across rebuild. */
-    if (activeStreaming !== undefined) {
-      channel.restoreStreaming(activeStreaming)
-    }
     // State-switch feedback: transient receipt, not transcript history.
     showTransientNotice(`Reasoning ${showReasoning ? 'expanded' : 'collapsed'}.`)
   }
@@ -1912,7 +2146,11 @@ function createTuiChatInternal(
       editor.handleInput('\t')
     }
   }
-  const disposeCommandChanges = ctx.on('commands/change', refreshCommandAutocomplete)
+  const disposeCommandChanges = ctx.on('commands/change', () => {
+    refreshCommandAutocomplete()
+    updatePromptValues()
+    requestRender()
+  })
   refreshCommandAutocomplete()
 
   const refreshSkillCommands = (service: SkillRegistry): void => {
@@ -2001,11 +2239,6 @@ function createTuiChatInternal(
       },
     })
     commandCtx.commands.register({
-      name: 'queue',
-      description: 'Review queued steering messages (edit or remove)',
-      handler: () => { queueDock.showSheet(); return { kind: 'success' } },
-    })
-    commandCtx.commands.register({
       name: 'rename',
       description: 'Rename this session',
       input: { hint: '[title]' },
@@ -2033,10 +2266,7 @@ function createTuiChatInternal(
       handler: async () => {
         await forkSession({
           ctx, resolved, palette, overlayManager, requestRender, isDisposed, appendNotice, agent,
-          activate: async (forkedAgent) => {
-            await workspaceSessions.add(forkedAgent.session.id)
-            if (!isDisposed()) registry.adopt(forkedAgent)
-          },
+          activate: adoptOwnedAgent,
         })
         return { kind: 'success' }
       },
@@ -2076,6 +2306,37 @@ function createTuiChatInternal(
       description: 'Show settings namespaces and where overrides live',
       handler: () => {
         openStaticDialog(insights, 'Settings', settingsLines(insights), () => settingsLines(insights))
+        return { kind: 'success' }
+      },
+    })
+    commandCtx.commands.register({
+      name: 'memory',
+      description: 'Show or set long-term memory for this session',
+      input: { hint: '[on|off]' },
+      handler: async ({ rawInput }) => {
+        const memory = memoryService()
+        if (memory === undefined) {
+          appendNotice('Memory is not available in this composition.', 'warning')
+          return { kind: 'success' }
+        }
+        const value = rawInput.trim().toLocaleLowerCase()
+        if (value === '') {
+          showTransientNotice(`Memory is ${memory.isEnabled(agent.session.id) ? 'on' : 'off'} for this session.`)
+          return { kind: 'success' }
+        }
+        if (value !== 'on' && value !== 'off') {
+          appendNotice('Usage: /memory [on|off]', 'warning')
+          return { kind: 'success' }
+        }
+        const targetAgent = agent
+        const enabled = value === 'on'
+        await memory.setEnabled(targetAgent.session.id, enabled)
+        if (!isDisposed()) {
+          syncMemoryScope(targetAgent)
+          refreshCommandAutocomplete()
+          showTransientNotice(`Memory ${enabled ? 'enabled' : 'disabled'} for this session.`)
+          requestRender()
+        }
         return { kind: 'success' }
       },
     })
@@ -2132,7 +2393,7 @@ function createTuiChatInternal(
     commandCtx.commands.register({
       name: 'assistant',
       description: 'Switch to the personal assistant session',
-      handler: () => { assistant.open(); return { kind: 'success' } },
+      handler: () => { void assistant.open(); return { kind: 'success' } },
     })
   })
   // The @-file reference prompt section registers per-slot (on each agent's
@@ -2240,7 +2501,12 @@ function createTuiChatInternal(
     )
   }
 
-  const submitEditorValue = (value: string, delivery: MessageDelivery = 'auto'): void => {
+  const submitEditorValuePrepared = (
+    value: string,
+    delivery: MessageDelivery,
+    targetSlot: TuiSessionSlot,
+    imageBlocks: readonly ContentBlock[],
+  ): void => {
     const text = value.trim()
     if (text === '') return
     const restoreSubmittedInput = (): void => {
@@ -2251,10 +2517,13 @@ function createTuiChatInternal(
     if (editTarget !== undefined) {
       editor.addToHistory(text)
       editor.setText('')
-      const replacement = replaceQueuedMessage(editTarget, [{ type: 'text', text }])
+      const retainedImages = imageBlocks.length === 0
+        ? editTarget.content.filter(block => block.type === 'image')
+        : imageBlocks
+      const replacement = replaceQueuedMessage(editTarget, [{ type: 'text', text }, ...retainedImages])
+      const attached = queuedReferenceContexts.get(editTarget.id)
+      queuedReferenceContexts.delete(editTarget.id)
       if (agent.inbox.replace(editTarget.id, replacement)) {
-        const attached = queuedReferenceContexts.get(editTarget.id)
-        queuedReferenceContexts.delete(editTarget.id)
         if (attached !== undefined) queuedReferenceContexts.set(replacement.id, attached)
         if (agent.inbox.nextStep.some(message => message.id === replacement.id)) {
           channel.addPendingSteering(replacement.id)
@@ -2263,13 +2532,16 @@ function createTuiChatInternal(
         showTransientNotice('Queued message updated.')
       } else if (agent.status === 'running') {
         // The target left the queue while editing; deliver as fresh steering.
+        if (attached !== undefined) attached.agent.inject(attached.context)
         agent.steer(replacement)
         channel.addPendingSteering(replacement.id)
         recordSubmission(agent, text, replacement)
       } else {
+        if (attached !== undefined) attached.agent.inject(attached.context)
         agent.followup(replacement)
         recordSubmission(agent, text, replacement)
       }
+      targetSlot.imageDraft.clear()
       refreshQueueDock()
       channel.refreshStatus()
       return
@@ -2277,6 +2549,10 @@ function createTuiChatInternal(
     // `/skill:<name>` carries a colon, which the command registry's name
     // grammar rejects, so it is intercepted before generic command routing.
     if (text.startsWith(SKILL_COMMAND_PREFIX)) {
+      if (imageBlocks.length > 0) {
+        appendNotice('Images can be attached only to user messages, not skill commands.', 'warning')
+        return
+      }
       editor.addToHistory(text)
       editor.setText('')
       const { name: skillName, instructions } = parseSkillCommand(text)
@@ -2285,6 +2561,10 @@ function createTuiChatInternal(
       return
     }
     if (value.startsWith('/')) {
+      if (imageBlocks.length > 0) {
+        appendNotice('Images can be attached only to user messages, not commands.', 'warning')
+        return
+      }
       editor.addToHistory(text)
       editor.setText('')
       runCommand(value)
@@ -2301,8 +2581,11 @@ function createTuiChatInternal(
     if (parsed.references.length === 0) {
       editor.addToHistory(text)
       editor.setText('')
-      const message = dispatchMessage([{ type: 'text', text: parsed.text }], undefined, delivery)
-      if (message !== undefined) recordSubmission(agent, text, message)
+      const message = dispatchMessage([{ type: 'text', text: parsed.text }, ...imageBlocks], undefined, delivery)
+      if (message !== undefined) {
+        targetSlot.imageDraft.clear()
+        recordSubmission(agent, text, message)
+      }
       return
     }
     const sessionReferences = ctx.get('sessionReferenceResolver')
@@ -2327,8 +2610,17 @@ function createTuiChatInternal(
       if (editor.getText() === value) editor.setText('')
       // The snapshot travels with the prompt so a blocking admission hook
       // discards them together — see dispatchMessage's attached-context path.
-      const message = dispatchMessage(prepared.content, prepared.additionalContext, delivery, targetAgent, targetChannel)
-      if (message !== undefined) recordSubmission(targetAgent, text, message)
+      const message = dispatchMessage(
+        [...prepared.content, ...imageBlocks],
+        prepared.additionalContext,
+        delivery,
+        targetAgent,
+        targetChannel,
+      )
+      if (message !== undefined) {
+        targetSlot.imageDraft.clear()
+        recordSubmission(targetAgent, text, message)
+      }
     }, (error: unknown) => {
       if (!disposed && !controller.signal.aborted) {
         restoreSubmittedInput()
@@ -2340,7 +2632,94 @@ function createTuiChatInternal(
       requestRender()
     })
   }
+
+  const submitEditorValue = (value: string, delivery: MessageDelivery = 'auto'): void => {
+    if (disposed) {
+      appendNotice(`Agent "${agent.id}" is disposed.`, 'error')
+      return
+    }
+    const targetSlot = registry.active()
+    const imageBlocks = targetSlot.imageDraft.contentBlocks()
+    if (imageBlocks.length === 0) {
+      submitEditorValuePrepared(value, delivery, targetSlot, imageBlocks)
+      return
+    }
+    const text = value.trim()
+    if (text === '') return
+    if (text.startsWith('/')) {
+      submitEditorValuePrepared(value, delivery, targetSlot, imageBlocks)
+      return
+    }
+    const selected = targetSlot.target.current
+    if (selected === undefined) {
+      appendNotice('Select a model before sending images.', 'warning')
+      return
+    }
+    let handedOff = false
+    editor.disableSubmit = true
+    void ctx.llm.resolveModelInfo(selected.provider, selected.model).then(
+      (model) => {
+        if (disposed) return
+        const currentText = editor.getText()
+        if (registry.active() !== targetSlot || (currentText !== '' && currentText !== value)) {
+          appendNotice('Image submission was cancelled because the active draft changed.', 'warning')
+          return
+        }
+        if (!model.inputModalities?.includes('image')) {
+          if (editor.getText() === '') editor.setText(value)
+          appendNotice(`Model ${selected.provider}/${selected.model} does not support image input. Choose a vision-capable model before sending this draft.`, 'warning')
+          return
+        }
+        handedOff = true
+        editor.disableSubmit = false
+        submitEditorValuePrepared(value, delivery, targetSlot, imageBlocks)
+      },
+      (error: unknown) => {
+        if (!disposed) {
+          if (editor.getText() === '') editor.setText(value)
+          appendNotice(`Could not verify image support: ${errorChain(error)}`, 'error')
+        }
+      },
+    ).finally(() => {
+      if (!handedOff) editor.disableSubmit = false
+      requestRender()
+    })
+  }
   editor.onSubmit = (value: string) => { submitEditorValue(value) }
+
+  let imagePasteInFlight = false
+  const pasteImageFromClipboard = (): void => {
+    if (imagePasteInFlight || editor.disableSubmit) return
+    const attachments = ctx.get('attachments') as ImageAttachmentWriter | undefined
+    if (attachments === undefined) {
+      appendNotice('Image attachments are not available in this composition.', 'warning')
+      return
+    }
+    const targetSlot = registry.active()
+    imagePasteInFlight = true
+    editor.disableSubmit = true
+    void pasteClipboardImage(targetSlot.imageDraft, attachments).then(
+      (image) => {
+        if (disposed) return
+        if (registry.active() !== targetSlot) {
+          targetSlot.imageDraft.remove(image.number)
+          appendNotice('Image paste was cancelled because the active session changed.', 'warning')
+          return
+        }
+        const current = editor.getText()
+        const separator = current === '' || /\s$/u.test(current) ? '' : ' '
+        editor.setText(`${current}${separator}${image.placeholder}`)
+        showTransientNotice(`${image.placeholder} attached.`)
+      },
+      (error: unknown) => {
+        if (!disposed) appendNotice(`Image paste failed: ${errorChain(error)}`, 'error')
+      },
+    ).finally(() => {
+      imagePasteInFlight = false
+      editor.disableSubmit = false
+      requestRender()
+    })
+  }
 
   const removeInputListener = ui.addInputListener((data) => {
     if (overlayManager.hasActiveOverlay()) return undefined
@@ -2353,6 +2732,11 @@ function createTuiChatInternal(
         void writeClipboardText(result.copiedText)
       }
       if (result?.consumed === true) requestRender()
+      return { consume: true }
+    }
+
+    if (editor.focused && matchesKey(data, 'alt+v')) {
+      pasteImageFromClipboard()
       return { consume: true }
     }
 
@@ -2441,6 +2825,11 @@ function createTuiChatInternal(
     }
     if (matchesKey(data, Key.escape) && agent.status === 'running') {
       rewindArmedAt = undefined
+      if (editor.getText() === '' && !queueDock.hasEditTarget() && queueDock.armLatestForEdit()) {
+        showTransientNotice('Latest queued message returned to the input.')
+        requestRender()
+        return { consume: true }
+      }
       agent.cancel({ kind: 'user' })
       return { consume: true }
     }
@@ -2492,8 +2881,13 @@ function createTuiChatInternal(
   // detach them with the slot itself. The initial slot is already attached.
 
   const detachListeners = (): void => {
+    if (welcomeDelay !== undefined) clearTimeout(welcomeDelay)
+    if (welcomeShimmer !== undefined) clearInterval(welcomeShimmer)
+    welcomeDelay = undefined
+    welcomeShimmer = undefined
     stoppedTitleAbort?.abort()
     if (stoppedTitleRetry !== undefined) clearTimeout(stoppedTitleRetry)
+    if (pendingTitleRetry !== undefined) clearTimeout(pendingTitleRetry)
     skillAbort.abort()
     fileSearch.dispose()
     noticeSlot.dispose()
@@ -2502,9 +2896,11 @@ function createTuiChatInternal(
     disposeSkillChanges()
     disposePromptChanges()
     disposeBackgroundSessionEvents()
+    disposeStoppedTitleFlush()
     disposeQueuedReferenceTurns()
     disposeQueuedReferenceDiscards()
     disposeBackgroundStatusChanges()
+    disposeOwnedAgentChanges()
     disposeWorkspaceChanges()
     for (const value of promptValues) value.dispose()
     // Every live slot tears down together: session listeners, per-slot
@@ -2544,6 +2940,29 @@ function createTuiChatInternal(
     questions.unregister()
     ui.stop()
     throw error
+  }
+  if (!agent.session.events.some(event => event.type === 'user/message') && sessionTitle === undefined) {
+    welcomeDelay = setTimeout(() => {
+      welcomeDelay = undefined
+      let offset = -SHIMMER_WIDTH
+      welcomeShimmer = setInterval(() => {
+        if (agent.session.events.some(event => event.type === 'user/message') || sessionTitle !== undefined) {
+          if (welcomeShimmer !== undefined) clearInterval(welcomeShimmer)
+          welcomeShimmer = undefined
+          header.setShimmerOffset(undefined)
+          requestRender()
+          return
+        }
+        header.setShimmerOffset(offset)
+        offset += 2
+        if (offset > logoFullWidth()) {
+          if (welcomeShimmer !== undefined) clearInterval(welcomeShimmer)
+          welcomeShimmer = undefined
+          header.setShimmerOffset(undefined)
+        }
+        requestRender()
+      }, SHIMMER_INTERVAL_MS)
+    }, 350)
   }
   tuiServiceFiber = ctx.inject([], (serviceCtx) => {
     new TuiExtensionServiceImpl(serviceCtx, agent, overlayManager)

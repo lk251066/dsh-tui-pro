@@ -81,25 +81,36 @@ export function createPermissionController(deps: PermissionDeps): PermissionCont
         deps.appendNotice('Permission presets are not available in this session.', 'warning')
         return
       }
-      const names = service.names
-      if (names.length === 0) return
-      const index = names.indexOf(service.current(agent().session.events))
-      // `custom` (index -1) restarts the ring from the most restrictive entry.
-      const next = names[(index + 1 + names.length) % names.length] ?? names[0]
-      if (next === undefined) return
-      const spec = service.resolve(next)
-      if (spec.sandbox === 'danger-full-access') {
-        deps.confirmRisk(
-          DANGER_FULL_ACCESS_WARNING,
-          (confirmed) => { if (confirmed) apply(next) },
-        )
-        return
+      try {
+        const names = service.names
+        if (names.length === 0) return
+        const index = names.indexOf(service.current(agent().session.events))
+        // `custom` (index -1) restarts the ring from the most restrictive entry.
+        const next = names[(index + 1 + names.length) % names.length] ?? names[0]
+        if (next === undefined) return
+        const spec = service.resolve(next)
+        if (spec.sandbox === 'danger-full-access') {
+          deps.confirmRisk(
+            DANGER_FULL_ACCESS_WARNING,
+            (confirmed) => { if (confirmed) apply(next) },
+          )
+          return
+        }
+        apply(next)
+      } catch (error) {
+        deps.appendNotice(`Failed to switch permission preset: ${String(error)}`, 'error')
       }
-      apply(next)
     },
     chip(): string | undefined {
       const service = presets()
-      return service === undefined ? undefined : service.current(agent().session.events)
+      if (service === undefined) return undefined
+      try {
+        return service.current(agent().session.events)
+      } catch {
+        // The cycle path reports service failures. Rendering must stay pure and
+        // available even when an optional permission provider is unhealthy.
+        return undefined
+      }
     },
   }
 }

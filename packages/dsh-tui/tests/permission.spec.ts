@@ -98,4 +98,35 @@ describe('Shift+Tab permission ring', () => {
     expect(applied).toEqual(['danger-full-access', 'read-only'])
     await disposeTuiTestHarness(result)
   })
+
+  it.each(['current', 'resolve'] as const)('reports a %s failure without changing the preset', async (failure) => {
+    const set = vi.fn()
+    const terminal = new FakeTerminal()
+    const result = await createTuiTestHarness(terminal, vi.fn(), {
+      configureContext: async (ctx) => {
+        ctx.provide('permissionPresets', {
+          names: ['read-only', 'workspace-write'],
+          current: () => {
+            if (failure === 'current') throw new Error('current failed')
+            return 'read-only'
+          },
+          resolve: () => {
+            if (failure === 'resolve') throw new Error('resolve failed')
+            return { sandbox: 'workspace-write' }
+          },
+          set,
+        } as never)
+      },
+    })
+    terminal.output = ''
+    terminal.send('\x1b[Z')
+    await new Promise(resolve => setTimeout(resolve, 25))
+
+    expect(set).not.toHaveBeenCalled()
+    expect(terminal.output).toContain('Failed to switch permission preset: Error:')
+    expect(terminal.output).toContain(failure)
+    expect(terminal.output).toContain('failed')
+    expect(terminal.output).not.toContain('Full access')
+    await disposeTuiTestHarness(result)
+  })
 })

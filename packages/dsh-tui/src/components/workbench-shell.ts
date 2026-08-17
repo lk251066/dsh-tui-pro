@@ -224,15 +224,15 @@ export class WorkbenchShellComponent implements Component {
     const height = Math.max(0, Math.floor(this.options.terminalRows()))
     if (width <= 0 || height === 0) return []
 
-    const top = this.palette.accent(frameLine(width, '┌', '─', '┐'))
+    const top = this.palette.dim(frameLine(width, '┌', '─', '┐'))
     if (height === 1) return [top]
-    const bottom = this.palette.accent(frameLine(width, '└', '─', '┘'))
+    const bottom = this.palette.dim(frameLine(width, '└', '─', '┘'))
     if (height === 2) return [top, bottom]
 
     const innerWidth = Math.max(0, width - 2)
     const innerHeight = height - 2
-    const leftBorder = this.palette.accent('│')
-    const rightBorder = this.palette.accent('│')
+    const leftBorder = this.palette.dim('│')
+    const rightBorder = this.palette.dim('│')
     if (innerWidth === 0) {
       return [top, ...Array.from({ length: innerHeight }, () => `${leftBorder}${rightBorder}`), bottom]
     }

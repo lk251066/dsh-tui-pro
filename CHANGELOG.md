@@ -4,6 +4,30 @@ All notable changes to this project will be documented in this file.
 
 The `v1.0.0` tag is not an installable public release: no npm package was published, and the repository-root tarball does not contain the required dsh bundle metadata. See [REPAIR_PLAN.md](REPAIR_PLAN.md) for the first verified release criteria.
 
+## [1.7.0] - 2026-08-18
+
+### Added
+
+- Add `Alt+V` clipboard image drafts backed by the attachment store, with PNG, JPEG, WebP, and GIF support and explicit vision-model capability checks.
+- Add durable shared memories with per-session `/memory [on|off]`; no argument reports status, the assistant defaults on, and project sessions default off.
+- Add a large welcome view for untitled sessions with no user messages.
+
+### Changed
+
+- Return the latest queued message to the editor on Esc before allowing a running turn to be cancelled.
+- Replace the active session during checkpoint rewind while retaining the rewound-away log in complete history.
+- Group Active sessions by workspace, remove the duplicate Current and Queue rows, simplify the header and outer frame, and keep cwd, branch, model, and context in the bottom status line.
+
+### Fixed
+
+- Dispose factory-created agents on every failed adoption path and keep workspace membership consistent across create, resume, fork, rewind, and assistant recovery.
+- Preserve queued reference context during edit recovery, live streaming during theme or session changes, todo state across turns, and compaction progress inside a turn.
+- Reject terminal handoff while any live agent is running, route nested subagent approvals through the TUI, and handle clipboard, permission, approval-height, title-loading, and tool-stall failures without corrupting the workbench.
+
+### Removed
+
+- Remove `/queue`; Tab queues, empty Up recalls or edits queued input, and Esc recovers the latest queued message.
+
 ## [1.6.3] - 2026-08-17
 
 ### Added
@@ -205,5 +229,5 @@ The published npm package, annotated `v1.0.1` tag, and checksummed GitHub Releas
 
 - **Repository**: https://github.com/lk251066/dsh-tui-pro
 - **NPM Package**: https://www.npmjs.com/package/@lk251066/dsh-tui
-- **GitHub Release**: https://github.com/lk251066/dsh-tui-pro/releases/tag/v1.4.0
-- **Plugin Catalog**: ready for submission using [PLUGIN_SUBMISSION.md](PLUGIN_SUBMISSION.md)
+- **GitHub Release**: https://github.com/lk251066/dsh-tui-pro/releases/tag/v1.7.0
+- **Plugin Catalog**: https://dshfind.com/zh/plugins/lk251066/dsh-tui-pro

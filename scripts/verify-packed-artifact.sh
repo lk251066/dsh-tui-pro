@@ -18,6 +18,8 @@ grep -Fx 'package/lib/index.js' "$packed_files"
 grep -Fx 'package/lib/index.d.ts' "$packed_files"
 grep -Fx 'package/lib/invariant.js' "$packed_files"
 grep -Fx 'package/lib/prompt.js' "$packed_files"
+grep -Fx 'package/lib/chat/memory.js' "$packed_files"
+grep -Fx 'package/lib/chat/memory.d.ts' "$packed_files"
 grep -Fx 'package/lib/workspace-agent-loop.js' "$packed_files"
 grep -Fx 'package/lib/workspace-agent-loop.d.ts' "$packed_files"
 grep -Fx 'package/README.md' "$packed_files"
@@ -43,6 +45,7 @@ pi_editor="$extract_dir/package/node_modules/@earendil-works/pi-tui/dist/compone
 test "$(node -p "require(process.argv[1]).dsh.bundle.patch" "$manifest")" = './cordis.patch.yml'
 test "$(node -p "require(process.argv[1]).publishConfig.access" "$manifest")" = 'public'
 test "$(node -p "require(process.argv[1]).exports['./workspace-agent-loop'].default" "$manifest")" = './lib/workspace-agent-loop.js'
+test "$(node -p "require(process.argv[1]).exports['./memory'].default" "$manifest")" = './lib/chat/memory.js'
 test "$(node -p "require(process.argv[1]).version" "$pi_manifest")" = '0.80.7'
 grep -F 'setPrompt(prompt)' "$pi_editor"
 
@@ -65,5 +68,11 @@ for dependency in "${bundle_dependencies[@]}"; do
   node -e "const manifest=require(process.argv[1]); const dependency=process.argv[2]; if (manifest.dependencies?.[dependency] === undefined) process.exit(1)" "$manifest" "$dependency"
   grep -F "name: '$dependency'" "$patch"
 done
+
+grep -F "name: '@lk251066/dsh-tui/memory'" "$patch"
+! grep -F "name: '@deepseek-ai/dsh-attachment-local'" "$patch"
+node -e "const manifest=require(process.argv[1]); if (manifest.dependencies?.['@deepseek-ai/dsh-attachment-local'] !== undefined) process.exit(1)" "$manifest"
+node -e "const manifest=require(process.argv[1]); if (manifest.dependencies?.['@deepseek-ai/dsh-brand'] === undefined) process.exit(1)" "$manifest"
+node -e "const manifest=require(process.argv[1]); if (manifest.dependencies?.zod === undefined) process.exit(1)" "$manifest"
 
 ! grep -F "name: '@deepseek-ai/dsh-memory'" "$patch"

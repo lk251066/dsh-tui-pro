@@ -7,7 +7,8 @@
  *
  * Every claimed request resolves on ALL paths (choice, Esc, abort, overlay
  * error, shutdown): a hung overlay would hang the tool call behind it. Requests
- * for other agents (subagents) fall through to `next()` unchanged.
+ * from this agent and its live runtime descendants share the queue; unrelated
+ * agents fall through to `next()` unchanged.
  * @module @deepseek-ai/dsh-tui/chat/approval
  */
 
@@ -82,14 +83,14 @@ export function createApprovalAnswerer(deps: ApprovalAnswererDeps): ApprovalAnsw
    * model reads `(approval feedback for <tool>): <text>` at its next step
    * boundary alongside the tool result it just earned.
    */
-  const deliverFeedback = (toolName: string, feedback: string): void => {
+  const deliverFeedback = (target: Agent, toolName: string, feedback: string): void => {
     try {
       const message = createUserMessage({
         content: [{ type: 'text', text: `(approval feedback for ${toolName}): ${feedback}` }],
         source: { kind: 'user' },
       })
-      if (agent.status === 'running') agent.steer(message)
-      else agent.followup(message)
+      if (target.status === 'running') target.steer(message)
+      else target.followup(message)
     } catch (error) {
       deps.appendNotice(`Failed to deliver approval feedback: ${String(error)}`, 'error')
     }
@@ -101,24 +102,27 @@ export function createApprovalAnswerer(deps: ApprovalAnswererDeps): ApprovalAnsw
     if (pending === undefined) return
     active = pending
     const request = pending.request
+    const callLabel = request.agent === agent
+      ? deps.pendingCallLabel(request.callId)
+      : `Subagent ${request.agent.session.id}`
     const session = overlayManager.open({
       ...request.signal === undefined ? {} : { signal: request.signal },
       create: () => new ApprovalDialog(
         request.toolName,
         request.reason,
-        deps.pendingCallLabel(request.callId),
+        callLabel,
         palette,
         (choice: ApprovalChoice, feedback?: string) => {
           if (choice === 'allow-session') sessionAllowedTools.add(request.toolName)
           settle(pending, choice === 'reject' ? 'rejected' : 'allowed-once')
-          if (feedback !== undefined) deliverFeedback(request.toolName, feedback)
+          if (feedback !== undefined) deliverFeedback(request.agent, request.toolName, feedback)
           showNext()
         },
         () => { /* settled by the choice handler */ },
       ),
       options: {
         width: Math.min(resolved.questionDialogWidth, 100),
-        maxHeight: resolved.questionDialogMaxHeight,
+        maxHeight: deps.questionMaxHeight(),
       },
     }, 'inline')
     pending.overlay = session
@@ -133,8 +137,28 @@ export function createApprovalAnswerer(deps: ApprovalAnswererDeps): ApprovalAnsw
     deps.requestRender()
   }
 
+  /** Whether one live agent is this root or a runtime descendant of it. */
+  const belongsToRoot = (candidate: Agent): boolean => {
+    if (candidate === agent) return true
+    const live = ctx.agents.list()
+    const seen = new Set<Agent>([agent])
+    const pending = [agent]
+    while (pending.length > 0) {
+      const parent = pending.shift()
+      /* v8 ignore next -- pending only receives concrete agents. */
+      if (parent === undefined) break
+      for (const child of live) {
+        if (seen.has(child) || !ctx.agents.isOwnedBy(child.id, parent)) continue
+        if (child === candidate) return true
+        seen.add(child)
+        pending.push(child)
+      }
+    }
+    return false
+  }
+
   const removeListener = ctx.on('approval/request', (request: ApprovalRequest, next) => {
-    if (request.agent !== agent) return next()
+    if (!belongsToRoot(request.agent)) return next()
     // A session grant answers without a prompt: the tool was allowed for this
     // TUI's lifetime, so the ask resolves allowed-once immediately.
     if (sessionAllowedTools.has(request.toolName)) {

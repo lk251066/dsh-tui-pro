@@ -1,6 +1,6 @@
 /**
  * Queue-dock controller: mirrors the agent's inbox lanes into the dock, drives
- * the `/queue` sheet, and carries the edit-in-flight target so a submitted
+ * the compact queue dock, and carries the edit-in-flight target so a submitted
  * edit REPLACES its queued message instead of enqueuing a new one.
  * @module @deepseek-ai/dsh-tui/chat/queue-dock
  */
@@ -8,7 +8,7 @@
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { createUserMessage, type ContentBlock, type MessageId, type UserMessage } from '@deepseek-ai/dsh-llm'
 import { contentText } from '../components/content.ts'
-import { QueueDialog, QueueDockComponent, type QueueEntry } from '../components/queue-dock.ts'
+import { QueueDockComponent, type QueueEntry } from '../components/queue-dock.ts'
 import type { ChannelNotice, ChatChannelDeps } from './channel.ts'
 
 /** Collaborators the queue dock needs from the chat channel. */
@@ -30,8 +30,6 @@ export interface QueueDockController {
   readonly component: QueueDockComponent
   /** Re-derive from the inbox (call on inbox events). */
   refresh(): void
-  /** Open the `/queue` management sheet. */
-  showSheet(): void
   /** How many messages currently wait in the inbox lanes. */
   pendingCount(): number
   /**
@@ -109,39 +107,6 @@ export function createQueueDock(deps: QueueDockDeps): QueueDockController {
     component,
     refresh(): void {
       component.update(entries())
-      deps.requestRender()
-    },
-    showSheet(): void {
-      const current = entries()
-      const session = deps.overlayManager.open({
-        create: () => new QueueDialog(
-          current,
-          deps.palette,
-          (entry) => {
-            const message = [...agent.inbox.nextStep, ...agent.inbox.nextTurn]
-              .find(candidate => candidate.id === entry.id)
-            if (message === undefined) {
-              deps.appendNotice('That queued message is no longer pending.', 'warning')
-              return
-            }
-            editTarget = message
-            deps.loadIntoEditor(contentText(message.content))
-          },
-          (entry) => {
-            try {
-              agent.inbox.remove(entry.id as MessageId)
-              // A removal receipt is pure operation feedback: transient when the
-              // channel offers the notice slot, persistent otherwise.
-              if (deps.showTransientNotice !== undefined) deps.showTransientNotice('Queued message removed.')
-              else deps.appendNotice('Queued message removed.')
-            } catch (error) {
-              deps.appendNotice(`Failed to remove the queued message: ${String(error)}`, 'error')
-            }
-          },
-          () => { void session.close() },
-        ),
-        options: { width: 76, maxHeight: 16 },
-      }, 'inline')
       deps.requestRender()
     },
     pendingCount(): number {

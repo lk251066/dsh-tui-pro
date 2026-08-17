@@ -1,5 +1,17 @@
 # Terminal Workbench
 
+## 1.7.0 changes
+
+The fixed workbench keeps one compact header, a workspace-grouped Active-session list, and a compact Status section. The bottom line is the single home for cwd, branch, model, and context. New untitled sessions show the welcome view until their first user message. The outer frame remains fixed while only the transcript scrolls.
+
+Running input uses Enter for immediate steering and Tab for the next turn. Empty Up recalls the latest submission. With an empty editor, Esc first returns the latest queued message to the editor; Esc can cancel the turn when no queued message remains. `/queue` is not registered.
+
+Double Escape remains the current-conversation checkpoint navigator. Confirming a checkpoint replaces the source session in Active with its branch and restores the selected prompt for editing. The source log remains available through `/sessions`, so repeated rewind does not grow the active list.
+
+`Alt+V` reads PNG, JPEG, WebP, or GIF data from the system clipboard and adds an `[Image #N]` placeholder to that session's draft. Sending requires a selected model that explicitly advertises image input. A text-only or unknown model retains the draft.
+
+`/memory`, `/memory on`, and `/memory off` control long-term memory for the current session. The assistant defaults on and project sessions default off. Enabled sessions can save and search the shared durable memory store; disabling a session removes its memory tools and prompt sections without deleting stored memories.
+
 ## 1.6.3 changes
 
 Click a project session in the right sidebar, then press `Delete` from an empty input to remove it from `Active sessions`. The current conversation remains open and usable, and its complete history remains available through `/sessions`. The assistant cannot be removed. A non-empty input keeps normal editor `Delete` behavior.

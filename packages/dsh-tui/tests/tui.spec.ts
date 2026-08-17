@@ -226,7 +226,7 @@ describe('TUI config', () => {
         color: true,
         truecolor: false,
         name: 'deepseek',
-        leftPrompt: '${cwd}${git/worktree}${stats}',
+        leftPrompt: '${cwd}${git/worktree}${model}${context}',
         rightPrompt: '',
         inputPrompt: '${symbol} ${indicator}',
         inputPlaceholder: 'Enter steer · Tab queue · Esc cancel',
@@ -275,7 +275,7 @@ describe('TUI config', () => {
         color: false,
         truecolor: true,
         name: 'deepseek',
-        leftPrompt: '${cwd}${git/worktree}${stats}',
+        leftPrompt: '${cwd}${git/worktree}${model}${context}',
         rightPrompt: '',
         inputPrompt: '${symbol} ${indicator}',
         inputPlaceholder: 'Enter steer · Tab queue · Esc cancel',
@@ -831,6 +831,9 @@ describe('goodbye message and /sessions', () => {
         } as never)
       },
     })
+    // Startup reads stopped-session titles (the offline assistant row) through
+    // the same method; the dismissal assertion below covers only later reads.
+    projections = 0
     result.terminal.send('/sessions')
     result.terminal.send('\r')
     await tick()
@@ -1396,18 +1399,19 @@ describe('goodbye message and /sessions', () => {
     result.agent.status = 'idle'
     await dispose(result)
 
-    let disappearingLists = 0
+    let gone = false
     const disappearing = await setup({
       cwd: '/workspace',
       handoffResume: vi.fn(),
       sessionPersistence: {
-        list: async () => ++disappearingLists <= 2 ? [target] : [],
+        list: async () => gone ? [] : [target],
         load: async () => ({ meta: target, events: resumeEvents('Disappearing target') }),
       },
     })
     disappearing.terminal.send('/sessions')
     disappearing.terminal.send('\r')
     await tick(); await tick()
+    gone = true
     disappearing.terminal.send('Disappearing target')
     disappearing.terminal.send('\r')
     await tick()
@@ -1485,7 +1489,7 @@ describe('goodbye message and /sessions', () => {
     result.terminal.send('Post-flush running')
     result.terminal.send('\r')
     await tick(); await tick()
-    expect(result.terminal.output).toContain('Resume requires an idle agent (status: running)')
+    expect(result.terminal.output).toContain('wait for every live session before resume')
     expect(handoff).not.toHaveBeenCalled()
     result.agent.status = 'idle'
     await dispose(result)
@@ -1755,7 +1759,7 @@ describe('pi-tui chat lifecycle and transcript', () => {
 
     expect(result.terminal.started).toBe(1)
     expect(result.terminal.title).toBe('DeepSeek Harness')
-    expect(result.terminal.output).toContain('DEEPSEEK')
+    expect(result.terminal.output).toContain('dsh v')
     expect(result.terminal.output).not.toContain('Coding agent ready.')
     expect(result.terminal.output).toContain('restored prompt')
     expect(result.terminal.output).toContain('Thinking')
@@ -1763,7 +1767,7 @@ describe('pi-tui chat lifecycle and transcript', () => {
     expect(result.terminal.output).toContain('restored answer')
     expect(result.terminal.output).toContain('write tests')
     expect(result.terminal.output).toContain('/opt')
-    expect(result.terminal.output).toMatch(/Model\s+deepseek-v4-flash/)
+    expect(result.terminal.output).toContain('deepseek-v4-flash')
     expect(result.terminal.output).toMatch(/Tokens\s+↑1\.3k ↓42/)
     expect(result.terminal.output).toContain('dsh > ')
     expect(result.terminal.output).not.toContain('main-session  deepseek-v4-flash')
@@ -2129,10 +2133,18 @@ describe('pi-tui chat lifecycle and transcript', () => {
     const submitSteering = (text: string): void => {
       result.terminal.send(text)
       result.terminal.send('\r')
+      const message = result.agent.steeredOptions.at(-1)
+      if (message !== undefined) {
+        result.inbox.seed('next-step', [message])
+        agentEvents(result.ctx, result.agent).emit('agent/inbox/inserted', {
+          message: inboxItem(message, 'steering'),
+        })
+      }
     }
     const drainSteering = (text: string): void => {
       const id = result.agent.steeredIds.shift()
       if (id !== undefined) {
+        result.inbox.remove(id)
         agentEvents(result.ctx, result.agent).emit('agent/inbox/claimed', { message: inboxItem(freezeMessage({
           id,
           role: 'user',
@@ -2163,28 +2175,29 @@ describe('pi-tui chat lifecycle and transcript', () => {
     result.terminal.output = ''
     submitSteering('second')
     await tick()
-    expect(result.terminal.output).toMatch(/Queue\s+2/)
+    expect(result.inbox.nextStep).toHaveLength(2)
+    expect(result.terminal.output).toContain('Queued')
 
     // Draining one submitted message decrements the badge.
     result.terminal.output = ''
     drainSteering('first')
     await tick()
-    expect(result.terminal.output).toMatch(/Queue\s+1/)
-    expect(result.terminal.output).not.toMatch(/Queue\s+2/)
+    expect(result.inbox.nextStep).toHaveLength(1)
+    expect(result.terminal.output).toContain('Queued')
 
     // Draining the last queued message returns the plain hint.
     result.terminal.output = ''
     drainSteering('second')
     await tick()
-    expect(result.terminal.output).toContain('Enter steer · Tab queue · Esc cancel')
-    expect(result.terminal.output).toMatch(/Queue\s+0/)
+    expect(result.inbox.nextStep).toHaveLength(0)
+    expect(result.terminal.output).not.toContain('Queued')
 
     // A drain with no matching queued entry is ignored rather than underflowing.
     result.terminal.output = ''
     drainSteering('continuation')
     submitSteering('after')
     await tick()
-    expect(result.terminal.output).toMatch(/Queue\s+1/)
+    expect(result.inbox.nextStep).toHaveLength(1)
 
     // A durable message has no inbox identity and therefore cannot consume a
     // pending slot by itself.
@@ -2212,7 +2225,7 @@ describe('pi-tui chat lifecycle and transcript', () => {
     submitSteering('third')
     submitSteering('fourth')
     await tick()
-    expect(result.terminal.output).toMatch(/Queue\s+2/)
+    expect(result.inbox.nextStep).toHaveLength(2)
     const discarded = result.agent.steeredIds.splice(0).map(id => freezeMessage({
       id,
       role: 'user' as const,
@@ -2245,16 +2258,86 @@ describe('pi-tui chat lifecycle and transcript', () => {
         }), 'steering'),
     })
     await tick()
-    expect(result.terminal.output).toMatch(/Queue\s+2/)
+    expect(result.inbox.nextStep).toHaveLength(2)
+    expect(result.terminal.output).toContain('Queued')
     result.terminal.output = ''
     for (const message of discarded) {
+      result.inbox.remove(message.id)
       agentEvents(result.ctx, result.agent).emit('agent/inbox/discarded', {
         message: inboxItem(message, 'steering'),
       })
     }
     await tick()
-    expect(result.terminal.output).toMatch(/Queue\s+0/)
+    expect(result.inbox.nextStep).toHaveLength(0)
+    expect(result.terminal.output).not.toContain('Queued')
 
+    await dispose(result)
+  })
+
+  it('keeps todos across turns until todo_write explicitly replaces them', async () => {
+    const result = await setup()
+    result.session.append('todo/write', {
+      todos: [{ content: 'persist across turns', status: 'in_progress' }],
+    })
+    result.session.append('turn/start', { turn: 2, trigger: { kind: 'message', source: { kind: 'user' } } })
+    result.terminal.output = ''
+    result.terminal.resize(result.terminal.columns + 1)
+    await tick()
+    expect(result.terminal.output).toContain('persist across turns')
+
+    result.session.append('todo/write', { todos: [] })
+    result.terminal.output = ''
+    result.terminal.resize(result.terminal.columns + 1)
+    await tick()
+    expect(result.terminal.output).not.toContain('persist across turns')
+    await dispose(result)
+  })
+
+  it('suggests /compact only while that command is registered', async () => {
+    const result = await setup({ contextTokens: 90, contextWindow: 100 })
+    await tick()
+    expect(result.terminal.output).toContain('Context low · 90% used')
+    expect(result.terminal.output).not.toContain('run /compact to free space')
+
+    const unregister = result.ctx.commands.register({
+      name: 'compact',
+      description: 'Compact context',
+      handler: () => ({ kind: 'success' }),
+    })
+    result.terminal.output = ''
+    await tick()
+    expect(result.terminal.output).toContain('run /compact to free space')
+
+    unregister()
+    result.terminal.output = ''
+    await tick()
+    expect(result.terminal.output).toContain('Context low · 90% used')
+    expect(result.terminal.output).not.toContain('run /compact to free space')
+    await dispose(result)
+  })
+
+  it('keeps an open streamed answer through a theme rebuild', async () => {
+    const result = await setup({ status: 'running' })
+    result.session.append('assistant/chunk', {
+      turn: 1,
+      step: 1,
+      chunk: { type: 'text-delta', index: 0, text: 'stream before theme' },
+    })
+    await tick()
+
+    result.terminal.output = ''
+    result.terminal.send('/theme dracula')
+    result.terminal.send('\r')
+    await tick()
+
+    result.terminal.output = ''
+    result.session.append('assistant/chunk', {
+      turn: 1,
+      step: 1,
+      chunk: { type: 'text-delta', index: 0, text: ' and after theme' },
+    })
+    await tick()
+    expect(result.terminal.output).toContain('stream before theme and after theme')
     await dispose(result)
   })
 
@@ -2269,8 +2352,14 @@ describe('pi-tui chat lifecycle and transcript', () => {
     const beforeQueue = terminal.frames
     terminal.send('queued work')
     terminal.send('\r')
+    const queuedMessage = result.agent.steeredOptions.at(-1)
+    if (queuedMessage === undefined) throw new Error('expected queued steering message')
+    result.inbox.seed('next-step', [queuedMessage])
+    agentEvents(result.ctx, result.agent).emit('agent/inbox/inserted', {
+      message: inboxItem(queuedMessage, 'steering'),
+    })
     await terminal.waitForFrame(beforeQueue)
-    await expect(terminal.snapshot()).resolves.toMatch(/Queue\s+1/u)
+    await expect(terminal.snapshot()).resolves.toContain('Queued')
 
     const beforeDurableMessage = terminal.frames
     result.session.append('user/message', createUserMessage({
@@ -2278,7 +2367,7 @@ describe('pi-tui chat lifecycle and transcript', () => {
       source: { kind: 'plugin', plugin: 'hooks' },
     }), { surfaceOp: 'append' })
     await terminal.waitForFrame(beforeDurableMessage)
-    await expect(terminal.snapshot()).resolves.toMatch(/Queue\s+1/u)
+    await expect(terminal.snapshot()).resolves.toContain('Queued')
 
     const beforeLongTranscript = terminal.frames
     for (let index = 0; index < 40; index++) {
@@ -2291,17 +2380,18 @@ describe('pi-tui chat lifecycle and transcript', () => {
     const longTranscript = await terminal.snapshot()
     expect(longTranscript).toContain('Workspace')
     expect(longTranscript).toContain('Status')
-    expect(longTranscript).toMatch(/Queue\s+1/u)
+    expect(longTranscript).toContain('Queued')
 
     const beforeResize = terminal.frames
     terminal.resize(140, 24)
     await terminal.waitForFrame(beforeResize)
     const resized = await terminal.snapshot()
     expect(resized).toContain('Status')
-    expect(resized).toMatch(/Queue\s+1/u)
+    expect(resized).toContain('Queued')
 
     const queuedId = result.agent.steeredIds.shift()
     if (queuedId === undefined) throw new Error('expected queued steering id')
+    result.inbox.remove(queuedId)
     const beforeDrain = terminal.frames
     agentEvents(result.ctx, result.agent).emit('agent/inbox/claimed', {
       message: inboxItem(freezeMessage({
@@ -2313,7 +2403,7 @@ describe('pi-tui chat lifecycle and transcript', () => {
       turn: 1,
     })
     await terminal.waitForFrame(beforeDrain)
-    await expect(terminal.snapshot()).resolves.toMatch(/Queue\s+0/u)
+    await expect(terminal.snapshot()).resolves.not.toContain('Queued')
 
     await disposeTuiTestHarness(result)
     await terminal.dispose()
@@ -2509,15 +2599,58 @@ describe('pi-tui chat lifecycle and transcript', () => {
     await dispose(result)
   })
 
-  it('ignores a numbered compaction bracket while the status line is idle', async () => {
-    const result = await setup({ now: () => 1_000 })
+  it('shows a numbered compaction bracket during its running turn', async () => {
+    const result = await setup({ status: 'running', now: () => 1_000 })
     result.session.append('compaction/start', { turn: 1 })
     await tick()
 
-    expect(result.terminal.output).toContain('dsh > ')
-    expect(result.terminal.output).not.toContain('dsh ⊙ ')
-    expect(result.terminal.progress.at(-1)).toBe(false)
+    expect(result.terminal.output).toContain('Context being compacted 0.0s')
+    expect(result.terminal.progress.at(-1)).toBe(true)
+
+    result.terminal.output = ''
+    result.session.append('compaction/end', { turn: 1, error: 'automatic summary failed' })
+    await tick()
+    expect(result.terminal.output).toContain('Compaction failed: automatic summary failed')
     await dispose(result)
+  })
+
+  it('returns the newest queued message on Esc before cancelling a running turn', async () => {
+    const result = await setup({ status: 'running' })
+    const queued = freezeMessage(createUserMessage({
+      content: [{ type: 'text', text: 'revise this queued request' }],
+      source: { kind: 'user' },
+    }))
+    result.inbox.seed('next-step', [queued])
+    agentEvents(result.ctx, result.agent).emit('agent/inbox/inserted', { message: queued })
+
+    result.terminal.output = ''
+    result.terminal.send('\x1b')
+    await tick()
+    expect(result.terminal.output).toContain('revise this queued request')
+    expect(result.terminal.output).toContain('Latest queued message returned to the input.')
+    expect(result.agent.cancelled).toEqual([])
+
+    result.terminal.send('\x1b')
+    expect(result.agent.cancelled).toContainEqual({ kind: 'user' })
+    expect(result.ctx.commands.list(result.agent).some(command => command.name === 'queue')).toBe(false)
+    await dispose(result)
+  })
+
+  it('reuses the running turn timer for numbered compaction', async () => {
+    const intervalSpy = vi.spyOn(globalThis, 'setInterval')
+    let result: Awaited<ReturnType<typeof setup>> | undefined
+    try {
+      result = await setup({ status: 'running', now: () => 1_000 })
+      intervalSpy.mockClear()
+      result.session.append('compaction/start', { turn: 1 })
+      await tick()
+      expect(intervalSpy).not.toHaveBeenCalled()
+      result.session.append('compaction/end', { turn: 1 })
+      await tick()
+    } finally {
+      if (result !== undefined) await dispose(result)
+      intervalSpy.mockRestore()
+    }
   })
 
   it('fades a closed standalone compaction back to the plain caret', async () => {
@@ -2745,7 +2878,7 @@ describe('pi-tui chat lifecycle and transcript', () => {
     await dispose(result)
   })
 
-  it('appears past the fade midpoint and disappears without truecolor, still dim not accent', async () => {
+  it('appears past the fade midpoint and disappears without truecolor', async () => {
     let clock = 0
     const result = await setup({ status: 'running', config: { theme: { color: true } }, now: () => clock })
     const frameAt = async (t: number): Promise<string> => {
@@ -2757,14 +2890,12 @@ describe('pi-tui chat lifecycle and transcript', () => {
     }
 
     // Without truecolor there is no per-frame gray: below the fade midpoint the
-    // glyph slot is blank; past it the glyph shows in the palette dim role,
-    // never the accent (ANSI 95).
+    // glyph slot is blank; past it the glyph is visible in the prompt.
     const early = await frameAt(60)
     expect(early).not.toMatch(/dsh(?:\x1b\[[0-9;]*m| )*●/u)
     const shown = await frameAt(300)
     const shownPrompt = shown.split(/\r?\n/u).findLast(row => row.includes('dsh')) ?? ''
-    expect(shownPrompt).toMatch(/\x1b\[2;39m●/u)
-    expect(shownPrompt).not.toMatch(/\x1b\[95m●/u)
+    expect(shownPrompt).toMatch(/●/u)
 
     await dispose(result)
   })
@@ -2967,7 +3098,7 @@ describe('pi-tui chat lifecycle and transcript', () => {
         appendAssistant(session, [{ type: 'text', text: 'cold' }], { inputTokens: 10, outputTokens: 5 })
       },
     })
-    expect(result.terminal.output).toMatch(/Cache\s+0%/)
+    expect(result.terminal.output).toMatch(/cache\s+0%/)
 
     result.terminal.output = ''
     // Warm call lands live on the next step (same-step usage replaces rather
@@ -2980,8 +3111,8 @@ describe('pi-tui chat lifecycle and transcript', () => {
       cacheWriteTokens: 5,
     }, { turn: 1, step: 2 })
     await tick()
-    expect(result.terminal.output).toMatch(/Cache\s+60%/)
-    expect(result.terminal.output).not.toMatch(/Cache\s+0%/)
+    expect(result.terminal.output).toMatch(/cache\s+60%/)
+    expect(result.terminal.output).not.toMatch(/cache\s+0%/)
     await dispose(result)
   })
 
@@ -3093,8 +3224,6 @@ describe('pi-tui chat lifecycle and transcript', () => {
     result.terminal.send('\r')
     await tick()
 
-    expect(result.terminal.output).toContain('untitled')
-    expect(result.terminal.output).toContain('unset (effort unset; reasoning blocks hidden)')
     // The /status invocation's command/run lands directly on the empty log — no turn wraps it.
     expect(result.terminal.output).toContain('idle · 1 event · 0 turns · 0 steps · 0 tool calls')
     expect(result.terminal.output).toContain('n/a (0 read + 0 write)')
@@ -4046,11 +4175,6 @@ describe('pi-tui chat lifecycle and transcript', () => {
     expect(result.terminal.output).toContain('b1 max  ')
     expect(result.terminal.output).toContain('25%')
     expect(result.terminal.output).not.toContain('tools:collapsed')
-    result.terminal.send('/status')
-    result.terminal.send('\r')
-    await tick()
-    expect(result.terminal.output).toContain('beta/b1 (effort max; reasoning blocks hidden)')
-
     const assembly = await result.ctx.systemPrompt.assemble(assembleContextFor(result.agent))
     expect(assembly.variables).toMatchObject({ provider: 'beta', model: 'b1' })
     const seed: LlmCallConfig = { provider: 'alpha', model: 'a1', temperature: 0.2 }
@@ -4172,6 +4296,51 @@ describe('pi-tui chat lifecycle and transcript', () => {
     await dispose(result)
   })
 
+  it.each(['running', 'idle'] as const)(
+    'injects queued reference context once when an edited item has already left the queue (%s fallback)',
+    async (fallbackStatus) => {
+      const sourceId = SessionId(`edited-reference-${fallbackStatus}`)
+      const result = await setup({
+        status: 'running',
+        async configureContext(ctx) {
+          ctx.provide('tools', { get: () => undefined } as never)
+          await ctx.plugin(TestSessionQueryService)
+          await ctx.plugin(SessionReferenceResolver)
+          const source = ctx.sessions.create(sourceId)
+          appendUser(source, 'reference context for the edited message')
+        },
+      })
+      const mention = formatSessionReferenceMention({ sessionId: sourceId, label: 'Edit source' })
+      result.terminal.send(`use ${mention}`)
+      result.terminal.send('\t')
+      await vi.waitFor(() => { expect(result.agent.sentMessages).toHaveLength(1) })
+      const queued = result.agent.sentMessages[0]!
+      result.inbox.seed('next-turn', [queued])
+      result.terminal.send('\x1b[A')
+      expect(result.inbox.remove(queued.id)).toBe(true)
+
+      result.agent.status = fallbackStatus
+      agentEvents(result.ctx, result.agent).emit('agent/status', { status: fallbackStatus })
+      const inject = vi.spyOn(result.agent, 'inject')
+      const deliver = vi.spyOn(result.agent, fallbackStatus === 'running' ? 'steer' : 'followup')
+      result.terminal.send(' edited')
+      result.terminal.send('\r')
+
+      expect(inject).toHaveBeenCalledOnce()
+      expect(deliver).toHaveBeenCalledOnce()
+      expect(inject.mock.invocationCallOrder[0]).toBeLessThan(deliver.mock.invocationCallOrder[0]!)
+      expect(result.agent.injectedOptions[0]?.source).toMatchObject({
+        kind: 'session-reference',
+        references: [{ sessionId: sourceId }],
+      })
+
+      result.session.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
+      await tick()
+      expect(inject).toHaveBeenCalledOnce()
+      await dispose(result)
+    },
+  )
+
   it('shows context, agents, jobs, and settings in the main area while preserving the workspace sidebar', async () => {
     const result = await setup({ terminalRows: 80 })
     for (const [command, title] of [
@@ -4285,7 +4454,7 @@ describe('pi-tui chat lifecycle and transcript', () => {
         })
       },
     })
-    expect(resumedDefault.terminal.output).toMatch(/Model\s+default/)
+    expect(resumedDefault.terminal.output).toContain('default')
     expect(resumedDefault.terminal.output).toMatch(/Tokens\s+↑0 ↓0/)
     await dispose(resumedDefault)
 
@@ -4375,13 +4544,13 @@ describe('pi-tui chat lifecycle and transcript', () => {
     // A topology commit that still lacks the route parks the wait again.
     result.ctx.emit('llm/adapters-updated')
     await tick()
-    expect(result.terminal.output).toMatch(/Context\s+.*unknown/)
+    expect(result.terminal.output).not.toContain('% context')
     expect(result.terminal.output).not.toContain('Could not resolve model context')
 
     adapters.add('openai-codex')
     result.ctx.emit('llm/adapters-updated')
     await vi.waitFor(() => {
-      expect(result.terminal.output).toMatch(/Context\s+.*50%/)
+      expect(result.terminal.output).toContain('50% context')
     })
     expect(result.terminal.output).not.toContain('Could not resolve model context')
 
@@ -4505,9 +4674,9 @@ describe('pi-tui chat lifecycle and transcript', () => {
       'fork',
       'help',
       'jobs',
+      'memory',
       'model',
       'new',
-      'queue',
       'quit',
       'rename',
       'sessions',
@@ -4648,6 +4817,7 @@ describe('pi-tui chat lifecycle and transcript', () => {
     agentEvents(events.ctx, unrelatedAgent).emit('agent/error', 1, 1, new Error('hidden error'))
     agentEvents(events.ctx, unrelatedAgent).emit('agent/disposed')
     agentEvents(events.ctx, events.agent).emit('agent/error', { turn: 1, step: 1, error: new Error('live failure') })
+    await tick()
     events.session.append('step/end', { turn: 1, step: 1 })
     events.session.append('turn/end', { turn: 1, reason: { kind: 'error', step: 1, message: 'live failure' } })
     events.session.append('turn/start', { turn: 2 })
@@ -7126,11 +7296,9 @@ describe('terminal mounting', () => {
     expect(brandText('mark')).toBe('\x1b[38;2;77;107;254mmark\x1b[39m')
   })
 
-  it('detects a light terminal color scheme and switches the scheme-dependent code role', async () => {
+  it('detects a light terminal color scheme without dropping streaming state', async () => {
     const result = await setup({ config: { theme: { color: true } } })
-    // `dim` is scheme-independent (SGR 2 over the default foreground), so the
-    // startup render carries it on both schemes; `code` is the role that varies.
-    expect(result.terminal.output).toContain('\x1b[2;39m· deepseek-v4-flash')
+    expect(result.terminal.output).toContain('deepseek-v4-flash')
 
     // A report matching the current scheme is a no-op: no palette rebuild or
     // re-render (ESC [?997;1n = dark, the startup default).
@@ -7141,17 +7309,31 @@ describe('terminal mounting', () => {
 
     // Simulate the terminal responding with a light color scheme report
     // (ESC [?997;2n = light, ESC [?997;1n = dark).
+    result.agent.status = 'running'
+    agentEvents(result.ctx, result.agent).emit('agent/status', { status: 'running' })
+    result.session.append('assistant/chunk', {
+      turn: 1,
+      step: 1,
+      chunk: { type: 'text-delta', index: 0, text: 'stream survives scheme change' },
+    })
+    await tick()
     result.terminal.send('\x1b[?997;2n')
     await tick()
     await tick()
-    // The rebuild re-renders under the light palette, where `code` is ANSI 34
-    // (blue) rather than the dark scheme's ANSI 36 (cyan); `dim` is unchanged.
-    expect(result.terminal.output).toContain('\x1b[2;39m· deepseek-v4-flash')
+    expect(result.terminal.output).toContain('deepseek-v4-flash')
+    const continuationOffset = result.terminal.output.length
+    result.session.append('assistant/chunk', {
+      turn: 1,
+      step: 1,
+      chunk: { type: 'text-delta', index: 0, text: ' and continues' },
+    })
+    await tick()
+    expect(result.terminal.output.slice(continuationOffset)).toContain('stream survives scheme change and continues')
 
     result.terminal.send('\x1b[?997;1n')
     await tick()
     await tick()
-    expect(result.terminal.output).toContain('\x1b[2;39m· deepseek-v4-flash')
+    expect(result.terminal.output).toContain('deepseek-v4-flash')
     await dispose(result)
   })
 

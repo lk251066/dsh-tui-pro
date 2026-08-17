@@ -69,6 +69,12 @@ export interface ChannelRegistry<S extends SessionSlot> {
    * idle-only LRU evicts first when the ceiling would be exceeded.
    */
   adopt(agent: Agent, activate?: boolean): S
+  /**
+   * Drop one non-active slot from the live set and run its final teardown
+   * (rewind replacement). The slot's agent lifecycle is the caller's. Unknown
+   * ids and the active slot are no-ops reporting false.
+   */
+  remove(sessionId: SessionId): boolean
   /** Tear down every live slot (shutdown path). */
   disposeAll(): void
 }
@@ -156,6 +162,13 @@ export function createChannelRegistry<S extends SessionSlot>(
       if (activate) switchTo(slot.sessionId)
       evictToCeiling()
       return slot
+    },
+    remove(sessionId: SessionId): boolean {
+      const slot = slots.get(sessionId)
+      if (slot === undefined || slot === activeSlot) return false
+      slots.delete(sessionId)
+      host.dispose(slot)
+      return true
     },
     disposeAll(): void {
       for (const slot of slots.values()) host.dispose(slot)

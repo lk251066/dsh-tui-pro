@@ -1,7 +1,7 @@
 {
   "name": "@lk251066/dsh-tui",
   "description": "Interactive terminal UI plugin for DeepSeek Harness",
-  "version": "1.6.3",
+  "version": "1.7.0",
   "private": false,
   "type": "module",
   "main": "lib/index.js",
@@ -18,6 +18,10 @@
     "./prompt": {
       "types": "./lib/prompt.d.ts",
       "default": "./lib/prompt.js"
+    },
+    "./memory": {
+      "types": "./lib/chat/memory.d.ts",
+      "default": "./lib/chat/memory.js"
     },
     "./workspace-agent-loop": {
       "types": "./lib/workspace-agent-loop.d.ts",
@@ -92,6 +96,7 @@
     }
   },
   "dependencies": {
+    "@deepseek-ai/dsh-brand": "^0.1.0-rc.6",
     "@deepseek-ai/dsh-session-projection-cache": "^0.1.0-rc.6",
     "@deepseek-ai/dsh-session-reference": "^0.1.0-rc.6",
     "@deepseek-ai/dsh-session-stats": "^0.1.0-rc.6",
@@ -107,7 +112,8 @@
     "get-east-asian-width": "1.6.0",
     "marked": "18.0.5",
     "saxes": "6.0.0",
-    "schemastery": "^3.18.0"
+    "schemastery": "^3.18.0",
+    "zod": "4.4.3"
   },
   "bundledDependencies": [
     "@earendil-works/pi-tui",

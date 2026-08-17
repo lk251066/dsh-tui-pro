@@ -8,6 +8,7 @@ const NOW = 1_700_000_000_000
 /** The dim and warning SGR opens a `createPalette(true)` (dark) line carries. */
 const DIM_SGR = '\x1b[2;39m'
 const WARNING_SGR = '\x1b[33m'
+const stripSgr = (text: string): string => text.replaceAll(/\x1b\[[0-9;]*m/gu, '')
 
 function makeLine(): WorkingLineComponent {
   return new WorkingLineComponent(createPalette(true), () => NOW)
@@ -26,7 +27,7 @@ describe('working line', () => {
     line.update(true, NOW - 1500, undefined, '⠙')
     const [row] = line.render(80)
     expect(row).toContain(DIM_SGR)
-    expect(row).toContain('⠙ Thinking… · 1.5s')
+    expect(stripSgr(row)).toContain('⠙ Thinking… · 1.5s')
     expect(row).not.toContain('↓')
   })
 
@@ -34,7 +35,7 @@ describe('working line', () => {
     const line = makeLine()
     line.update(true, NOW - 2000, undefined, '⠙', { verb: 'Pondering' })
     const [row] = line.render(80)
-    expect(row).toContain('⠙ Pondering · 2.0s')
+    expect(stripSgr(row)).toContain('⠙ Pondering · 2.0s')
     expect(row).not.toContain('Thinking…')
   })
 
@@ -42,7 +43,7 @@ describe('working line', () => {
     const line = makeLine()
     line.update(true, NOW - 2000, 'Reading src/foo.ts', '⠋', { verb: 'Pondering', emittedTokens: 12 })
     const [row] = line.render(80)
-    expect(row).toContain('⠋ Reading src/foo.ts')
+    expect(stripSgr(row)).toContain('⠋ Reading src/foo.ts')
     expect(row).not.toContain('Pondering')
   })
 
@@ -61,7 +62,7 @@ describe('working line', () => {
     line.update(true, NOW - 10_000, undefined, '⠋', { verb: 'Pondering', lastOutputAt: NOW - 5000 })
     const stalled = line.render(80)[0]
     expect(stalled).toContain(WARNING_SGR)
-    expect(stalled).not.toContain(DIM_SGR)
+    expect(stalled).toContain(DIM_SGR)
     // Exactly three seconds is not yet a stall; only beyond it is.
     line.update(true, NOW - 10_000, undefined, '⠋', { verb: 'Pondering', lastOutputAt: NOW - 3000 })
     expect(line.render(80)[0]).toContain(DIM_SGR)

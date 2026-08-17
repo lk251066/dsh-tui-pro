@@ -175,11 +175,11 @@ export interface SessionChannel {
   tokens(): SessionTokenTotals
   /** Whether a turn is currently running (spinner/working-line input). */
   isRunning(): boolean
-  /** Whether a standalone compaction is live (working-line input). */
+  /** Whether a compaction is live (working-line input). */
   isCompacting(): boolean
   /** Render clock of the running turn's start (working-line input). */
   runningStartedAt(): number | undefined
-  /** Render clock of the live standalone compaction's start, when one runs. */
+  /** Render clock of the live compaction's start, when one runs. */
   compactingStartedAt(): number | undefined
   /** The live phase glyph the fade-out should show; feeds the running seed. */
   noteRenderedStatusGlyph(glyph: string | undefined): void
@@ -195,8 +195,6 @@ export interface SessionChannel {
   applyToolsVisibility(visibility: ToolCardVisibility): void
   /** Turns that currently carry registered assistant steps. */
   assistantStepTurns(): Iterable<number>
-  /** Detach the live streaming component (preserved across a rebuild). */
-  detachStreaming(): StreamingAssistantComponent | undefined
   /** Steering submissions not yet claimed or discarded (prompt badge). */
   pendingSteeringCount(): number
   /**
@@ -230,11 +228,6 @@ export interface SessionChannel {
   addPendingSteering(id: MessageId): void
   /** Label of the tool card a pending approval asks about. */
   toolCardLabel(callId: string | undefined): string | undefined
-  /**
-   * Preserve an active stream across a host transcript rebuild: re-attach the
-   * (already detached) streaming component.
-   */
-  restoreStreaming(component: StreamingAssistantComponent): void
 }
 
 /**
@@ -255,12 +248,13 @@ export function createSessionChannel(deps: SessionChannelDeps): SessionChannel {
   let runningStatus: RunningStatus | undefined
   let fadingStatus: FadingStatus | undefined
   /**
-   * Live standalone compaction observed by this process. Never derive this
+   * Live compaction observed by this process. Never derive this
    * state from history: a resumed log may contain a stale orphaned start.
    */
   let compacting: {
+    turn: number | null
     startedAt: number
-    timer: ReturnType<typeof setInterval>
+    timer: ReturnType<typeof setInterval> | undefined
   } | undefined
   // TUI steering submissions that the inbox has not yet claimed or discarded.
   // Correlation ids avoid guessing whether a running-state submission actually
@@ -557,6 +551,7 @@ export function createSessionChannel(deps: SessionChannelDeps): SessionChannel {
         break
       }
       case 'tool/result': {
+        lastOutputAt = event.time
         const callId = event.data.message.source.callId
         let card = toolCards.get(callId)
         if (card === undefined) {
@@ -588,8 +583,6 @@ export function createSessionChannel(deps: SessionChannelDeps): SessionChannel {
         todo.update(event.data.todos)
         break
       case 'turn/start':
-        // Plan strip is turn-scoped: keep it after turn/end for reading, clear on the next turn.
-        todo.update([])
         streamedChars = 0
         lastOutputAt = undefined
         break
@@ -667,6 +660,22 @@ export function createSessionChannel(deps: SessionChannelDeps): SessionChannel {
     return boundary
   }
 
+  /** The one step whose streamed chunks are still live in a running agent. */
+  const liveStep = (events: readonly SessionEvent[]): StepPosition | undefined => {
+    if (agent.status !== 'running') return undefined
+    let open: StepPosition | undefined
+    for (const event of events) {
+      if (event.type === 'step/start') open = { turn: event.data.turn, step: event.data.step }
+      else if (
+        event.type === 'step/end'
+        && open?.turn === event.data.turn
+        && open.step === event.data.step
+      ) open = undefined
+      else if (event.type === 'turn/end' && open?.turn === event.data.turn) open = undefined
+    }
+    return open
+  }
+
   /**
    * Replay the human transcript from the append-only log. The conversation a
    * compaction replaced folds away at its last boundary (Claude Code's
@@ -694,6 +703,7 @@ export function createSessionChannel(deps: SessionChannelDeps): SessionChannel {
     todo.update([])
     const transcriptCalls = transcriptToolCallIds(agent.session)
     const events = agent.session.events
+    const activeStep = liveStep(events)
     const boundary = deps.toolsVisibility() === 'expanded' ? -1 : lastCompactCheckpointIndex(events)
     let foldedMessages = 0
     for (const [index, event] of events.entries()) {
@@ -718,7 +728,10 @@ export function createSessionChannel(deps: SessionChannelDeps): SessionChannel {
         continue
       }
       if (event.type === 'tool/call' && !transcriptCalls.has(event.data.callId)) continue
-      renderEvent(event, { addHistory: populateHistory, renderChunks: false })
+      const renderChunks = event.type === 'assistant/chunk'
+        && activeStep?.turn === event.data.turn
+        && activeStep.step === event.data.step
+      renderEvent(event, { addHistory: populateHistory, renderChunks })
     }
     deps.requestRender()
   }
@@ -751,7 +764,7 @@ export function createSessionChannel(deps: SessionChannelDeps): SessionChannel {
   /** Hard clear: drop every indicator, including a live compaction bracket. */
   const clearStatus = (): void => {
     if (compacting !== undefined) {
-      clearInterval(compacting.timer)
+      if (compacting.timer !== undefined) clearInterval(compacting.timer)
       compacting = undefined
     }
     clearTurnStatus()
@@ -782,7 +795,7 @@ export function createSessionChannel(deps: SessionChannelDeps): SessionChannel {
     deps.onSpinnerFrame(running, runningStatus?.startedAt ?? compacting?.startedAt, pending?.label(), frame, {
       verb: pickSpinnerVerb(verbBase + (runningStatus?.turn ?? 0)),
       emittedTokens: Math.floor(streamedChars / 4),
-      ...lastOutputAt === undefined ? {} : { lastOutputAt },
+      ...pending !== undefined || lastOutputAt === undefined ? {} : { lastOutputAt },
     })
   }
   const settleSpinnerIdle = (): void => {
@@ -799,22 +812,26 @@ export function createSessionChannel(deps: SessionChannelDeps): SessionChannel {
     if (event.type === 'goal/change' || event.type === 'turn/start') deps.refreshGoalBar()
     if (event.type === 'agent/inbox/spliced' || event.type === 'user/message') deps.refreshQueueDock()
     if (event.type === 'plan/mode' || event.type === 'permission/preset') deps.applyStatus(agent.status)
-    // Track live standalone compaction state.
-    if (event.type === 'compaction/start' && event.data.turn === null) {
+    // Track live compaction state. A turn-owned compaction reuses the turn's
+    // status timer; standalone work (or a malformed idle turn bracket) owns one.
+    if (event.type === 'compaction/start') {
       if (compacting === undefined) {
         const startedAt = deps.now()
         compacting = {
+          turn: event.data.turn,
           startedAt,
-          timer: setInterval(renderStatus, STATUS_ANIMATION_INTERVAL_MS),
+          timer: event.data.turn === null || runningStatus === undefined
+            ? setInterval(renderStatus, STATUS_ANIMATION_INTERVAL_MS)
+            : undefined,
         }
         deps.terminal.setProgress(true)
       }
       deps.requestRender()
       return
     }
-    if (event.type === 'compaction/end' && event.data.turn === null && compacting !== undefined) {
+    if (event.type === 'compaction/end' && compacting?.turn === event.data.turn) {
       const fadeOutGlyph = runningPhaseGlyph(agent.session.events, false, true)
-      clearInterval(compacting.timer)
+      if (compacting.timer !== undefined) clearInterval(compacting.timer)
       compacting = undefined
       if (event.data.error !== undefined) {
         deps.appendNotice(`Compaction failed: ${event.data.error}`, 'warning')
@@ -884,11 +901,6 @@ export function createSessionChannel(deps: SessionChannelDeps): SessionChannel {
       for (const card of contextCards) card.setExpanded(visibility === 'expanded')
     },
     assistantStepTurns: () => assistantSteps.keys(),
-    detachStreaming: () => {
-      const current = streaming
-      streaming = undefined
-      return current
-    },
     pendingSteeringCount: () => pendingSteering.size,
     tickSpinner,
     attach(): void {
@@ -898,11 +910,14 @@ export function createSessionChannel(deps: SessionChannelDeps): SessionChannel {
         renderSessionEvent(event)
       })
       disposeDequeued = ctx.on('agent/inbox/claimed', ({ agent: source, message }) => {
-        if (source === agent) settlePendingSteering(message.id)
+        if (source !== agent) return
+        settlePendingSteering(message.id)
+        deps.refreshQueueDock()
       })
       disposeDiscarded = ctx.on('agent/inbox/discarded', ({ agent: source, message }) => {
         if (source !== agent) return
         if (pendingSteering.delete(message.id)) renderStatus()
+        deps.refreshQueueDock()
       })
       disposeInserted = ctx.on('agent/inbox/inserted', ({ agent: source }) => {
         if (source === agent) deps.refreshQueueDock()
@@ -960,12 +975,6 @@ export function createSessionChannel(deps: SessionChannelDeps): SessionChannel {
       renderStatus()
     },
     toolCardLabel: callId => callId === undefined ? undefined : toolCards.get(callId)?.label(),
-    restoreStreaming(component: StreamingAssistantComponent): void {
-      streaming = component
-      streaming.setShowReasoning(deps.showReasoning())
-      registerAssistantStep(component)
-      chat.addChild(component)
-    },
   }
   return channel
 }

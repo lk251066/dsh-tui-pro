@@ -12,6 +12,7 @@ node_bin="${NODE:-$(command -v node)}"
 capture="$output_root/interactive.typescript"
 readable="$output_root/interactive.strings"
 export_path="$output_root/pty-export.md"
+package_version="$($node_bin -p "require('$repo_root/packages/dsh-tui/package.json').version")"
 
 rm -f "$export_path"
 trap 'rm -f "$export_path"' EXIT
@@ -34,6 +35,13 @@ grep -aqF 'Reasoning effort:' "$capture"
 grep -aqF 'Exported to' "$capture"
 grep -aqF 'New session session-' "$capture"
 grep -aqF 'assistant' "$capture"
+grep -aqF 'coding agent ready' "$capture"
+grep -aqF "v$package_version" "$capture"
+grep -aqF 'PTY command audit' "$capture"
+grep -aqF 'Memory is off for this session.' "$capture"
+grep -aqF 'Memory enabled for this session.' "$capture"
+grep -aqF 'Memory disabled for this session.' "$capture"
+grep -aqF 'Image paste failed:' "$capture"
 grep -aqF $'\x1b[?1049h' "$capture"
 grep -aqF $'\x1b[?1049l' "$capture"
 grep -aqF $'\x1b[?1002h\x1b[?1006h' "$capture"
@@ -43,21 +51,21 @@ test -f "$export_path"
 grep -qF 'Workspace' "$readable"
 grep -qF 'Active' "$readable"
 grep -qF 'Status' "$readable"
-grep -qF 'Queue' "$readable"
 grep -qF 'Perm' "$readable"
-grep -qF 'Plan' "$readable"
-python3 - "$readable" <<'PY'
+grep -qF 'plan off' "$readable"
+python3 - "$readable" "$package_version" <<'PY'
 from pathlib import Path
 import sys
 
 lines = Path(sys.argv[1]).read_text(encoding='utf-8').splitlines()
-title = next((line for line in lines if 'dsh DEEPSEEK HARNESS' in line), None)
+version = sys.argv[2]
+title = next((line for line in lines if f'v{version}' in line or 'coding agent ready' in line), None)
 workspace = next((line for line in lines if 'Workspace' in line and '│' in line), None)
 editor = next((line for line in lines if ('dsh >' in line or 'dsh   ' in line) and '│' in line), None)
 if not lines or not lines[0].startswith('┌') or not lines[-1].startswith('└'):
     raise SystemExit('outer frame is not preserved across the terminal viewport')
 if title is None:
-    raise SystemExit('compact workbench title is missing')
+    raise SystemExit('welcome or compact version-and-title header is missing')
 workspace_separators = [] if workspace is None else [index for index, value in enumerate(workspace) if value == '│']
 if workspace is None or len(workspace_separators) < 3 or workspace.index('Workspace') < workspace_separators[1]:
     raise SystemExit('Workspace is not rendered in the right sidebar')
@@ -70,7 +78,9 @@ PY
 ! grep -aqF 'TUI prompt value' "$capture"
 ! grep -aqF 'ERR_MODULE_NOT_FOUND' "$capture"
 ! grep -aqF 'Unknown command:' "$capture"
+! grep -aqF 'Unknown theme' "$capture"
 ! grep -aqF 'Command failed:' "$capture"
 ! grep -aqF 'documentPath is not a function' "$capture"
+! grep -aqF 'service "attachments" has been registered' "$capture"
 
-echo 'Verified the terminal workbench, right sidebar, command paths, button-motion mouse reporting, session switching, export, and shutdown through a real PTY.'
+echo 'Verified welcome and compact headers, the fixed workbench, memory commands, clipboard-image failure, session switching, export, and shutdown through a real PTY.'

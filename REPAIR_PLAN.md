@@ -6,9 +6,19 @@ This document is the source of truth for making `@lk251066/dsh-tui` independentl
 
 Ship one package: `@lk251066/dsh-tui`. Its package manifest already defines `dsh.bundle.patch`, so the repository will not create or publish a separate `@lk251066/dsh-tui-bundle` compatibility package.
 
-The published `1.5.0` package, annotated tag, checksummed GitHub Release, source version, and lockfile identify release commit `9d201d2`. Version `1.6.3` is the current release against public `@deepseek-ai/dsh@0.1.0-rc.6`.
+Version `1.7.0` is the current release against public `@deepseek-ai/dsh@0.1.0-rc.6`. The package, annotated tag, checksummed GitHub Release, source version, and lockfile identify one release commit.
 
-The `1.6.0` scope covers reliable active-session switching, direct transcript selection and clipboard delivery, turn-level visual hierarchy, and per-block disclosure interactions inside the existing fixed workbench. The `1.6.1` repair removes the redundant `/copy` command, clarifies the active-session count, and resumes stopped sessions from another workspace in-process on hosts that cannot hand off the terminal. The `1.6.2` repair makes failed resume setup retryable, waits briefly for stopped-session title lookup, and preserves complete stored-image references. The `1.6.3` repair adds direct active-session removal after sidebar selection.
+The `1.7.0` release completes factory-agent ownership and rewind replacement, simplifies the fixed workbench, removes `/queue`, adds clipboard image drafts, and adds a durable per-session memory switch.
+
+## Version 1.7.0 session-scoped input and lifecycle
+
+Every agent handle created by the TUI remains owned by its create, resume, fork, rewind, or assistant-open operation until workspace attachment and session-registry adoption both succeed. Failure rolls back only membership added by that operation and disposes the handle once. Checkpoint rewind replaces the source Active slot with its branch; the source log remains in complete history. The assistant cannot fork or rewind. Terminal handoff is refused while any live agent or compaction is running.
+
+The full-screen workbench renders a workspace-grouped Active-session list and a compact Status section. Existing conversations use one compact header; new untitled conversations use the welcome view. The bottom line owns cwd, branch, model, and context. Only the transcript scrolls; the frame, sidebar, and input remain fixed.
+
+Enter steers a running turn, Tab queues the next turn, and empty Up recalls the latest submission. With an empty editor, Esc restores the newest queued message before a later Esc can cancel the turn. `/queue` is not registered; the dock remains a read-only queue preview.
+
+`Alt+V` stores one clipboard image in the active session's draft and inserts an `[Image #N]` placeholder. Sending requires a model whose resolved metadata includes image input. Unsupported or unknown model metadata leaves the draft intact. `/memory on|off` persists memory enablement for the current session; the assistant defaults on and project sessions default off. Enabled sessions receive the shared `memory_save` and `memory_search` tools and recalled-memory prompt section.
 
 ## Version 1.6.3 active-session removal
 
@@ -16,11 +26,11 @@ Clicking a sidebar row activates that session. Pressing `Delete` with an empty f
 
 ## Version 1.6.2 repair
 
-A resumed agent remains owned by the open operation until it is attached to its workspace and adopted by the session registry. Any failure before adoption disposes that handle. Stopped-title lookup retries for a bounded one-second startup window and cancels on TUI disposal. Stored image rendering passes the complete durable attachment reference to `readImage`, preserving PNG, JPEG, WebP, and GIF metadata. Clipboard input remains text-only.
+In the `1.6.2` release, a resumed agent remains owned by the open operation until it is attached to its workspace and adopted by the session registry. Any failure before adoption disposes that handle. Stopped-title lookup retries for a bounded one-second startup window and cancels on TUI disposal. Stored image rendering passes the complete durable attachment reference to `readImage`, preserving PNG, JPEG, WebP, and GIF metadata. Clipboard input in that release remains text-only.
 
 ## Version 1.6.1 repair
 
-The sidebar renders `Active sessions · N` to identify the manually maintained active-workspace list. A stopped session uses its immutable session cwd when it is resumed, so a Windows host does not need process replacement merely to switch projects. If in-process creation fails for a cross-workspace session, the existing host handoff is still attempted. Transcript drag selection remains the only copy command; `/copy` is not registered. The input contract is text-only: image blocks can render from durable attachments, but system clipboard image capture is not implemented.
+In the `1.6.1` release, the sidebar renders `Active sessions · N` to identify the manually maintained active-workspace list. A stopped session uses its immutable session cwd when it is resumed, so a Windows host does not need process replacement merely to switch projects. If in-process creation fails for a cross-workspace session, the existing host handoff is still attempted. Transcript drag selection remains the only copy command; `/copy` is not registered. Its input path is text-only: image blocks can render from durable attachments, but system clipboard image capture is not implemented.
 
 ## Version 1.6.0 transcript and session interaction
 
@@ -46,7 +56,7 @@ Built-in short choices use the fixed bottom interaction area. Questions, approva
 
 ## Version 1.1.0 terminal workbench
 
-The current source uses one full-screen workbench. The transcript, tools, dialogs, and editor occupy the left main area; Workspace, Sessions, Current, and Status stay on the right. The editor stays fixed at the bottom, Page Up and Page Down scroll only the transcript, and inline dialogs temporarily replace the editor. The public `1.0.2` artifact retains its released layout until a later version is published.
+The `1.1.0` release introduces one full-screen workbench. The transcript, tools, dialogs, and editor occupy the left main area while the initial Workspace, Sessions, Current, and Status layout stays on the right. The editor stays fixed at the bottom, Page Up and Page Down scroll only the transcript, and inline dialogs temporarily replace the editor.
 
 The same source also renders user messages before their assistant responses, starts the bundle in the personal assistant session, and supports `/new` plus `/new <path>` across project directories. The `1.1.0` workbench enters the terminal alternate screen, reserves an outer frame, and keeps transcript scrolling inside its inner viewport. Type checking, all 442 tests, lint with 38 warnings and no errors, build, artifact packing, Windows and Linux empty-profile loading, and the Linux real PTY flow pass for the `1.1.0` artifact. The release workflow repeated those checks, published npm `1.1.0`, and created the checksummed GitHub Release from commit `81b72c8`.
 

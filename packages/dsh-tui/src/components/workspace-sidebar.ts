@@ -10,7 +10,6 @@ import {
   type Component,
 } from '@earendil-works/pi-tui'
 import type { AgentStatus } from '@deepseek-ai/dsh-agent'
-import { contextPressureLevel } from '../chat/context-pressure.ts'
 import { formatTokens } from '../chat/tokens.ts'
 import { SessionListComponent } from './session-list.ts'
 import { displayText } from './text.ts'
@@ -53,20 +52,6 @@ function sectionTitle(title: string, width: number, palette: Palette): string[] 
     padToWidth(palette.bold(` ${title}`), width),
     palette.dim('─'.repeat(width)),
   ]
-}
-
-function row(label: string, value: string, width: number, palette: Palette): string {
-  const prefix = ` ${palette.dim(label.padEnd(8))}`
-  return padToWidth(`${prefix}${value}`, width)
-}
-
-function contextValue(percent: number | undefined, palette: Palette): string {
-  if (percent === undefined) return palette.dim('unknown')
-  const clamped = Math.min(100, Math.max(0, percent))
-  const filled = Math.round(clamped / 20)
-  const level = contextPressureLevel(clamped)
-  const paint = level === 'critical' ? palette.error : level === 'warning' ? palette.warning : palette.accent
-  return `${paint('█'.repeat(filled))}${palette.dim('·'.repeat(5 - filled))} ${Math.round(clamped)}%`
 }
 
 /** Renders persistent project, session, and status sections in the right sidebar. */
@@ -130,21 +115,14 @@ export class WorkspaceSidebarComponent implements Component {
     const workspaceLines = [
       ...sectionTitle('Workspace', width, palette),
       padToWidth(` ${palette.bold(palette.accent(workspace))}${state.branch === undefined ? '' : palette.dim(` · ${state.branch}`)}`, width),
-      padToWidth(palette.dim(` ${cwd}`), width),
     ]
-    const currentLines = [
-      ...sectionTitle('Current', width, palette),
-      padToWidth(` ${statusGlyph} ${statusLabel}`, width),
-    ]
+    const plan = state.plan ? palette.accent('plan on') : palette.dim('plan off')
+    const cacheSuffix = state.cacheHitRate === undefined ? '' : palette.dim(` · cache ${cache}`)
     const statusLines = [
       ...sectionTitle('Status', width, palette),
-      row('Model', state.model, width, palette),
-      row('Context', contextValue(state.contextPercent, palette), width, palette),
-      row('Tokens', tokenValue, width, palette),
-      ...(state.cacheHitRate === undefined ? [] : [row('Cache', cache, width, palette)]),
-      row('Queue', String(state.queued), width, palette),
-      row('Perm', permission, width, palette),
-      row('Plan', state.plan ? palette.accent('on') : palette.dim('off'), width, palette),
+      padToWidth(` ${statusGlyph} ${statusLabel}${palette.dim(' · ')}${plan}`, width),
+      padToWidth(` ${palette.dim('Tokens')} ${tokenValue}${cacheSuffix}`, width),
+      padToWidth(` ${palette.dim('Perm')} ${permission}`, width),
     ]
     const topLines = [
       ...workspaceLines,
@@ -152,7 +130,7 @@ export class WorkspaceSidebarComponent implements Component {
       ...this.sessionList.render(width),
     ]
     const sessionStart = workspaceLines.length + 1
-    const bottomLines = ['', ...currentLines, '', ...statusLines]
+    const bottomLines = ['', ...statusLines]
     const height = Math.max(1, Math.floor(this.options.terminalRows()))
     const filler = Math.max(0, height - topLines.length - bottomLines.length)
     const combined = [...topLines, ...Array.from({ length: filler }, () => ''), ...bottomLines]

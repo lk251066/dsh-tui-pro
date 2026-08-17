@@ -69,7 +69,12 @@ describe('assistant tools', () => {
       },
     })
 
-    installAssistantTools(ctx, registry, workspaceSessions)
+    installAssistantTools(ctx, registry, workspaceSessions, async (handle, options) => {
+      if (!workspaceSessions.has(handle.agent.session.id)) {
+        await workspaceSessions.add(handle.agent.session.id)
+      }
+      registry.adopt(handle.agent, options?.activate)
+    })
     await vi.waitFor(() => {
       expect(ctx.tools.schemas().map(schema => schema.name).sort()).toEqual([
         'add_session_to_workspace',

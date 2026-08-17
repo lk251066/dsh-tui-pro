@@ -3,7 +3,8 @@
  * row): a braille spinner frame, what the agent is actually doing (the newest
  * pending tool card's verb label, a per-turn whimsical verb, or `Thinking…`),
  * the elapsed wall time, and the approximate tokens streamed this turn. The
- * whole line turns warning-colored when output has stalled. Renders nothing
+ * the glyph, action, and metadata use separate visual roles. A stalled action
+ * turns warning-colored. Renders nothing
  * while idle.
  * @module @deepseek-ai/dsh-tui/components/working-line
  */
@@ -86,14 +87,15 @@ export class WorkingLineComponent implements Component {
     const label = this.activity ?? this.verb ?? THINKING_LABEL
     const startedAt = this.startedAt ?? now
     const elapsed = formatStatusDuration(Math.max(0, now - startedAt))
-    const segments = [`${glyph} ${label} · ${elapsed}`]
+    const metadata = [`· ${elapsed}`]
     if (this.emittedTokens !== undefined && this.emittedTokens > 0) {
-      segments.push(`↓ ${this.emittedTokens} tokens`)
+      metadata.push(`· ↓ ${this.emittedTokens} tokens`)
     }
     // No last-output timestamp means the caller cannot judge staleness — stay
     // dim rather than guessing; only a measured gap beyond the threshold stalls.
     const stalled = this.lastOutputAt !== undefined && now - this.lastOutputAt > STALL_WARNING_MS
-    const paint = stalled ? this.palette.warning : this.palette.dim
-    return [paint(truncateToWidth(segments.join(' · '), width, ''))]
+    const action = stalled ? this.palette.warning(label) : this.palette.text(label)
+    const line = `${this.palette.accent(glyph)} ${action} ${this.palette.dim(metadata.join(' '))}`
+    return [truncateToWidth(line, width, '')]
   }
 }

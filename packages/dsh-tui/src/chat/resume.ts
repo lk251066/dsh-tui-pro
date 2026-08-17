@@ -51,6 +51,10 @@ export interface ResumeControllerDeps extends ChatChannelDeps, ChannelNotice {
   openPersisted(sessionId: SessionId, cwd: string): Promise<boolean>
   /** Current agent status, re-read at each resume precondition point. */
   agentStatus(): AgentStatus
+  /** Explain why replacing this process would interrupt a live session. */
+  handoffBlocker(): string | undefined
+  /** Persist every session owned by a live agent before process replacement. */
+  flushLiveSessions(): Promise<void>
 }
 
 /** Session-resume controller for one chat channel. */
@@ -272,15 +276,20 @@ export function createResumeController(deps: ResumeControllerDeps): ResumeContro
       }
       /* v8 ignore next -- shutdown during preflight invalidates an awaited service read or reaches this guard */
       if (deps.isDisposed()) return
-      await ctx.sessions.flush(agent().session)
+      const initialBlocker = deps.handoffBlocker()
+      if (initialBlocker !== undefined) throw new Error(initialBlocker)
+      await deps.flushLiveSessions()
       // Disposal can run while the flush promise is pending.
       if (deps.isDisposed()) return
-      if (agent().status !== 'idle') throw new Error(`Resume requires an idle agent (status: ${agent().status}).`)
+      const flushedBlocker = deps.handoffBlocker()
+      if (flushedBlocker !== undefined) throw new Error(flushedBlocker)
       await overlay?.close()
       resumeOverlay = undefined
       await runtime.terminal.drainInput(100, 20)
       // Disposal can run while terminal draining is pending.
       if (deps.isDisposed()) return
+      const releaseBlocker = deps.handoffBlocker()
+      if (releaseBlocker !== undefined) throw new Error(releaseBlocker)
       ui.stop()
       terminalReleased = true
       // The host re-execs into the session's own workspace: process cwd, not the
@@ -306,7 +315,10 @@ export function createResumeController(deps: ResumeControllerDeps): ResumeContro
   }
 
   const openStoppedSession = (sessionId: SessionId, overlay?: TuiOverlaySession): void => {
-    if (sessionOpenInFlight) return
+    if (sessionOpenInFlight) {
+      deps.appendNotice('A session is already being opened.', 'warning')
+      return
+    }
     sessionOpenInFlight = true
     const open = async (): Promise<void> => {
       try {

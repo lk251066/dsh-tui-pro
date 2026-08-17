@@ -8,10 +8,12 @@
  */
 
 import { randomUUID } from 'node:crypto'
-import type { Agent } from '@deepseek-ai/dsh-agent'
+import type { Agent, AgentHandle } from '@deepseek-ai/dsh-agent'
 import { errorChain } from '@deepseek-ai/dsh-llm'
 import { SessionId, type SessionEvent } from '@deepseek-ai/dsh-session'
 import type { ChannelNotice, ChatChannelDeps } from './channel.ts'
+
+const ASSISTANT_SESSION_ID = SessionId('assistant')
 
 /**
  * The seed boundary for a fork: the event index ONE PAST the last `turn/end`
@@ -40,8 +42,12 @@ export function forkCut(events: readonly SessionEvent[], atSeq?: number): number
 export interface ForkDeps extends ChatChannelDeps, ChannelNotice {
   /** The agent whose session forks. */
   agent: Agent
-  /** Add the created branch to the active workspace and open it in this TUI. */
-  activate(agent: Agent): Promise<void>
+  /**
+   * Consume the created handle, add its branch to the active workspace, and
+   * open it in this TUI. Fork is explicit branching: source and branch both
+   * stay active.
+   */
+  activate(handle: AgentHandle): Promise<void>
 }
 
 /**
@@ -53,6 +59,10 @@ export async function forkSession(deps: ForkDeps): Promise<void> {
   const { agent } = deps
   if (agent.status !== 'idle') {
     deps.appendNotice('/fork requires an idle agent (status: ' + agent.status + ').', 'warning')
+    return
+  }
+  if (agent.session.id === ASSISTANT_SESSION_ID) {
+    deps.appendNotice('The assistant conversation cannot be forked into a project session.', 'warning')
     return
   }
   const events = agent.session.events
@@ -69,10 +79,9 @@ export async function forkSession(deps: ForkDeps): Promise<void> {
       seed: events.slice(0, cut),
       meta: { cwd, parentSession: agent.session.id, seedLength: cut },
     })
-    if (deps.isDisposed()) return
-    await deps.activate(handle.agent)
+    await deps.activate(handle)
   } catch (error) {
-    deps.appendNotice(`Fork failed: ${errorChain(error)}`, 'error')
+    if (!deps.isDisposed()) deps.appendNotice(`Fork failed: ${errorChain(error)}`, 'error')
     return
   }
   if (deps.isDisposed()) return
