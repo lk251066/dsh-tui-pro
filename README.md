@@ -4,11 +4,11 @@ Community-maintained interactive terminal UI plugin for [DeepSeek Harness](https
 
 ## Release status
 
-Version `1.3.0` is the current release target. The previous public release is [`1.2.0`](https://www.npmjs.com/package/@lk251066/dsh-tui/v/1.2.0); publication of `1.3.0` requires the source, artifact, and PTY checks in [TESTING.md](TESTING.md).
+Version [`1.3.0`](https://www.npmjs.com/package/@lk251066/dsh-tui/v/1.3.0) is published on npm. Its [GitHub Release](https://github.com/lk251066/dsh-tui-pro/releases/tag/v1.3.0), annotated tag, and npm package identify release commit `8fca5ec`.
 
 Do not use the existing `v1.0.0` GitHub tag; it predates the repaired source and bundle metadata. Install from npm or a verified GitHub Release.
 
-The `1.3.0` source keeps durable workspace sessions and the framed workbench from `1.2.0`, fixes settings and model-effort commands, isolates model selection per session, and routes mouse-wheel input to the transcript. See [REPAIR_PLAN.md](REPAIR_PLAN.md) for the release record.
+Version `1.3.0` keeps durable workspace sessions and the framed workbench from `1.2.0`, fixes settings and model-effort commands, isolates model selection per session, and routes mouse-wheel input to the transcript. See [REPAIR_PLAN.md](REPAIR_PLAN.md) for the release record.
 
 ## Intended installation
 

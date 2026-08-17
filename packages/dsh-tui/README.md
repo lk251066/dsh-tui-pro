@@ -4,7 +4,7 @@ Interactive terminal UI plugin and profile bundle for [DeepSeek Harness](https:/
 
 ## Release status
 
-Version `1.3.0` is the current release target. The previous public package is [`1.2.0`](https://www.npmjs.com/package/@lk251066/dsh-tui/v/1.2.0); release checks must pass before publication.
+Version [`1.3.0`](https://www.npmjs.com/package/@lk251066/dsh-tui/v/1.3.0) is published on npm. Its [GitHub Release](https://github.com/lk251066/dsh-tui-pro/releases/tag/v1.3.0), annotated tag, and npm package identify release commit `8fca5ec`.
 
 ## Installation
 

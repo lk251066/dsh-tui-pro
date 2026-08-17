@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 The `v1.0.0` tag is not an installable public release: no npm package was published, and the repository-root tarball does not contain the required dsh bundle metadata. See [REPAIR_PLAN.md](REPAIR_PLAN.md) for the first verified release criteria.
 
-## [1.3.0] - unreleased
+## [1.3.0] - 2026-08-17
 
 ### Added
 

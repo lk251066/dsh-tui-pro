@@ -6,7 +6,7 @@ This document is the source of truth for making `@lk251066/dsh-tui` independentl
 
 Ship one package: `@lk251066/dsh-tui`. Its package manifest already defines `dsh.bundle.patch`, so the repository will not create or publish a separate `@lk251066/dsh-tui-bundle` compatibility package.
 
-The published `1.2.0` artifact remains the last verified release. The `1.3.0` release must align source, package version, lockfile, npm artifact, GitHub tag/release, and real PTY evidence against public `@deepseek-ai/dsh@0.1.0-rc.6`.
+The published `1.3.0` package, annotated tag, checksummed GitHub Release, source version, and lockfile identify release commit `8fca5ec`. The package passes Windows and Linux empty-profile installation and real PTY evidence against public `@deepseek-ai/dsh@0.1.0-rc.6`.
 
 The `1.3.0` scope is limited to command correctness and visible workbench behavior: settings getter access, model-effort selection, per-session model state, explicit export paths, fork activation, removal of unavailable commands, settled thinking and diff presentation, and mouse-wheel transcript scrolling.
 

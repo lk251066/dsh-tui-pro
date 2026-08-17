@@ -2,7 +2,7 @@
 
 ## Submission status
 
-Version `1.3.0` is the current release target. The previous public release is `1.2.0`; the new npm package, annotated tag, GitHub commit, and release assets must identify the same `1.3.0` source.
+Version `1.3.0` is published. The npm package, annotated tag, GitHub commit `8fca5ec`, and checksummed release assets identify the same source.
 
 The public repository now carries the `dsh-plugin` GitHub topic, which is dshfind's official submission mechanism. dshfind synchronizes that topic daily at 10:17 China Standard Time. Its current public snapshot does not yet contain `lk251066/dsh-tui-pro`; the next successful site sync is required before its listing URL can be verified.
 
@@ -17,7 +17,7 @@ The repair and acceptance evidence are tracked in [REPAIR_PLAN.md](REPAIR_PLAN.m
 | License | MIT |
 | Repository | <https://github.com/lk251066/dsh-tui-pro> |
 | npm | <https://www.npmjs.com/package/@lk251066/dsh-tui> |
-| Verified release | pending `v1.3.0` publication |
+| Verified release | <https://github.com/lk251066/dsh-tui-pro/releases/tag/v1.3.0> |
 | dshfind submission | <https://github.com/topics/dsh-plugin> |
 
 `@lk251066/dsh-tui` is the only supported package name. It owns both the TUI plugin and its `cordis.patch.yml` layer through the `dsh.bundle.patch` manifest field.
@@ -45,7 +45,7 @@ dsh plugin --profile tui add @lk251066/dsh-tui
 - [x] The same checks pass on the release commit and registry package.
 - [x] The packed TUI starts, opens commands, creates and switches sessions, and shuts down cleanly through a real PTY.
 - [x] User-visible behavior has keyless snapshot coverage and reproducible terminal evidence.
-- [ ] The `1.3.0` npm version, GitHub tag, GitHub Release, and release commit agree.
+- [x] The `1.3.0` npm version, GitHub tag, GitHub Release, and release commit agree.
 - [x] The public installation command succeeds without the development workspace or `.tarballs/` directory.
 
 ## Public links
@@ -53,5 +53,5 @@ dsh plugin --profile tui add @lk251066/dsh-tui
 - Repository: <https://github.com/lk251066/dsh-tui-pro>
 - Issues: <https://github.com/lk251066/dsh-tui-pro/issues>
 - npm package: <https://www.npmjs.com/package/@lk251066/dsh-tui>
-- Verified GitHub Release: pending `v1.3.0` publication
+- Verified GitHub Release: <https://github.com/lk251066/dsh-tui-pro/releases/tag/v1.3.0>
 - dshfind discovery source: <https://github.com/topics/dsh-plugin>
