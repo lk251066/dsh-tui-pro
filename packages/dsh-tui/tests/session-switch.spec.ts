@@ -414,7 +414,8 @@ describe('multi-session switching (/new, /sessions)', () => {
   })
 
   it('cycles active workspace sessions with Alt+Left and Alt+Right only from an empty editor', async () => {
-    const { harness, created } = await switchHarness()
+    const root = await mkdtemp(join(tmpdir(), 'dsh-tui-alt-switch-'))
+    const { harness, created } = await switchHarness(root)
     try {
       submit(harness, '/new')
       await tick()
@@ -422,42 +423,51 @@ describe('multi-session switching (/new, /sessions)', () => {
 
       // Move from the newly activated project session back to the startup
       // session, then return to the project session.
-      harness.terminal.send('\x1b[1;3D')
+      harness.terminal.send('\x1b[1;3C')
       await tick()
       submit(harness, 'message on main')
       expect(harness.agent.sentMessages.at(-1)?.content).toEqual([{ type: 'text', text: 'message on main' }])
 
-      harness.terminal.send('\x1b[1;3C')
+      harness.terminal.send('\x1b[1;3D')
       await tick()
       submit(harness, 'message on branch')
       expect(created[0]?.followups).toEqual(['message on branch'])
 
       harness.terminal.send('draft text')
-      harness.terminal.send('\x1b[1;3D')
+      harness.terminal.send('\x1b[1;3C')
       harness.terminal.send('\r')
       await tick()
       expect(created[0]?.followups).toEqual(['message on branch', 'draft text'])
     } finally {
       await disposeTuiTestHarness(harness)
+      await rm(root, { recursive: true, force: true })
     }
   })
 
   it('/switch selects active sessions directly and opens the bottom selector without an argument', async () => {
-    const { harness, created } = await switchHarness()
+    const root = await mkdtemp(join(tmpdir(), 'dsh-tui-command-switch-'))
+    const { harness, created } = await switchHarness(root)
     try {
       submit(harness, '/new')
       await tick()
       expect(created).toHaveLength(1)
 
-      submit(harness, '/switch previous')
+      submit(harness, '/switch 3')
       await tick()
       submit(harness, 'message on main')
       expect(harness.agent.sentMessages.at(-1)?.content).toEqual([{ type: 'text', text: 'message on main' }])
 
-      submit(harness, '/switch next')
+      submit(harness, '/switch previous')
       await tick()
       submit(harness, 'message on branch')
       expect(created[0]?.followups).toEqual(['message on branch'])
+
+      submit(harness, '/switch next')
+      await tick()
+      submit(harness, 'second message on main')
+      expect(harness.agent.sentMessages.at(-1)?.content).toEqual([
+        { type: 'text', text: 'second message on main' },
+      ])
 
       submit(harness, '/switch')
       await tick()
@@ -466,19 +476,21 @@ describe('multi-session switching (/new, /sessions)', () => {
       harness.terminal.send('\x1b')
     } finally {
       await disposeTuiTestHarness(harness)
+      await rm(root, { recursive: true, force: true })
     }
   })
 
   it('switches through a direct click on an active sidebar session', async () => {
-    const { harness, created } = await switchHarness()
+    const root = await mkdtemp(join(tmpdir(), 'dsh-tui-sidebar-switch-'))
+    const { harness, created } = await switchHarness(root)
     try {
       submit(harness, '/new')
       await tick()
       expect(created).toHaveLength(1)
 
-      // At 88 columns the sidebar begins at column 57. Its first project row
-      // is the original main session, immediately below the assistant row.
-      harness.terminal.send('\x1b[<0;60;10M')
+      // At 88 columns the sidebar begins at column 57. New sessions are first
+      // within one workspace, so the original main session is the third row.
+      harness.terminal.send('\x1b[<0;60;11M')
       await tick()
       submit(harness, 'message after sidebar click')
 
@@ -488,6 +500,7 @@ describe('multi-session switching (/new, /sessions)', () => {
       expect(created[0]?.followups).toEqual([])
     } finally {
       await disposeTuiTestHarness(harness)
+      await rm(root, { recursive: true, force: true })
     }
   })
 
