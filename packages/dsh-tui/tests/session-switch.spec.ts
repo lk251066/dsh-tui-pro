@@ -864,7 +864,6 @@ describe('multi-session switching (/new, /sessions)', () => {
       expect(harness.terminal.output.slice(before)).not.toContain('logged while away')
       // Remounting the second slot replays the whole log from the session.
       await switchTo(harness, String(secondSession!.id))
-      expect(harness.terminal.output).toContain('You')
       expect(harness.terminal.output).toContain('logged while away')
       expect(harness.terminal.output).toContain('streamed while away')
       // The remounted slot owns input routing again.

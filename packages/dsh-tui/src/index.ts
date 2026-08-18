@@ -1526,8 +1526,8 @@ function createTuiChatInternal(
     // below then re-apply the phase to the rebuilt components idempotently.
     if (channel.hasCompactionCheckpoint()) rebuildTranscript(false)
     channel.applyToolsVisibility(toolsVisibility)
-    // Hidden mode folds each turn's steps into one assistant message; other
-    // modes restore the per-step Assistant headers.
+    // Keep the first visible reply at turn spacing and later steps at tighter
+    // continuation spacing after card visibility changes.
     for (const turn of channel.assistantStepTurns()) applyTurnFolding(turn)
     // State-switch feedback: transient receipt, not transcript history.
     showTransientNotice(toolsVisibility === 'hidden' ? 'Tool cards hidden.' : `Tool and context cards ${toolsVisibility}.`)

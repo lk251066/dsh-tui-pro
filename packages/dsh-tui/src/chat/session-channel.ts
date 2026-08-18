@@ -239,9 +239,8 @@ export function createSessionChannel(deps: SessionChannelDeps): SessionChannel {
   const todo = new TodoComponent(palette)
   let streaming: StreamingAssistantComponent | undefined
   let completedStreaming: StreamingAssistantComponent | undefined
-  // Assistant step components in model order per turn, for hidden-mode folding:
-  // with tool cards hidden, a turn keeps one Assistant header and later steps
-  // render as headerless continuations (see applyTurnFolding).
+  // Assistant step components in model order per turn. The first visible
+  // reply owns the turn-level gap; later steps use continuation spacing.
   const assistantSteps = new Map<number, StreamingAssistantComponent[]>()
   let runningStatus: RunningStatus | undefined
   let fadingStatus: FadingStatus | undefined
@@ -366,16 +365,16 @@ export function createSessionChannel(deps: SessionChannelDeps): SessionChannel {
   let lastOutputAt: number | undefined
 
   /**
-   * Re-derive one Assistant header per turn. The first step with a visible body
-   * owns it; every later step renders as a headerless continuation.
+   * Re-derive turn spacing. The first step with a visible body owns the larger
+   * turn-level gap; every later step renders as a tighter continuation.
    */
   const applyTurnFolding = (turn: number): void => {
     const steps = assistantSteps.get(turn)
     if (steps === undefined) return
-    let headerSeen = false
+    let visibleStepSeen = false
     for (const step of steps) {
-      if (!headerSeen && step.hasVisibleBody()) {
-        headerSeen = true
+      if (!visibleStepSeen && step.hasVisibleBody()) {
+        visibleStepSeen = true
         step.setFoldedContinuation(false)
       } else {
         step.setFoldedContinuation(true)
@@ -402,7 +401,7 @@ export function createSessionChannel(deps: SessionChannelDeps): SessionChannel {
     /* v8 ignore next -- registration precedes attachment, so the component is present until this removal. */
     if (stepIndex < 0) return
     steps.splice(stepIndex, 1)
-    // A retracted step may have owned the turn's hidden-mode header.
+    // A retracted step may have owned the turn-level gap.
     applyTurnFolding(current.position.turn)
   }
 
@@ -494,7 +493,7 @@ export function createSessionChannel(deps: SessionChannelDeps): SessionChannel {
           // Message-level spacing: two blank rows set a user bubble apart from
           // the previous block; turn-internal gaps stay at one row.
           chat.addChild(new Spacer(2))
-          chat.addChild(new UserMessageComponent(text, palette, images, ref => deps.loadAttachmentImage(ref), event.time))
+          chat.addChild(new UserMessageComponent(text, palette, images, ref => deps.loadAttachmentImage(ref)))
           if (options.addHistory && text) deps.addToEditorHistory(text)
         }
         break
@@ -513,7 +512,7 @@ export function createSessionChannel(deps: SessionChannelDeps): SessionChannel {
           attachStreaming()
           streaming.update(event.data.chunk, event.time)
           // The first streamed text/reasoning may make this step the turn's
-          // hidden-mode header owner (or a continuation with a visible body).
+          // turn-level gap owner (or a continuation with a visible body).
           applyTurnFolding(streaming.position.turn)
         }
         break

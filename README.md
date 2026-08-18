@@ -39,12 +39,12 @@ The package itself owns the TUI plugin and its `cordis.patch.yml` profile layer.
 - Per-session `/memory on|off`, enabled by default for the assistant and disabled by default for project sessions
 - A fixed personal assistant entry with workspace-session tools
 - `/new` for the active project and `/new <path>` for another project
-- Turn-level `You` and `Assistant` headings, syntax highlighting, diff rendering, and Markdown rendering
+- Visually distinct user message bands and assistant Markdown, without repeated role labels
 - Thinking blocks are hidden by default; `/details ... reasoning on` expands settled reasoning
 - Tool cards support hidden, collapsed, and expanded views; diff cards show colored additions and deletions
 - Approval dialogs with risk confirmation
 
-New untitled conversations show the large welcome view. Existing conversations use the compact `dsh v{version} — {title}` header, while cwd, branch, model, and context stay in the bottom status line.
+New untitled conversations show the large welcome view. Conversation activity removes it and leaves the transcript unobstructed, while cwd, branch, model, and context stay in the bottom status line.
 
 Launching in a directory resumes its first manually ordered active project session. If that directory has no active session, dsh creates one and adds it to the workspace. To close a project session, open it and run `/quit`, or press `Delete` while the input is empty. A running turn is cancelled, the session leaves Active, the assistant opens, and history remains available through `/sessions`. The assistant cannot be closed.
 

@@ -3006,9 +3006,9 @@ describe('pi-tui chat lifecycle and transcript', () => {
     expect(result.terminal.output).toContain('nested result')
     expect(result.terminal.output).toContain('[future-block]')
     expect(result.terminal.output).toContain('[content]')
-    // User input uses the turn-level `You` heading (permission blue, bold) on
-    // the bubble fill, and keeps the markdown source verbatim, fences included.
-    expect(result.terminal.output).toContain('\x1b[1m\x1b[94mYou')
+    // User input starts directly with the prompt marker on the bubble fill and
+    // keeps the markdown source verbatim, fences included.
+    expect(result.terminal.output).not.toContain('\x1b[1m\x1b[94mYou')
     expect(result.terminal.output).toContain('\x1b[1m\x1b[2;39m›\x1b[22;39m\x1b[22m # Heading')
     expect(result.terminal.output).toContain('```ts')
     // Assistant fenced code renders through the syntax highlighter: keywords

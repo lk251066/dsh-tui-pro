@@ -14,6 +14,8 @@ The `1.8.0` source separates whole-TUI exit from project-session closing, gives 
 
 Established conversations have no persistent top header or reserved header spacing. The new-session welcome remains visible only while the session is pristine. One dim horizontal rule replaces the blank row above the fixed auxiliary and input area, so the transcript owns every other available row. Transcript scrolling, disclosure clicks, and drag selection use the expanded viewport coordinates.
 
+User messages remain full-width background bands with a `›` marker; assistant replies remain bare Markdown. Those styles identify the speaker without separate `You` and `Assistant` rows. Turn-level and continuation spacing remain independent of the removed labels.
+
 ## Version 1.8.0 terminal diagnostics and delegation
 
 The fixed status row reports weighted-average token throughput and uses the plan palette role when plan mode is active. Help and diagnostics share one bounded main-area viewer with line, page, Home, and End navigation. Skills use one `/skill` command with argument completion and a searchable bottom selector; the removed `/skill:<name>` syntax is not recognized.

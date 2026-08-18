@@ -11,14 +11,13 @@ import {
 import { TOOL_SETTLED } from '../src/components/figures.ts'
 import { parseArguments } from '../src/components/content.ts'
 import { createPalette, markdownTheme } from '../src/components/theme.ts'
-import { formatClockTime } from '../src/chat/timing.ts'
 
 const plain = createPalette(false)
 const color = createPalette(true, 'dark')
 const plainMd = markdownTheme(plain)
 const colorMd = markdownTheme(color)
 
-/** The header stamp's fixed wall-clock time: 12:30 local on 2026-07-21. */
+/** A fixed wall-clock time for reasoning-duration tests. */
 const STAMP = new Date(2026, 6, 21, 12, 30, 0).getTime()
 
 function toolResult(text: string): Extract<SessionEvent, { type: 'tool/result' }>['data'] {
@@ -35,53 +34,44 @@ function toolCard(palette: typeof plain, mdTheme: typeof plainMd): ToolCardCompo
 }
 
 describe('UserMessageComponent', () => {
-  it('renders the permission-blue header and the › marker with a hanging indent', () => {
+  it('renders the › marker with a hanging indent and no repeated role label', () => {
     const rows = new UserMessageComponent('one\ntwo', plain).render(40).map(row => row.trimEnd())
-    expect(rows).toEqual(['You', '› one', '  two'])
+    expect(rows).toEqual(['› one', '  two'])
   })
 
   it('indents soft-wrapped continuation rows under the marker column', () => {
-    // pi-tui's Text pads the header row to width; the body rows stay unpadded.
     const rows = new UserMessageComponent('aaaaaaaaaaaaaaaaaaaa', plain).render(12).map(row => row.trimEnd())
-    expect(rows).toEqual(['You', '› aaaaaaaaaa', '  aaaaaaaaaa'])
-  })
-
-  it('stamps the header with the event clock time when given', () => {
-    const rows = new UserMessageComponent('hi', plain, [], undefined, STAMP).render(40)
-    expect(rows[0]?.trimEnd()).toBe(`You ${formatClockTime(STAMP)}`)
-    expect(rows[0]?.trimEnd()).toBe('You 12:30')
+    expect(rows).toEqual(['› aaaaaaaaaa', '  aaaaaaaaaa'])
   })
 
   it('fills every row to the component width with the bubble background', () => {
-    const rows = new UserMessageComponent('hi', color, [], undefined, STAMP).render(24)
+    const rows = new UserMessageComponent('hi', color).render(24)
     for (const row of rows) {
       expect(row.startsWith('\x1b[100m')).toBe(true)
       expect(row.endsWith('\x1b[49m')).toBe(true)
       expect(visibleWidth(row)).toBe(24)
     }
-    // The header keeps the bold permission-blue `You` inside the fill.
-    expect(rows[0]).toContain('\x1b[1m\x1b[94mYou')
+    expect(rows[0]).toContain(' hi')
   })
 
   it('skips the fill and the padding when color is off', () => {
     const rows = new UserMessageComponent('hi', plain).render(24).map(row => row.trimEnd())
-    expect(rows).toEqual(['You', '› hi'])
+    expect(rows).toEqual(['› hi'])
   })
 })
 
 describe('StreamingAssistantComponent', () => {
-  it('opens a two-row gap and a stamped header for the turn’s header-owning step', () => {
+  it('opens a two-row turn gap without a repeated role label', () => {
     const step = new StreamingAssistantComponent({ turn: 1, step: 1 }, false, plain, plainMd, 30)
     step.markStart(STAMP)
     step.settle([{ type: 'text', text: 'answer' }], STAMP + 2_000)
     const rows = step.render(40)
     expect(rows[0]).toBe('')
     expect(rows[1]).toBe('')
-    expect(rows[2]?.trimEnd()).toBe(`Assistant ${formatClockTime(STAMP)}`)
-    expect(rows[3]?.trimEnd()).toBe('answer')
+    expect(rows[2]?.trimEnd()).toBe('answer')
   })
 
-  it('keeps a one-row gap and no header for folded continuations', () => {
+  it('keeps a one-row gap for folded continuations', () => {
     const step = new StreamingAssistantComponent({ turn: 1, step: 2 }, false, plain, plainMd, 30)
     step.markStart(STAMP)
     step.setFoldedContinuation(true)
@@ -89,7 +79,6 @@ describe('StreamingAssistantComponent', () => {
     const rows = step.render(40)
     expect(rows[0]).toBe('')
     expect(rows[1]?.trimEnd()).toBe('answer')
-    expect(rows.join('\n')).not.toContain('Assistant')
   })
 
   it('renders shown reasoning as a quoted block with the ▎ bar', () => {
@@ -171,7 +160,7 @@ describe('StreamingAssistantComponent long-reply fold', () => {
     step.markStart(STAMP)
     step.settle([{ type: 'text', text: body }], STAMP + 2_000)
     const rows = step.render(40).map(row => row.trimEnd())
-    expect(rows).toEqual(['', '', 'Assistant 12:30', 'line 1', 'line 2', 'line 3', '… +5 lines (click to expand)'])
+    expect(rows).toEqual(['', '', 'line 1', 'line 2', 'line 3', '… +5 lines (click to expand)'])
   })
 
   it('expands the folded reply when its disclosure row is clicked', () => {

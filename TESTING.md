@@ -4,16 +4,16 @@
 
 ## 1.8.1 source verification
 
-The `1.8.1` checks cover removal of the established-session top header, the expanded transcript viewport, the dim input separator, welcome removal after the first message, transcript scrolling, disclosure clicks, drag selection, terminal titles, sidebar titles, and main-area diagnostics.
+The `1.8.1` checks cover removal of the established-session top header and repeated role labels, the expanded transcript viewport, the dim input separator, welcome removal after the first message, transcript scrolling, disclosure clicks, drag selection, terminal titles, sidebar titles, and main-area diagnostics.
 
 | Check | Result |
 | --- | --- |
-| Complete source tests | Passed: 46 files, 591 tests |
+| Complete source tests | Passed: 46 files, 590 tests |
 | Focused workbench layout | Passed: 17 tests, including headerless viewport rows and updated drag coordinates |
 | `pnpm run typecheck` | Passed |
 | `pnpm run lint` | Passed with 38 existing warnings and no errors |
 | `pnpm run build` | Passed |
-| `pnpm run pack:artifact` | Passed: 328 files, 747.5 kB, SHA-1 `44ec8386334ae0e8c74ed71160e4ec00a33ff053` |
+| `pnpm run pack:artifact` | Passed: 328 files, 746.9 kB, SHA-1 `26ecf08019a84eeaf35f9f042389d076ef84525c` |
 | Local `tui` profile | Installed from the `1.8.1` tarball; dependency listing, installed manifest, and `--dump-config` resolve the local package |
 
 ## 1.8.0 source verification
@@ -290,9 +290,9 @@ Exercise these behaviors through the installed profile:
 25. Guarded `Alt+Left` and `Alt+Right`, `/switch`, and left-clicking an active sidebar row open the same target session; ordinary editor cursor movement, completions, and overlays retain their input.
 26. Left-button transcript dragging includes both endpoint cells, preserves blank rows and wide graphemes, and copies without ANSI controls; reverse dragging, resize reflow, wheel scrolling, and non-left buttons behave as documented.
 27. Local, tmux, and SSH text-copy paths use system, tmux forwarding, and OSC 52 respectively. `Alt+V` reads PNG, JPEG, WebP, and GIF clipboard images through each supported platform adapter and keeps the session draft when the selected model lacks image input.
-28. `You` and `Assistant` headings remain distinct, the editor has a fixed preceding gap, and clicking thinking, tool, grouped-tool, diff, or context disclosure headers toggles only that block.
+28. User message bands and bare assistant Markdown remain visually distinct without `You` or `Assistant` heading rows; the editor has a fixed preceding rule, and clicking thinking, tool, grouped-tool, diff, or context disclosure headers toggles only that block.
 29. `/context`, `/agents`, `/jobs`, and `/settings` cover the chat main area while the full frame and sidebar remain visible.
-30. A new untitled session shows the welcome view; after its first user message or title, the header becomes `dsh v{version} — {title}` without moving the transcript or sidebar.
+30. A new untitled session shows the welcome view; after its first user message or title, the welcome view disappears without leaving a persistent top header or moving the transcript or sidebar.
 31. `/memory` reports the current session setting; `/memory on|off` persists it, installs or disposes memory tools and prompt sections, and keeps stored memories. The assistant defaults on and project sessions default off.
 32. `/queue` is absent from command help and autocomplete; Tab, Up, and Esc provide the complete queue interaction.
 33. Fork, rewind, resume, assistant recovery, workspace-attachment failure, and UI-adoption failure leave no unowned agent handle or unintended Active membership. The assistant rejects fork and rewind.

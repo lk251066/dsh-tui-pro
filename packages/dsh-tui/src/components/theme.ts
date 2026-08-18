@@ -63,7 +63,7 @@ export interface Palette {
   success: ColorRole
   warning: ColorRole
   error: ColorRole
-  /** Permission prompts, the `You` role header, and inline code, CC's permission blue. */
+  /** Permission prompts and inline code, CC's permission blue. */
   permission: ColorRole
   /** Plan-mode surfaces, CC's plan teal (reserved until the plan chip lands). */
   plan: ColorRole
@@ -142,7 +142,7 @@ export function paletteSpec(scheme: TerminalColorScheme): {
       // their default foreground, which made every "dim" surface the most
       // prominent text on screen.
       dim: { open: '2;39', close: '22;39', purpose: 'The one recessed tone: tool bodies, chrome, footers' },
-      accent: { open: '95', close: '39', purpose: 'The one emphasis color: role headers, prompt, borders' },
+      accent: { open: '95', close: '39', purpose: 'The one emphasis color: prompt, borders, and active controls' },
       brand: { open: '34', close: '39', purpose: 'DeepSeek brand art when truecolor is unavailable' },
       // ANSI 36 (cyan) is difficult to read on a light background — use ANSI 34
       // (blue) which is legible on both light and dark schemes.
@@ -153,9 +153,8 @@ export function paletteSpec(scheme: TerminalColorScheme): {
       warning: { open: '33', close: '39', purpose: 'Pending calls and warnings' },
       error: { open: '31', close: '39', purpose: 'Failures, signals, and a diff\'s removed lines' },
       // Semantic roles mirroring Claude Code's theme: permission's bright blue
-      // (the `You` role header) and plan's white-on-dark teal (reserved until
-      // the plan chip lands, defined so presets can theme it ahead of the surface).
-      permission: { open: '94', close: '39', purpose: 'Permission prompts and the user role header' },
+      // and plan's white-on-dark teal.
+      permission: { open: '94', close: '39', purpose: 'Permission prompts and inline code' },
       plan: { open: '37', close: '39', purpose: 'Plan-mode surfaces' },
       // Word-level diff emphasis: bold over the side's own line color, so the
       // changed words stand out inside an already green/red row while the
@@ -166,7 +165,7 @@ export function paletteSpec(scheme: TerminalColorScheme): {
     attributes: {
       bold: { open: '1', close: '22', purpose: 'Emphasis; composes with any color' },
       italic: { open: '3', close: '23', purpose: 'Reasoning text' },
-      underline: { open: '4', close: '24', purpose: 'Role-header banding' },
+      underline: { open: '4', close: '24', purpose: 'Underlined Markdown and emphasized controls' },
       strike: { open: '9', close: '29', purpose: 'Struck-through Markdown' },
       selected: { open: '7', close: '27', purpose: 'Reverse video for the active selection' },
     },
@@ -237,9 +236,9 @@ export function bubbleSpec(scheme: TerminalColorScheme, options: PaletteOptions 
 /**
  * Theme-agnostic palette derived from {@link paletteSpec}. Body `text` stays the
  * terminal's default foreground so it reads on light and dark backgrounds alike;
- * grouping uses foreground-only bold, underlined role headers and reverse video
- * rather than per-line prefixes, so a transcript drag-select copies message
- * text without stray glyphs. The one background exception is the user-message
+ * grouping uses foreground-only bold and reverse video rather than per-line
+ * role prefixes, so a transcript drag-select copies message text without stray
+ * glyphs. The one background exception is the user-message
  * `bubble` fill ({@link bubbleSpec}): a background SGR emits no glyphs either,
  * so the copied text stays clean while the user's own messages stand apart.
  *

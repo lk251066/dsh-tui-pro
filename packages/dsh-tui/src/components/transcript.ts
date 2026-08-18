@@ -45,7 +45,6 @@ import {
 } from './figures.ts'
 import { progressiveTitle, settledTitle } from '../chat/tool-verbs.ts'
 import {
-  formatClockTime,
   formatStatusDuration,
   type StepPosition,
 } from '../chat/timing.ts'
@@ -559,14 +558,11 @@ class UserBodyComponent implements Component {
 }
 
 /**
- * A user or steering prompt rendered as a codex-style bubble: every row (the
- * role header, the body, image blocks) is padded to the component width and
- * filled with the palette's derived `bubble` background, so the user's own
- * messages read as one band apart from the assistant's bare text. The `You`
- * header takes the permission blue (bold, no underline — the underline stays
- * the Assistant header's banding), and a dim `HH:MM` stamp rides the header
- * when the event time is known. Image blocks render inline beneath the text
- * through {@link ImageBlockComponent}.
+ * A user or steering prompt rendered as a codex-style bubble: every body and
+ * image row is padded to the component width and filled with the palette's
+ * derived `bubble` background, so the user's own messages read as one band
+ * apart from the assistant's bare text without a repeated role label. Image
+ * blocks render inline beneath the text through {@link ImageBlockComponent}.
  */
 export class UserMessageComponent extends Container {
   constructor(
@@ -574,12 +570,8 @@ export class UserMessageComponent extends Container {
     private readonly palette: Palette,
     images: readonly ImageAttachmentRef[] = [],
     loadImage?: (ref: ImageAttachmentRef) => Promise<Uint8Array | undefined>,
-    /** Wall-clock time of the `user/message` event, for the header stamp. */
-    at?: number,
   ) {
     super()
-    const stamp = at === undefined ? '' : ` ${palette.dim(formatClockTime(at))}`
-    this.addChild(new Text(palette.bold(palette.permission('You')) + stamp, 0, 0))
     if (text !== '') this.addChild(new UserBodyComponent(displayText(text), palette))
     const loader: (ref: ImageAttachmentRef) => Promise<Uint8Array | undefined>
       = loadImage === undefined ? () => Promise.resolve(undefined) : loadImage
@@ -649,10 +641,8 @@ const FOLDED_BODY_HINT = /^… \+\d+ lines \(click to expand\)$/u
 
 /**
  * Children of a settled assistant message: optional reasoning block then the
- * response text. The first visible step in a turn carries the Assistant role
- * header (with a dim `HH:MM` stamp when the step's start time is known) and
- * opens the message-level two-row gap; later steps are one-row-gap
- * continuations. A settled
+ * response text. The first visible step in a turn opens the message-level
+ * two-row gap; later steps are one-row-gap continuations. A settled
  * step folds its reasoning to one dim `∴ Thinking` line unless expanded
  * (Claude Code's default), while a streaming step keeps the reasoning live;
  * a folded continuation with no visible body renders nothing at all, so
@@ -670,7 +660,6 @@ function assistantMessageChildren(
   mdTheme: MarkdownTheme,
   settled: boolean,
   thinkingMs: number | undefined,
-  headerAt: number | undefined,
   maxMessageLines: number,
   textExpanded: boolean,
 ): Component[] {
@@ -678,12 +667,8 @@ function assistantMessageChildren(
   const text = displayText(textBlocks(content, 'text').trim())
   const showsReasoning = reasoning !== '' && (!settled || showReasoning)
   const foldsReasoning = settled && reasoning !== '' && !showReasoning
-  if (foldedContinuation && !showsReasoning && !foldsReasoning && text === '') return []
+  if (!showsReasoning && !foldsReasoning && text === '') return []
   const children: Component[] = [new Spacer(foldedContinuation ? 1 : 2)]
-  if (!foldedContinuation) {
-    const stamp = headerAt === undefined ? '' : ` ${palette.dim(formatClockTime(headerAt))}`
-    children.push(new Text(palette.underline(palette.bold(palette.accent('Assistant'))) + stamp, 0, 0))
-  }
   const duration = thinkingMs === undefined ? '' : ` for ${formatStatusDuration(thinkingMs)}`
   const liveDuration = thinkingMs === undefined ? '…' : `… ${formatStatusDuration(thinkingMs)}`
   const reasoningLines = reasoning === '' ? 0 : reasoning.split('\n').length
@@ -743,9 +728,9 @@ export class StreamingAssistantComponent extends Container {
 
   /**
    * Record the step's start time (its `step/start` event time) for the
-   * collapsed thinking line's duration and the role header's clock stamp.
+   * collapsed thinking line's duration.
    * @param time - Step start in epoch milliseconds, or `undefined` when the
-   * opening event is unavailable (the duration and stamp are simply omitted).
+   * opening event is unavailable (the duration is simply omitted).
    */
   markStart(time: number | undefined): void {
     this.startedAt = time
@@ -842,10 +827,9 @@ export class StreamingAssistantComponent extends Container {
   }
 
   /**
-   * Mark this step as a folded continuation of its turn: no `Assistant` header,
-   * and no output at all while the step has no visible body. Used while tool
-   * cards are hidden so a turn reads as one assistant message.
-   * @param folded - Whether to render as a headerless continuation.
+   * Mark this step as a folded continuation of its turn. Continuations use a
+   * one-row internal gap, and a step with no visible body renders nothing.
+   * @param folded - Whether to render with continuation spacing.
    */
   setFoldedContinuation(folded: boolean): void {
     if (this.foldedContinuation === folded) return
@@ -855,7 +839,7 @@ export class StreamingAssistantComponent extends Container {
 
   /**
    * Whether the step currently renders visible reasoning or text.
-   * @returns `true` when a header-owning render would show a body.
+   * @returns `true` when the step would render a reasoning or response body.
    */
   hasVisibleBody(): boolean {
     const content = this.presentedContent()
@@ -884,7 +868,6 @@ export class StreamingAssistantComponent extends Container {
       this.mdTheme,
       this.settledContent !== undefined,
       this.thinkingMs ?? (this.thinkingStartedAt === undefined ? undefined : Math.max(0, this.now() - this.thinkingStartedAt)),
-      this.startedAt,
       this.maxMessageLines,
       this.textExpanded,
     )

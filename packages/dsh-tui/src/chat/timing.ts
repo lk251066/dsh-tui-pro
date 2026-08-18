@@ -389,18 +389,6 @@ export function formatQueuedStatus(queued: number): string | undefined {
 }
 
 /**
- * Format a wall-clock time as `HH:MM` in local time, for role headers.
- * @param time - Epoch milliseconds.
- * @returns The formatted local clock time.
- */
-export function formatClockTime(time: number): string {
-  const date = new Date(time)
-  return [date.getHours(), date.getMinutes()]
-    .map(value => value.toString().padStart(2, '0'))
-    .join(':')
-}
-
-/**
  * Format a completion timestamp as `YYYY-MM-DD HH:MM:SS` in local time.
  * @param time - Epoch milliseconds.
  * @returns The formatted local timestamp.
