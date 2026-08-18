@@ -547,7 +547,7 @@ function createTuiChatInternal(
   let welcomeShimmer: ReturnType<typeof setInterval> | undefined
   let branch = runtime.gitBranch?.(initialCwd) ?? gitBranch(initialCwd)
   const promptValues: TuiPromptValueHandle[] = [
-    ctx.tuiPrompt.register('cwd', palette.bold(palette.accent(formattedCwd))),
+    ctx.tuiPrompt.register('cwd', palette.dim(formattedCwd)),
     ctx.tuiPrompt.register('git/worktree', branch === undefined ? undefined : palette.dim(` (${displayText(branch)})`)),
     ctx.tuiPrompt.register('token_meter/cache_hit_rate'),
     ctx.tuiPrompt.register('model'),
@@ -594,11 +594,11 @@ function createTuiChatInternal(
     const renderTime = now()
     sessionLayout?.refresh()
     const tokens = channel.tokens()
-    cwdValue.set(palette.bold(palette.accent(formattedCwd)))
+    cwdValue.set(palette.dim(formattedCwd))
     gitValue.set(branch === undefined ? undefined : palette.dim(` (${displayText(branch)})`))
     const rate = cacheHitRate(tokens)
     const usage = `↑${formatTokens(tokens.input)} ↓${formatTokens(tokens.output)}`
-    modelValue.set(`  ${palette.dim(displayText(target.current === undefined ? 'model unset' : compactTargetLabel(target.current)))}`)
+    modelValue.set(`  ${palette.text(displayText(target.current === undefined ? 'model unset' : compactTargetLabel(target.current)))}`)
     tokenValue.set(`  ${palette.dim(rate === undefined ? usage : `${usage}  cache ${rate}%`)}`)
     const pressure = contextPressure()
     const usedTokens = pressure?.projectedTokens ?? pressure?.pressureTokens
@@ -632,7 +632,7 @@ function createTuiChatInternal(
       ? palette.bold(palette.plan('  ⎇ plan'))
       : undefined)
     const throughput = channel.liveTokenRate()
-    throughputValue.set(throughput === undefined ? undefined : palette.dim(`  ${throughput} tok/s`))
+    throughputValue.set(throughput === undefined ? undefined : palette.text(`  ${throughput} tok/s`))
     // The `${memory}` fragment keeps the session's memory switch visible after
     // the transient /memory notice fades; an absent service or a disabled
     // switch renders nothing so the status row stays clean.

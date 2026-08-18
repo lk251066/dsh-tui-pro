@@ -7482,7 +7482,7 @@ describe('terminal mounting', () => {
       cwd: join(homedir(), 'projects', 'dsh-tui'),
     })
     await tick()
-    expect(terminal.output).toMatch(/\x1b\[95m~[\\/]/u)
+    expect(terminal.output).toMatch(/\x1b\[2;39m~[\\/]/u)
     expect(terminal.output).toContain('\x1b[2;39m (tui-staging)')
     await disposeTuiTestHarness(result)
   })

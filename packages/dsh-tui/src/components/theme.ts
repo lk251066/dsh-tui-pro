@@ -195,13 +195,13 @@ export interface PaletteOptions {
 }
 
 /** White fraction mixed into a dark terminal background for the bubble fill. */
-const BUBBLE_DARK_LIFT = 0.12
+const BUBBLE_DARK_LIFT = 0.08
 /** Black fraction mixed into a light terminal background for the bubble fill. */
 const BUBBLE_LIGHT_SHADE = 0.04
 
 /**
  * The user-message bubble's background spec, derived from the terminal's canvas
- * rather than a fixed color: a dark background lifted ~12% toward white, a
+ * rather than a fixed color: a dark background lifted ~8% toward white, a
  * light one shaded ~4% toward black, so the bubble reads as a whisper of
  * contrast on any scheme (codex's user-bubble treatment). The mix base is the
  * probed terminal background when known, else the preset's assumed canvas, else

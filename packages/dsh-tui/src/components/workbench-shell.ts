@@ -54,7 +54,6 @@ interface ColumnWidths {
 interface MainSections {
   readonly header: string[]
   readonly auxiliary: string[]
-  readonly inputSeparator: string[]
   readonly input: string[]
   readonly transcriptRows: number
 }
@@ -277,7 +276,6 @@ export class WorkbenchShellComponent implements Component {
     return [
       ...sections.header,
       ...transcript,
-      ...sections.inputSeparator,
       ...sections.auxiliary,
       ...sections.input,
     ]
@@ -290,16 +288,13 @@ export class WorkbenchShellComponent implements Component {
     const afterInput = Math.max(0, height - input.length)
     const rawAuxiliary = this.options.auxiliary.render(width)
     const auxiliary = rawAuxiliary.slice(Math.max(0, rawAuxiliary.length - afterInput))
-    const roomBeforeSeparator = Math.max(0, height - input.length - auxiliary.length)
-    const inputSeparator = roomBeforeSeparator > 0 ? [this.palette.dim('─'.repeat(width))] : []
-    const afterSeparator = Math.max(0, roomBeforeSeparator - inputSeparator.length)
-    const header = this.options.header.render(width).slice(0, afterSeparator)
+    const roomBeforeHeader = Math.max(0, height - input.length - auxiliary.length)
+    const header = this.options.header.render(width).slice(0, roomBeforeHeader)
     return {
       header,
       auxiliary,
-      inputSeparator,
       input,
-      transcriptRows: Math.max(0, height - header.length - inputSeparator.length - auxiliary.length - input.length),
+      transcriptRows: Math.max(0, height - header.length - auxiliary.length - input.length),
     }
   }
 

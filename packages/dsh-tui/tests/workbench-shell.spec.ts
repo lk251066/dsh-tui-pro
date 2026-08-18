@@ -69,9 +69,9 @@ describe('WorkbenchShellComponent', () => {
     expect(plain).toHaveLength(8)
     expect(main).toEqual([
       'header',
+      'row 9',
       'row 10',
       'row 11',
-      '─'.repeat(65),
       'queue',
       'dsh >',
     ])
@@ -86,7 +86,7 @@ describe('WorkbenchShellComponent', () => {
     const scrolled = workbench.render(100).map(stripSgr)
     const content = scrolled.slice(1, -1)
     expect(content.map(line => line.slice(1, line.indexOf('│', 1)).trim()))
-      .toEqual(['header', 'row 8', 'row 9', '─'.repeat(65), 'queue', 'dsh >'])
+      .toEqual(['header', 'row 6', 'row 7', 'row 8', 'queue', 'dsh >'])
     expect(content.map(line => line.slice(line.indexOf('│', 1) + 1, -1).trim()))
       .toEqual(['Workspace', 'Sessions', 'Status', '', '', ''])
 
@@ -131,17 +131,17 @@ describe('WorkbenchShellComponent', () => {
     expect(plain.some(line => line.includes('dsh >'))).toBe(true)
   })
 
-  it('gives an established conversation every row above the input separator', () => {
+  it('gives an established conversation every row above the fixed input area', () => {
     const transcript = Array.from({ length: 12 }, (_, index) => `row ${String(index)}`).join('\n')
     const plain = createWorkbench({ rows: 8, header: '', transcript }).render(100).map(stripSgr)
     const content = plain.slice(1, -1)
     const main = content.map(line => line.slice(1, line.indexOf('│', 1)).trim())
 
     expect(main).toEqual([
+      'row 8',
       'row 9',
       'row 10',
       'row 11',
-      '─'.repeat(65),
       'queue',
       'dsh >',
     ])

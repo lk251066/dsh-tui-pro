@@ -10,7 +10,7 @@ Do not use the existing `v1.0.0` GitHub tag; it predates the repaired source and
 
 The `1.8.0` source reserves `/exit` for whole-TUI shutdown. `/quit` and empty-input `Delete` close the current project session, preserve its history, and return to the fixed assistant. The assistant can read user/assistant dialogue and image placeholders from another Active project session without exposing reasoning or tool traffic. See [REPAIR_PLAN.md](REPAIR_PLAN.md) for the implementation record.
 
-The `1.8.1` source removes persistent top chrome from established conversations and replaces the blank row above the input area with one dim separator. The transcript owns every other available row while the pristine-session welcome remains unchanged. During model output, the bottom line shows the current step's rolling `token/s` estimate. The editor starts directly with `>` or its running-state glyph, and an assistant reply opens one row below the user message.
+The `1.8.1` source removes persistent top chrome from established conversations and lets the input frame provide the only lower boundary. The transcript owns every row above the fixed input area while the pristine-session welcome remains unchanged. During model output, the bottom line shows the current step's rolling `token/s` estimate. The editor starts directly with `>` or its running-state glyph, and an assistant reply opens one row below the user message.
 
 ## Intended installation
 

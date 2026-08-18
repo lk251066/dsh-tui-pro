@@ -71,18 +71,18 @@ export class SessionListComponent extends Container {
     for (const row of rows) {
       const item = row.item
       if (item === undefined) {
-        lines.push(padToWidth(this.palette.bold(this.palette.dim(` ${row.workspace}`)), width))
+        lines.push(padToWidth(this.palette.dim(` ${row.workspace}`), width))
         continue
       }
       const marker = item.status === 'running'
         ? this.palette.accent('●')
         : item.status === 'idle' ? this.palette.dim('○') : this.palette.dim('·')
-      const active = item.isActive ? this.palette.bold('›') : ' '
       const age = item.lastActivityAgo
-      const titleWidth = Math.max(1, width - 7 - visibleWidth(age))
+      const titleWidth = Math.max(1, width - 5 - visibleWidth(age))
       const title = truncateToWidth(item.title, titleWidth, '…')
-      const gap = ' '.repeat(Math.max(1, width - 5 - visibleWidth(title) - visibleWidth(age)))
-      const titleLine = padToWidth(` ${active} ${marker} ${title}${gap}${this.palette.dim(age)}`, width)
+      const styledTitle = item.isActive ? this.palette.accent(title) : title
+      const gap = ' '.repeat(Math.max(1, width - 3 - visibleWidth(title) - visibleWidth(age)))
+      const titleLine = padToWidth(` ${marker} ${styledTitle}${gap}${this.palette.dim(age)}`, width)
 
       lines.push(titleLine)
     }

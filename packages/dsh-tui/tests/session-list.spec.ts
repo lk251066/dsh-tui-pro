@@ -33,6 +33,8 @@ describe('SessionListComponent', () => {
     expect(text).toContain('Main session')
     expect(text).toContain('Debug session')
     expect(text.split('project')).toHaveLength(2)
+    expect(text).not.toContain('›')
+    expect(text).toContain(palette.accent('Main session'))
     expect(text).not.toContain('\x1b[7m')
     expect(lines.every(line => visibleWidth(line) === 44)).toBe(true)
   })

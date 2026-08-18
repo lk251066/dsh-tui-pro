@@ -143,19 +143,19 @@ describe('user bubble fill', () => {
     expect(createPalette(true, 'light').bubble('x')).toBe('\x1b[47mx\x1b[49m')
   })
 
-  it('lifts a dark canvas ~12% and shades a light one ~4% on truecolor', () => {
-    expect(createPalette(true, 'dark', { truecolor: true }).bubble('x')).toBe('\x1b[48;2;31;31;31mx\x1b[49m')
+  it('lifts a dark canvas ~8% and shades a light one ~4% on truecolor', () => {
+    expect(createPalette(true, 'dark', { truecolor: true }).bubble('x')).toBe('\x1b[48;2;20;20;20mx\x1b[49m')
     expect(createPalette(true, 'light', { truecolor: true }).bubble('x')).toBe('\x1b[48;2;245;245;245mx\x1b[49m')
   })
 
   it('mixes from the probed terminal background when known', () => {
     const palette = createPalette(true, 'dark', { truecolor: true, background: { r: 40, g: 42, b: 54 } })
-    expect(palette.bubble('x')).toBe('\x1b[48;2;66;68;78mx\x1b[49m')
+    expect(palette.bubble('x')).toBe('\x1b[48;2;57;59;70mx\x1b[49m')
   })
 
   it('mixes from the preset canvas when no probe is available', () => {
     const palette = createPalette(true, 'dark', { preset: THEME_PRESETS.dracula, truecolor: true })
-    expect(palette.bubble('x')).toBe('\x1b[48;2;66;68;78mx\x1b[49m')
+    expect(palette.bubble('x')).toBe('\x1b[48;2;57;59;70mx\x1b[49m')
   })
 
   it('emits no escape when color is off', () => {

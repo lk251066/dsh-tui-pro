@@ -4,13 +4,15 @@
 
 Established conversations no longer reserve a persistent top header or its surrounding blank rows. The transcript begins at the top of the main column and uses every row above the fixed input area. The new-session welcome remains visible only before conversation activity begins.
 
-One dim horizontal rule replaces the blank gap above auxiliary state and the editor. The rule identifies the transcript boundary without reducing its previous height. Scrolling, disclosure clicks, and drag selection use the expanded viewport coordinates.
+The editor frame is the only boundary below the transcript; a second full-width rule no longer repeats that edge. The reclaimed row belongs to the transcript, and scrolling, disclosure clicks, and drag selection use the expanded viewport coordinates.
 
-User message bands and assistant Markdown now provide the speaker distinction directly. The repeated `You` and `Assistant` heading rows and their heading timestamps are removed, while message wrapping, reasoning, tool cards, and reply folding remain unchanged.
+User message bands and assistant Markdown now provide the speaker distinction directly. The repeated `You` and `Assistant` heading rows and their heading timestamps are removed. The user fill is deliberately subtle on dark terminals, while message wrapping, reasoning, tool cards, and reply folding remain unchanged.
 
 Assistant replies now open one row below the preceding user message or tool output. The editor prompt no longer repeats `dsh`; it contains only the idle caret or the current running-state glyph.
 
-The bottom status line now reports the current model step's rolling output rate instead of the completed-session weighted average. It estimates tokens from text and tool-argument deltas emitted during the latest two seconds, refreshes while streaming, resets for each step, and disappears when that step finishes.
+The bottom status line now reports the current model step's rolling output rate instead of the completed-session weighted average. It estimates tokens from text and tool-argument deltas emitted during the latest two seconds, refreshes while streaming, resets for each step, and disappears when that step finishes. The working row keeps only its action and elapsed time; cwd and branch are dim, while model and live rate remain readable without competing with the transcript.
+
+The Active-session list uses one status glyph per row and accents only the current title. The redundant current-row arrow is removed, and multi-workspace group labels are dim instead of bold.
 
 ## 1.8.0 source changes
 

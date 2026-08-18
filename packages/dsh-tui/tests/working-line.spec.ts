@@ -17,7 +17,7 @@ function makeLine(): WorkingLineComponent {
 describe('working line', () => {
   it('renders nothing while idle', () => {
     const line = makeLine()
-    line.update(true, NOW - 1000, 'Reading src/foo.ts', '⠋', { verb: 'Pondering', emittedTokens: 99 })
+    line.update(true, NOW - 1000, 'Reading src/foo.ts', '⠋', { verb: 'Pondering' })
     line.update(false, undefined, undefined, undefined)
     expect(line.render(80)).toEqual([])
   })
@@ -41,20 +41,17 @@ describe('working line', () => {
 
   it('prefers a pending tool activity over the turn verb', () => {
     const line = makeLine()
-    line.update(true, NOW - 2000, 'Reading src/foo.ts', '⠋', { verb: 'Pondering', emittedTokens: 12 })
+    line.update(true, NOW - 2000, 'Reading src/foo.ts', '⠋', { verb: 'Pondering' })
     const [row] = line.render(80)
     expect(stripSgr(row)).toContain('⠋ Reading src/foo.ts')
     expect(row).not.toContain('Pondering')
   })
 
-  it('appends the token segment only for a positive count', () => {
+  it('does not repeat token statistics supplied by the streaming channel', () => {
     const line = makeLine()
-    line.update(true, NOW - 1000, undefined, '⠋', { verb: 'Vibing', emittedTokens: 128 })
-    expect(line.render(80)[0]).toContain('· 1.0s · ↓ 128 tokens')
-    line.update(true, NOW - 1000, undefined, '⠋', { verb: 'Vibing', emittedTokens: 0 })
-    expect(line.render(80)[0]).not.toContain('↓')
-    line.update(true, NOW - 1000, undefined, '⠋', { verb: 'Vibing' })
-    expect(line.render(80)[0]).not.toContain('↓')
+    const channelStatus = { verb: 'Vibing', emittedTokens: 128 }
+    line.update(true, NOW - 1000, undefined, '⠋', channelStatus)
+    expect(stripSgr(line.render(80)[0])).toBe('⠋ Vibing · 1.0s')
   })
 
   it('paints the line warning-colored once output stalls past three seconds', () => {
@@ -76,13 +73,10 @@ describe('working line', () => {
     expect(line.render(80)[0]).toContain(DIM_SGR)
   })
 
-  it('truncates to the given width, tokens segment first to go', () => {
+  it('truncates to the given width', () => {
     const line = makeLine()
-    line.update(true, NOW - 1000, undefined, '⠋', { verb: 'Reticulating', emittedTokens: 12_345 })
-    const [row] = line.render(80)
-    expect(row).toContain('↓ 12345 tokens')
+    line.update(true, NOW - 1000, undefined, '⠋', { verb: 'Reticulating' })
     const narrow = line.render(10)[0]
     expect(narrow).not.toContain('Reticulating')
-    expect(narrow).not.toContain('↓')
   })
 })

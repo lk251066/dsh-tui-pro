@@ -4,7 +4,7 @@
 
 ## 1.8.1 source verification
 
-The `1.8.1` checks cover removal of the established-session top header and repeated role labels, the expanded transcript viewport, the dim input separator, welcome removal after the first message, transcript scrolling, disclosure clicks, drag selection, terminal titles, sidebar titles, and main-area diagnostics. They also cover the prefix-free editor prompt, one-row user-to-assistant spacing, and a current-step `token/s` estimate that refreshes from the latest two seconds of streaming output and clears at step completion.
+The `1.8.1` checks cover removal of the established-session top header, repeated role labels, and redundant full-width input rule; the expanded transcript viewport; welcome removal after the first message; transcript scrolling; disclosure clicks; drag selection; terminal titles; sidebar titles; and main-area diagnostics. They also cover the prefix-free editor prompt, one-row user-to-assistant spacing, subtle user fill, simplified Active-session highlighting, and a current-step `token/s` estimate that refreshes from the latest two seconds of streaming output and clears at step completion.
 
 | Check | Result |
 | --- | --- |
@@ -13,8 +13,8 @@ The `1.8.1` checks cover removal of the established-session top header and repea
 | `pnpm run typecheck` | Passed |
 | `pnpm run lint` | Passed with 34 existing warnings and no errors |
 | `pnpm run build` | Passed |
-| `pnpm run pack:artifact` | Passed: 331 files, 747.4 kB, SHA-1 `cc6e717afe7c6f7d588b6100cc03f1b751064f76`, SHA-256 `f4df8628df62810ac21177717bc3b1bb70352d477a63dfc27cc4eec1c3962ad2` |
-| Local `tui` profile | Reinstalled from the `1.8.1` tarball; installed JavaScript contains the prefix-free prompt and live-rate module, `why` and `--dump-config` resolve the package, and direct non-TTY launch reaches the intentional TTY requirement after plugin loading |
+| `pnpm run pack:artifact` | Passed: 331 files, 747.1 kB, SHA-1 `7cfa5f279de01541bc5eb929477bbf22f08c3bf0`, SHA-256 `7922f4c8f154ebb079f8068ab7ac25a6a6ed864d544b86a30da93df00e528571` |
+| Local `tui` profile | Reinstalled from the `1.8.1` tarball; installed JavaScript contains the expanded viewport, simplified working row and session marker, reduced user fill, footer hierarchy, prefix-free prompt, and live-rate module; `why` and `--dump-config` resolve the package, and direct non-TTY launch reaches the intentional TTY requirement after plugin loading |
 
 ## 1.8.0 source verification
 
