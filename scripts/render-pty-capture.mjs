@@ -3,15 +3,20 @@ import xtermHeadless from '@xterm/headless'
 
 const { Terminal } = xtermHeadless
 
-const [capturePath, outputPath] = process.argv.slice(2)
+const [capturePath, outputPath, columnsArg = '140', rowsArg = '32'] = process.argv.slice(2)
 if (capturePath === undefined || outputPath === undefined) {
-  throw new Error('usage: render-pty-capture.mjs <capture> <output>')
+  throw new Error('usage: render-pty-capture.mjs <capture> <output> [columns] [rows]')
+}
+const columns = Number.parseInt(columnsArg, 10)
+const rows = Number.parseInt(rowsArg, 10)
+if (!Number.isSafeInteger(columns) || columns <= 0 || !Number.isSafeInteger(rows) || rows <= 0) {
+  throw new Error('terminal columns and rows must be positive integers')
 }
 
 const terminal = new Terminal({
   allowProposedApi: true,
-  cols: 140,
-  rows: 32,
+  cols: columns,
+  rows,
   scrollback: 2_000,
 })
 // Stop at the last completed synchronized frame. Shutdown deliberately moves

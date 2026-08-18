@@ -12,9 +12,11 @@ The `1.8.0` source separates whole-TUI exit from project-session closing, gives 
 
 ## Version 1.8.1 transcript viewport
 
-Established conversations have no persistent top header or reserved header spacing. The new-session welcome remains visible only while the session is pristine. The framed editor supplies the only lower boundary, so a repeated full-width rule does not consume a transcript row. Transcript scrolling, disclosure clicks, and drag selection use the expanded viewport coordinates.
+Established conversations have no persistent top header, reserved header spacing, or outer workbench frame. The new-session welcome remains visible only while the session is pristine. One horizontal inset column on each edge and one dim main/sidebar divider provide structure; the framed editor supplies the only lower boundary. Transcript scrolling, disclosure clicks, sidebar clicks, and drag selection use the expanded viewport coordinates.
 
-User messages remain full-width background bands with a `›` marker; assistant replies remain bare Markdown. Those styles identify the speaker without separate `You` and `Assistant` rows. Turn-level and continuation spacing remain independent of the removed labels.
+User messages remain full-width background bands with a `›` marker; assistant replies remain bare Markdown with a `•` marker. Thinking uses `∴`; tool calls use their state glyph and result bodies start at an indented `⎿`. Every continuation hangs under the same body column, so the left gutter stays stable across wrapped messages and narrow terminals without separate `You` and `Assistant` rows.
+
+Plan calls declare `kind: 'plan'` and render as the transcript's one deliberate bordered panel. Subagent calls declare `kind: 'delegate'`, render as `Subagent · <description>`, and keep the delegated prompt and result under the normal detail controls. Todo state stays as one `Plan completed/total · current item` row until the shared detail view expands it. These treatments follow tool-owned semantic kinds rather than tool-name checks.
 
 Assistant replies use one leading row after a user message or tool output. The input prompt contains only the idle caret or active phase glyph, without a `dsh` label. The bottom status line reports a rolling estimate for the current step from output emitted during the latest two seconds; it resets at each step and clears when streaming ends. Historical replay and completed-session statistics never populate this live value. The working row does not repeat a cumulative token count, and the sidebar identifies the current session by title accent instead of an additional arrow.
 

@@ -13,7 +13,6 @@ import {
   Text,
   truncateToWidth,
   visibleWidth,
-  wrapTextWithAnsi,
   type Component,
   type MarkdownTheme,
 } from '@earendil-works/pi-tui'
@@ -37,8 +36,6 @@ import {
 } from './logo.ts'
 import { contentText, type ParsedArguments } from './content.ts'
 import {
-  RESULT_CONTINUATION,
-  RESULT_MARKER,
   shortcutHint,
   THINKING_GLYPH,
   TOOL_SETTLED,
@@ -67,6 +64,32 @@ function pretty(value: unknown): string {
   // JSON.stringify is typed to return string but yields undefined for e.g. symbols.
   const serialized = JSON.stringify(value, null, 2) as string | undefined
   return displayText(serialized ?? String(value))
+}
+
+/** One marker column plus one space, with wrapped rows aligned to the content column. */
+class TranscriptGutterComponent implements Component {
+  constructor(
+    private readonly child: Component,
+    private readonly marker: string,
+    private readonly indent = 0,
+  ) {}
+
+  invalidate(): void {
+    this.child.invalidate()
+  }
+
+  render(width: number): string[] {
+    const markerWidth = Math.max(1, visibleWidth(this.marker))
+    const contentWidth = Math.max(1, width - this.indent - markerWidth - 1)
+    const rows = this.child.render(contentWidth)
+    let marked = false
+    return rows.map((row) => {
+      if (row === '') return ''
+      const prefix = marked ? ' '.repeat(markerWidth) : padToWidth(this.marker, markerWidth)
+      marked = true
+      return truncateToWidth(`${' '.repeat(this.indent)}${prefix} ${row}`, width, '')
+    })
+  }
 }
 
 interface RenderedDiff {
@@ -545,15 +568,21 @@ export class ImageBlockComponent extends Container {
  * survives soft wraps.
  */
 class UserBodyComponent implements Component {
-  constructor(private readonly text: string, private readonly palette: Palette) {}
+  private readonly gutter: TranscriptGutterComponent
 
-  invalidate(): void {}
+  constructor(text: string, palette: Palette) {
+    this.gutter = new TranscriptGutterComponent(
+      new Text(text, 0, 0),
+      palette.bold(palette.dim('›')),
+    )
+  }
+
+  invalidate(): void {
+    this.gutter.invalidate()
+  }
 
   render(width: number): string[] {
-    const rows = wrapTextWithAnsi(this.text, Math.max(1, width - 2))
-    return rows.map((row, index) => index === 0
-      ? `${this.palette.bold(this.palette.dim('›'))} ${row}`
-      : `  ${row}`)
+    return this.gutter.render(width)
   }
 }
 
@@ -671,24 +700,36 @@ function assistantMessageChildren(
   const liveDuration = thinkingMs === undefined ? '…' : `… ${formatStatusDuration(thinkingMs)}`
   const reasoningLines = reasoning === '' ? 0 : reasoning.split('\n').length
   if (foldsReasoning) {
-    children.push(new Text(palette.italic(palette.dim(
-      `▶ Thinking${duration} · ${String(reasoningLines)} lines ${shortcutHint('ctrl+r', 'expand')}`,
-    )), 0, 0))
+    children.push(new TranscriptGutterComponent(
+      new Text(palette.italic(palette.dim(
+        `Thinking${duration} · ${String(reasoningLines)} lines ${shortcutHint('ctrl+r', 'expand')}`,
+      )), 0, 0),
+      palette.dim(THINKING_GLYPH),
+    ))
   } else if (showsReasoning) {
     // Quote-prefix every line (blank lines keep a bare `>` so the bar does not
     // break at paragraph gaps) and let the Markdown quote style draw the bar.
     const quoted = reasoning.split('\n').map(line => line === '' ? '>' : `> ${line}`).join('\n')
     children.push(
-      new Text(palette.italic(palette.dim(
-        `▼ ${THINKING_GLYPH} Thinking${settled ? duration : liveDuration}${settled ? ` ${shortcutHint('ctrl+r', 'collapse')}` : ''}`,
-      )), 0, 0),
-      new Markdown(quoted, 0, 0, mdTheme, { color: value => palette.dim(value), italic: true }),
+      new TranscriptGutterComponent(
+        new Text(palette.italic(palette.dim(
+          `Thinking${settled ? duration : liveDuration}${settled ? ` ${shortcutHint('ctrl+r', 'collapse')}` : ''}`,
+        )), 0, 0),
+        palette.dim(THINKING_GLYPH),
+      ),
+      new TranscriptGutterComponent(
+        new Markdown(quoted, 0, 0, mdTheme, { color: value => palette.dim(value), italic: true }),
+        ' ',
+      ),
     )
   }
   if (text) {
-    children.push(settled
-      ? new FoldableBodyComponent(text, maxMessageLines, textExpanded, palette, mdTheme)
-      : new Markdown(text, 0, 0, mdTheme, { color: value => palette.text(value) }))
+    children.push(new TranscriptGutterComponent(
+      settled
+        ? new FoldableBodyComponent(text, maxMessageLines, textExpanded, palette, mdTheme)
+        : new Markdown(text, 0, 0, mdTheme, { color: value => palette.text(value) }),
+      palette.bold('•'),
+    ))
   }
   return children
 }
@@ -815,7 +856,7 @@ export class StreamingAssistantComponent extends Container {
       this.setShowReasoning(!this.showReasoning)
       return true
     }
-    if (!this.textExpanded && FOLDED_BODY_HINT.test(line.trimEnd())) {
+    if (!this.textExpanded && FOLDED_BODY_HINT.test(line.trim())) {
       this.textExpanded = true
       this.rebuild()
       return true
@@ -861,27 +902,18 @@ interface CardBody {
   readonly lines: readonly string[]
 }
 
+/** Read extension kinds that may be newer than the installed public tools types. */
+function callKind(view: ToolCallView): string | undefined {
+  return view.card === 'generic'
+    ? (view as ToolCallView & { readonly kind?: string }).kind
+    : undefined
+}
+
 /**
  * Ctrl+O card-visibility cycle: `hidden` drops tool cards from the transcript,
  * `collapsed` previews the first body lines, `expanded` shows everything.
  */
 export type ToolCardVisibility = 'hidden' | 'collapsed' | 'expanded'
-
-/**
- * Prefix a card's body rows with the result marker: the first non-blank row
- * carries `⎿`, later rows align under its text column, blank rows stay empty.
- */
-function prefixResultLines(body: readonly string[]): string[] {
-  let marked = false
-  return body.map((line) => {
-    if (line === '') return ''
-    if (!marked) {
-      marked = true
-      return `${RESULT_MARKER}${line}`
-    }
-    return `${RESULT_CONTINUATION}${line}`
-  })
-}
 
 /**
  * Transcript card with a width-keyed rendered-row cache. pi-tui re-renders
@@ -1039,6 +1071,9 @@ export class ToolCardComponent extends CachedCardComponent {
     // settled; the header color (warning/success/error) doubles the state.
     const pending = this.result === undefined
     const glyph = pending ? this.spinnerFrame ?? '○' : TOOL_SETTLED()
+    if (callKind(this.callView) === 'plan') {
+      return this.renderPlan(width, pending, isError)
+    }
     const rawBody = this.renderBody(width)
     const view = this.resultView ?? this.callView
     // A generic card's own content, a read card's `content` fallback (the
@@ -1102,23 +1137,58 @@ export class ToolCardComponent extends CachedCardComponent {
     // The header is a single card row: collapse an embedded newline in a
     // model-authored label to an inline escape so it cannot break onto extra
     // rows and collide with the body lines that follow.
-    const disclosure = this.visibility === 'expanded' ? '▼' : '▶'
-    const headerText = `${disclosure} ${glyph} ${displayInlineText(label)}${duration}`
-    const maxWidth = Math.max(1, width - 2)
-    const header = pending
-      ? this.palette.warning(truncateToWidth(headerText, maxWidth, ''))
-      : truncateToWidth(
-        this.palette.dim(`${disclosure} `) + statusColor(glyph) + this.palette.dim(` ${displayInlineText(label)}${duration}`),
-        maxWidth,
-        '',
-      )
+    const semanticLabel = callKind(this.callView) === 'delegate'
+      ? `Subagent · ${displayInlineText(label).replace(/^(?:Delegate|Delegating)\s+/u, '')}`
+      : `${displayInlineText(label)}`
+    const headerText = `${semanticLabel}${duration}`
+    const header = new TranscriptGutterComponent(
+      new Text(pending ? this.palette.warning(headerText) : this.palette.dim(headerText), 0, 0),
+      statusColor(glyph),
+    ).render(width)[0] ?? ''
     // The blank first row is the card's own paragraph gap (no external Spacer),
     // so the hidden state removes the gap together with the card.
     const lines: string[] = ['', header]
     if (visibleBody.length > 0) {
-      lines.push(...new Text(prefixResultLines(visibleBody).join('\n'), 0, 0).render(width))
+      lines.push(...new TranscriptGutterComponent(
+        new Text(visibleBody.join('\n'), 0, 0),
+        this.palette.dim('⎿'),
+        2,
+      ).render(width))
     }
     return lines
+  }
+
+  /** Render the submitted plan as the transcript's one deliberate full panel. */
+  private renderPlan(width: number, pending: boolean, isError: boolean): string[] {
+    if (this.visibility === 'hidden') return []
+    const view = this.callView.card === 'generic' ? this.callView : undefined
+    const source = view?.content === undefined ? '' : displayText(contentText(view.content))
+    const title = displayInlineText(view?.title ?? 'Plan')
+    const state = pending ? 'reviewing' : isError ? 'revision requested' : 'approved'
+    if (width < 12) {
+      return [
+        '',
+        ...new TranscriptGutterComponent(
+          new Text(`${title} · ${state}\n${source}`, 0, 0),
+          this.palette.plan('◆'),
+        ).render(width),
+      ]
+    }
+    const innerWidth = Math.max(1, width - 4)
+    const rendered = new Markdown(source, 0, 0, this.mdTheme, { color: value => this.palette.text(value) })
+      .render(innerWidth)
+    const visible = this.visibility === 'expanded'
+      ? rendered
+      : preview(rendered, this.maxOutputLines, count => this.palette.dim(`… +${count} lines ${shortcutHint('ctrl+o', 'expand')}`))
+    const caption = truncateToWidth(` Plan · ${title} · ${state} `, width - 4, '')
+    const topFill = `${caption}${'─'.repeat(Math.max(0, width - 2 - visibleWidth(caption)))}`
+    const border = (text: string): string => this.palette.plan(text)
+    return [
+      '',
+      `${border('╭')}${border(topFill)}${border('╮')}`,
+      ...visible.map(row => `${border('│')} ${padToWidth(row, innerWidth)} ${border('│')}`),
+      `${border('╰')}${border('─'.repeat(width - 2))}${border('╯')}`,
+    ]
   }
 
   /** The pending terminal call view, when this row is a terminal card. */
@@ -1592,6 +1662,7 @@ export class ContextCardComponent extends CachedCardComponent {
 /** The plan/todo panel rendered above the prompt. */
 export class TodoComponent implements Component {
   private todos: readonly TodoItem[] = []
+  private expanded = false
 
   constructor(private readonly palette: Palette) {}
 
@@ -1603,11 +1674,27 @@ export class TodoComponent implements Component {
     this.todos = todos
   }
 
+  /** Expand the complete checklist only in the shared detail phase. */
+  setExpanded(expanded: boolean): void {
+    this.expanded = expanded
+  }
+
   invalidate(): void {}
 
   render(width: number): string[] {
     if (this.todos.length === 0) return []
-    const lines: string[] = [this.palette.bold(this.palette.accent('Plan'))]
+    const completed = this.todos.filter(todo => todo.status === 'completed').length
+    const current = this.todos.find(todo => todo.status === 'in_progress')
+      ?? this.todos.find(todo => todo.status !== 'completed')
+    const marker = completed === this.todos.length
+      ? this.palette.success('✓')
+      : this.palette.plan('●')
+    const summary = `Plan ${completed}/${this.todos.length}${current === undefined ? '' : ` · ${displayText(current.content)}`}`
+    const lines = new TranscriptGutterComponent(
+      new Text(this.palette.plan(summary), 0, 0),
+      marker,
+    ).render(width)
+    if (!this.expanded) return ['', ...lines]
     for (const todo of this.todos) {
       const prefix = todo.status === 'completed'
         ? this.palette.success('✓')
@@ -1616,7 +1703,7 @@ export class TodoComponent implements Component {
           : this.palette.dim('○')
       const content = displayText(todo.content)
       const text: string = todo.status === 'completed' ? this.palette.dim(content) : content
-      lines.push(truncateToWidth(`  ${prefix} ${text}`, width, ''))
+      lines.push(...new TranscriptGutterComponent(new Text(text, 0, 0), prefix, 2).render(width))
     }
     return ['', ...lines]
   }

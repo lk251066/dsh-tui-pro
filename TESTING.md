@@ -4,16 +4,18 @@
 
 ## 1.8.1 source verification
 
-The `1.8.1` checks cover removal of the established-session top header, repeated role labels, and redundant full-width input rule; the expanded transcript viewport; welcome removal after the first message; transcript scrolling; disclosure clicks; drag selection; terminal titles; sidebar titles; and main-area diagnostics. They also cover the prefix-free editor prompt, one-row user-to-assistant spacing, subtle user fill, simplified Active-session highlighting, and a current-step `token/s` estimate that refreshes from the latest two seconds of streaming output and clears at step completion.
+The `1.8.1` checks cover the borderless fixed workbench, expanded transcript viewport, one-column outer whitespace, and dim separator between the transcript and sidebar. Transcript content uses one symbol gutter for user, assistant, thinking, tool, and nested-result rows with hanging indentation at narrow widths. Plan and delegate calls use their structured presentation kinds, todo progress has a compact current-step row with `Ctrl+O` expansion, and scrolling, disclosure clicks, drag selection, terminal titles, sidebar titles, main-area diagnostics, the prefix-free editor prompt, compact message spacing, and current-step `token/s` remain covered.
 
 | Check | Result |
 | --- | --- |
-| Complete source tests | Passed: 47 files, 592 tests |
-| Focused workbench layout | Passed: 17 tests, including headerless viewport rows and updated drag coordinates |
+| Complete source tests | Passed: 47 files, 595 tests |
+| Focused transcript and workbench layout | Passed: 45 tests, including gutter wrapping, Plan and Delegate cards, compact todo progress, borderless viewport rows, and updated pointer coordinates |
 | `pnpm run typecheck` | Passed |
 | `pnpm run lint` | Passed with 34 existing warnings and no errors |
 | `pnpm run build` | Passed |
-| `pnpm run pack:artifact` | Passed: 331 files, 747.1 kB, SHA-1 `7cfa5f279de01541bc5eb929477bbf22f08c3bf0`, SHA-256 `7922f4c8f154ebb079f8068ab7ac25a6a6ed864d544b86a30da93df00e528571` |
+| `pnpm run pack:artifact` | Passed: 331 files, 747.8 kB, SHA-1 `0f1c9dde56f278decedcd414a1e9c2da7c9a82a6`, SHA-256 `5aa6da270f7f928d6047c4af669655a9b708d0cbcd8d2343f7da9fb565ee7345` |
+| Windows empty-profile public-host installation | Passed against public dsh rc.6; profile installation, `why`, `--dump-config`, and non-TTY module loading resolved the reviewed tarball |
+| Linux real PTY | Passed at 80x24 and 120x35 for the borderless fixed workbench, single sidebar separator, fixed editor, commands, session switching, memory, image-paste failure, export, and shutdown |
 | Local `tui` profile | Reinstalled from the `1.8.1` tarball; installed JavaScript contains the expanded viewport, simplified working row and session marker, reduced user fill, footer hierarchy, prefix-free prompt, and live-rate module; `why` and `--dump-config` resolve the package, and direct non-TTY launch reaches the intentional TTY requirement after plugin loading |
 
 ## 1.8.0 source verification
@@ -267,7 +269,7 @@ Exercise these behaviors through the installed profile:
 2. Workspace shows the active project and Git branch without terminal control characters; Active sessions are grouped by workspace without repeating the workspace on every session row.
 3. The bottom line shows cwd, branch, model, and context. Sidebar Status shows agent state, input/output tokens, cache hit rate, permission preset, and plan mode before and after a model turn.
 4. A second session created with `/new` appears under Active and switches without duplicate UI children; detached title and running-state changes update without first switching to that session.
-5. `/sessions` replaces only the left chat area with complete history; the outer frame and sidebar stay fixed, and search, Up, Down, Enter, Tab, Space, and Escape perform their documented actions without sending text to the model.
+5. `/sessions` replaces only the left chat area with complete history; the outer whitespace, separator, and sidebar stay fixed, and search, Up, Down, Enter, Tab, Space, and Escape perform their documented actions without sending text to the model.
 6. The queue dock changes through insert, claim, discard, Esc recovery, and unrelated durable transcript updates without a duplicate Queue row in the sidebar.
 7. Approval, question, tool output, reasoning visibility, and compaction status render correctly.
 8. Removing an active session retains it in complete history, and adding it restores its sidebar entry without changing the log.
@@ -291,13 +293,13 @@ Exercise these behaviors through the installed profile:
 26. Left-button transcript dragging includes both endpoint cells, preserves blank rows and wide graphemes, and copies without ANSI controls; reverse dragging, resize reflow, wheel scrolling, and non-left buttons behave as documented.
 27. Local, tmux, and SSH text-copy paths use system, tmux forwarding, and OSC 52 respectively. `Alt+V` reads PNG, JPEG, WebP, and GIF clipboard images through each supported platform adapter and keeps the session draft when the selected model lacks image input.
 28. User message bands and bare assistant Markdown remain visually distinct without `You` or `Assistant` heading rows; the editor has a fixed preceding rule, and clicking thinking, tool, grouped-tool, diff, or context disclosure headers toggles only that block.
-29. `/context`, `/agents`, `/jobs`, and `/settings` cover the chat main area while the full frame and sidebar remain visible.
+29. `/context`, `/agents`, `/jobs`, and `/settings` cover the chat main area while the fixed separator and sidebar remain visible.
 30. A new untitled session shows the welcome view; after its first user message or title, the welcome view disappears without leaving a persistent top header or moving the transcript or sidebar.
 31. `/memory` reports the current session setting; `/memory on|off` persists it, installs or disposes memory tools and prompt sections, and keeps stored memories. The assistant defaults on and project sessions default off.
 32. `/queue` is absent from command help and autocomplete; Tab, Up, and Esc provide the complete queue interaction.
 33. Fork, rewind, resume, assistant recovery, workspace-attachment failure, and UI-adoption failure leave no unowned agent handle or unintended Active membership. The assistant rejects fork and rewind.
 
-`scripts/verify-interactive-pty.sh` drives the packed plugin through a Python standard-library PTY. The driver answers terminal capability queries, exercises welcome and compact headers, memory status and toggles, clipboard-image failure, valid command paths, session creation and switching, history, export, and shutdown. The captured ANSI stream is replayed through `@xterm/headless`; the check requires the fixed outer frame, current sidebar sections, Workspace to the right of the separator, the editor to the left, and no duplicate attachment service. The repository snapshot suite remains the keyless evidence for stable rendered output.
+`scripts/verify-interactive-pty.sh` drives the packed plugin through a Python standard-library PTY. The driver answers terminal capability queries, exercises welcome and compact headers, memory status and toggles, clipboard-image failure, valid command paths, session creation and switching, history, export, and shutdown. The captured ANSI stream is replayed through `@xterm/headless` at the requested terminal size; the check requires the borderless fixed workbench, current sidebar sections, Workspace to the right of the single separator, the editor to the left, and no duplicate attachment service. The repository snapshot suite remains the keyless evidence for stable rendered output.
 
 ## Registry verification
 

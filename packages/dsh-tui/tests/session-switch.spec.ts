@@ -619,7 +619,7 @@ describe('multi-session switching (/new, /sessions)', () => {
 
       // The active workspace row follows the workspace heading and the newly
       // created session, so the original main session is the next row.
-      harness.terminal.send('\x1b[<0;60;12M')
+      harness.terminal.send('\x1b[<0;60;11M')
       await tick()
       submit(harness, 'message after sidebar click')
 
@@ -643,7 +643,7 @@ describe('multi-session switching (/new, /sessions)', () => {
 
       // Select the original session in the sidebar, then remove that current
       // session from the active workspace list with two immediate key presses.
-      harness.terminal.send('\x1b[<0;60;12M')
+      harness.terminal.send('\x1b[<0;60;11M')
       await tick()
       const workspace = harness.ctx.workspaceRegistry.list()[0]!
       const detach = vi.spyOn(workspace, 'detachSession')

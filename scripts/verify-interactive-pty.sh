@@ -7,12 +7,13 @@ dsh_home="${DSH_PTY_HOME:-$repo_root/.test-results/public-dsh-smoke/home}"
 profile="${DSH_PTY_PROFILE:-tui-public-smoke}"
 output_root="${DSH_PTY_OUTPUT_DIR:-$repo_root/.test-results/public-dsh-smoke}"
 timeout_seconds="${DSH_PTY_TIMEOUT:-120}"
+columns="${DSH_PTY_COLUMNS:-140}"
+rows="${DSH_PTY_ROWS:-32}"
 dsh_bin="${DSH_PTY_DSH_BIN:-$host_root/node_modules/@deepseek-ai/dsh/lib/bin.js}"
 node_bin="${NODE:-$(command -v node)}"
 capture="$output_root/interactive.typescript"
 readable="$output_root/interactive.strings"
 export_path="$output_root/pty-export.md"
-package_version="$($node_bin -p "require('$repo_root/packages/dsh-tui/package.json').version")"
 
 rm -f "$export_path"
 trap 'rm -f "$export_path"' EXIT
@@ -25,17 +26,18 @@ python3 "$repo_root/scripts/drive-interactive-pty.py" \
   --capture "$capture" \
   --cwd "$host_root" \
   --timeout "$timeout_seconds" \
+  --columns "$columns" \
+  --rows "$rows" \
   --env TERM=xterm-256color \
   --env DSH_HOME="$dsh_home" \
   --env DEEPSEEK_API_KEY=dummy \
   -- "$node_bin" "$dsh_bin" --profile "$profile"
-"$node_bin" "$repo_root/scripts/render-pty-capture.mjs" "$capture" "$readable"
+"$node_bin" "$repo_root/scripts/render-pty-capture.mjs" "$capture" "$readable" "$columns" "$rows"
 grep -aqF 'Settings' "$capture"
-grep -aqF 'Reasoning effort:' "$capture"
+grep -aqF 'Reasoning effort ·' "$capture"
 grep -aqF 'Exported to' "$capture"
 grep -aqF 'New session session-' "$capture"
 grep -aqF 'assistant' "$capture"
-grep -aqF "v$package_version" "$capture"
 grep -aqF 'PTY command audit' "$capture"
 grep -aqF 'Memory is off for this session.' "$capture"
 grep -aqF 'Memory enabled for this session.' "$capture"
@@ -52,24 +54,20 @@ grep -qF 'Active' "$readable"
 grep -qF 'Status' "$readable"
 grep -qF 'Perm' "$readable"
 grep -qF 'plan off' "$readable"
-python3 - "$readable" "$package_version" <<'PY'
+python3 - "$readable" <<'PY'
 from pathlib import Path
 import sys
 
 lines = Path(sys.argv[1]).read_text(encoding='utf-8').splitlines()
-version = sys.argv[2]
-title = next((line for line in lines if f'v{version}' in line or 'coding agent ready' in line), None)
 workspace = next((line for line in lines if 'Workspace' in line and '│' in line), None)
-editor = next((line for line in lines if ('dsh >' in line or 'dsh   ' in line) and '│' in line), None)
-if not lines or not lines[0].startswith('┌') or not lines[-1].startswith('└'):
-    raise SystemExit('outer frame is not preserved across the terminal viewport')
-if title is None:
-    raise SystemExit('welcome or compact version-and-title header is missing')
+editor_bottom = next((line for line in reversed(lines) if '╰' in line and '│' in line), None)
+if not lines or lines[0].startswith('┌') or lines[-1].startswith('└'):
+    raise SystemExit('removed outer frame is still rendered across the terminal viewport')
 workspace_separators = [] if workspace is None else [index for index, value in enumerate(workspace) if value == '│']
-if workspace is None or len(workspace_separators) < 3 or workspace.index('Workspace') < workspace_separators[1]:
+if workspace is None or len(workspace_separators) != 1 or workspace.index('Workspace') < workspace_separators[0]:
     raise SystemExit('Workspace is not rendered in the right sidebar')
-editor_separators = [] if editor is None else [index for index, value in enumerate(editor) if value == '│']
-if editor is None or len(editor_separators) < 3 or min(index for marker in ('dsh >', 'dsh   ') if (index := editor.find(marker)) >= 0) > editor_separators[-2]:
+editor_separators = [] if editor_bottom is None else [index for index, value in enumerate(editor_bottom) if value == '│']
+if editor_bottom is None or len(editor_separators) != 1 or editor_bottom.index('╰') > editor_separators[0]:
     raise SystemExit('editor is not rendered in the left main area')
 PY
 ! grep -aqF 'fatal load failure' "$capture"
@@ -82,4 +80,4 @@ PY
 ! grep -aqF 'documentPath is not a function' "$capture"
 ! grep -aqF 'service "attachments" has been registered' "$capture"
 
-echo 'Verified welcome and compact headers, the fixed workbench, memory commands, clipboard-image failure, session switching, export, and shutdown through a real PTY.'
+echo "Verified the borderless fixed workbench at ${columns}x${rows}, memory commands, clipboard-image failure, session switching, export, and shutdown through a real PTY."

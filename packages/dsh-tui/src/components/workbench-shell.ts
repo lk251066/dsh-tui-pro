@@ -21,6 +21,7 @@ import { padToWidth } from './text.ts'
 const DEFAULT_SIDEBAR_WIDTH = 32
 const MIN_SIDEBAR_WIDTH = 24
 const MIN_MAIN_WIDTH = 40
+const HORIZONTAL_INSET = 1
 
 /** User-configurable sizing for the persistent workspace sidebar. */
 export interface WorkbenchShellOptions {
@@ -70,12 +71,6 @@ export interface WorkbenchMouseResult {
   readonly consumed: boolean
   readonly copiedText?: string
   readonly sessionId?: string
-}
-
-function frameLine(width: number, left: string, fill: string, right: string): string {
-  if (width <= 0) return ''
-  if (width === 1) return fill
-  return `${left}${fill.repeat(width - 2)}${right}`
 }
 
 /** Owns the full terminal viewport and swaps only the active transcript. */
@@ -167,7 +162,7 @@ export class WorkbenchShellComponent implements Component {
 
   /** Width available to the main work area for the supplied terminal width. */
   mainWidth(width: number): number {
-    return this.columnWidths(Math.max(0, width - 2)).main
+    return this.columnWidths(Math.max(0, width - HORIZONTAL_INSET * 2)).main
   }
 
   /** Rows consumed by the fixed input area at the current main width. */
@@ -217,41 +212,28 @@ export class WorkbenchShellComponent implements Component {
   render(width: number): string[] {
     const height = Math.max(0, Math.floor(this.options.terminalRows()))
     if (width <= 0 || height === 0) return []
-
-    const top = this.palette.dim(frameLine(width, '┌', '─', '┐'))
-    if (height === 1) return [top]
-    const bottom = this.palette.dim(frameLine(width, '└', '─', '┘'))
-    if (height === 2) return [top, bottom]
-
-    const innerWidth = Math.max(0, width - 2)
-    const innerHeight = height - 2
-    const leftBorder = this.palette.dim('│')
-    const rightBorder = this.palette.dim('│')
-    if (innerWidth === 0) {
-      return [top, ...Array.from({ length: innerHeight }, () => `${leftBorder}${rightBorder}`), bottom]
-    }
-
+    const leftInset = ' '.repeat(Math.min(HORIZONTAL_INSET, width))
+    const rightInset = ' '.repeat(Math.min(HORIZONTAL_INSET, Math.max(0, width - leftInset.length)))
+    const innerWidth = Math.max(0, width - leftInset.length - rightInset.length)
     const widths = this.columnWidths(innerWidth)
     if (widths.sidebar === 0) {
-      const mainLines = this.renderMain(widths.main, innerHeight)
-      const content = Array.from(
-        { length: innerHeight },
-        (_, index) => `${leftBorder}${padToWidth(mainLines[index] ?? '', widths.main)}${rightBorder}`,
+      const mainLines = this.renderMain(widths.main, height)
+      return Array.from(
+        { length: height },
+        (_, index) => `${leftInset}${padToWidth(mainLines[index] ?? '', widths.main)}${rightInset}`,
       )
-      return [top, ...content, bottom]
     }
 
-    const mainLines = this.renderMain(widths.main, innerHeight)
+    const mainLines = this.renderMain(widths.main, height)
     const rawSidebarLines = this.options.sidebar.render(widths.sidebar)
-    const sidebarLines = rawSidebarLines.slice(0, innerHeight)
+    const sidebarLines = rawSidebarLines.slice(0, height)
     const separator = this.palette.dim('│')
 
-    const content = Array.from({ length: innerHeight }, (_, index) => {
+    return Array.from({ length: height }, (_, index) => {
       const main = padToWidth(mainLines[index] ?? '', widths.main)
       const sidebar = padToWidth(sidebarLines[index] ?? '', widths.sidebar)
-      return `${leftBorder}${main}${separator}${sidebar}${rightBorder}`
+      return `${leftInset}${main}${separator}${sidebar}${rightInset}`
     })
-    return [top, ...content, bottom]
   }
 
   private columnWidths(width: number): ColumnWidths {
@@ -312,7 +294,7 @@ export class WorkbenchShellComponent implements Component {
     readonly rows: number
     readonly maxOffset: number
   } {
-    const height = Math.max(0, Math.floor(this.options.terminalRows()) - 2)
+    const height = Math.max(0, Math.floor(this.options.terminalRows()))
     const rows = this.mainSections(this.mainWidth(width), height).transcriptRows
     const transcriptWidth = this.mainWidth(width)
     const lineCount = this.transcript.render(transcriptWidth).length
@@ -362,23 +344,23 @@ export class WorkbenchShellComponent implements Component {
   }
 
   private transcriptRowStart(width: number): number {
-    const height = Math.max(0, Math.floor(this.options.terminalRows()) - 2)
-    return 2 + this.mainSections(this.mainWidth(width), height).header.length
+    const height = Math.max(0, Math.floor(this.options.terminalRows()))
+    return 1 + this.mainSections(this.mainWidth(width), height).header.length
   }
 
   private transcriptRowEnd(width: number): number {
-    const height = Math.max(0, Math.floor(this.options.terminalRows()) - 2)
+    const height = Math.max(0, Math.floor(this.options.terminalRows()))
     const sections = this.mainSections(this.mainWidth(width), height)
     return this.transcriptRowStart(width) + sections.transcriptRows - 1
   }
 
   private transcriptPoint(width: number, column: number, row: number): SelectionPoint | undefined {
-    const height = Math.max(0, Math.floor(this.options.terminalRows()) - 2)
+    const height = Math.max(0, Math.floor(this.options.terminalRows()))
     const mainWidth = this.mainWidth(width)
     const sections = this.mainSections(mainWidth, height)
     if (sections.transcriptRows <= 0) return undefined
     if (column < 2 || column > 1 + mainWidth) return undefined
-    const startRow = 2 + sections.header.length
+    const startRow = 1 + sections.header.length
     const endRow = startRow + sections.transcriptRows - 1
     if (row < startRow || row > endRow) return undefined
     const lines = this.transcript.render(mainWidth)
@@ -393,7 +375,7 @@ export class WorkbenchShellComponent implements Component {
   }
 
   private clampTranscriptPoint(width: number, column: number, row: number): SelectionPoint | undefined {
-    const height = Math.max(0, Math.floor(this.options.terminalRows()) - 2)
+    const height = Math.max(0, Math.floor(this.options.terminalRows()))
     const sections = this.mainSections(this.mainWidth(width), height)
     if (sections.transcriptRows <= 0) return undefined
     const clampedRow = Math.min(
@@ -423,11 +405,11 @@ export class WorkbenchShellComponent implements Component {
   }
 
   private sidebarSession(column: number, row: number, width: number): string | undefined {
-    const innerWidth = Math.max(0, width - 2)
+    const innerWidth = Math.max(0, width - HORIZONTAL_INSET * 2)
     const widths = this.columnWidths(innerWidth)
     if (widths.sidebar === 0 || this.options.sidebarSessionAt === undefined) return undefined
     const sidebarStart = widths.main + 3
-    if (column < sidebarStart || column >= width || row < 2 || row >= this.options.terminalRows()) return undefined
-    return this.options.sidebarSessionAt(row - 2, widths.sidebar)
+    if (column < sidebarStart || column >= width || row < 1 || row > this.options.terminalRows()) return undefined
+    return this.options.sidebarSessionAt(row - 1, widths.sidebar)
   }
 }

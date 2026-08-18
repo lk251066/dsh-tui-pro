@@ -202,9 +202,10 @@ describe('/assistant', () => {
     const { harness, calls, created } = await assistantHarness({ persistedIds: ['assistant'] })
     try {
       submit(harness, '/assistant')
-      await tick()
+      await vi.waitFor(() => {
+        expect(harness.terminal.output).toContain('Assistant session resumed.')
+      })
       expect(calls).toEqual([expect.objectContaining({ kind: 'resume', sessionId: 'assistant' })])
-      expect(harness.terminal.output).toContain('Assistant session resumed.')
       submit(harness, '继续')
       await tick()
       expect(created[0]?.followups).toEqual(['继续'])

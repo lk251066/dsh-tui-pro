@@ -889,6 +889,7 @@ export function createSessionChannel(deps: SessionChannelDeps): SessionChannel {
       // Context cards carry injected instructions rather than tool traffic, so
       // they never hide: the hidden phase reads as their collapsed preview.
       for (const card of contextCards) card.setExpanded(visibility === 'expanded')
+      todo.setExpanded(visibility === 'expanded')
     },
     pendingSteeringCount: () => pendingSteering.size,
     tickSpinner,

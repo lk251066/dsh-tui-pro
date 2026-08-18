@@ -26,6 +26,7 @@ const PROGRESSIVE_VERBS: Readonly<Record<string, string>> = {
   send: 'Sending',
   ask: 'Asking',
   load: 'Loading',
+  delegate: 'Delegating',
 }
 
 /** Longest command echoed into a terminal-card header. */

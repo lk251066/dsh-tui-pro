@@ -1584,8 +1584,10 @@ describe('pi-tui chat lifecycle and transcript', () => {
     }
 
     const viewport = await terminal.snapshot()
-    expect(viewport).toContain(`┌${'─'.repeat(98)}┐`)
-    expect(viewport).toContain(`└${'─'.repeat(98)}┘`)
+    expect(viewport).toContain('0| "')
+    expect(viewport).toContain('23| "')
+    expect(viewport).toContain('│ Workspace')
+    expect(viewport).not.toContain(`┌${'─'.repeat(98)}┐`)
 
     await disposeTuiTestHarness(result)
     await terminal.flush()

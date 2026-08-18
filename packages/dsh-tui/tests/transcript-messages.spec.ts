@@ -5,6 +5,7 @@ import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import {
   CollapsedToolGroupComponent,
   StreamingAssistantComponent,
+  TodoComponent,
   ToolCardComponent,
   UserMessageComponent,
 } from '../src/components/transcript.ts'
@@ -67,7 +68,7 @@ describe('StreamingAssistantComponent', () => {
     step.settle([{ type: 'text', text: 'answer' }], STAMP + 2_000)
     const rows = step.render(40)
     expect(rows[0]).toBe('')
-    expect(rows[1]?.trimEnd()).toBe('answer')
+    expect(rows[1]?.trimEnd()).toBe('• answer')
   })
 
   it('renders shown reasoning as a quoted block with the ▎ bar', () => {
@@ -78,13 +79,13 @@ describe('StreamingAssistantComponent', () => {
       { type: 'text', text: 'answer' },
     ], STAMP + 2_000)
     const rows = step.render(40)
-    expect(rows.join('\n')).toContain('▼ ∴ Thinking for 2.0s')
+    expect(rows.join('\n')).toContain('∴ Thinking for 2.0s')
     const trimmed = rows.map(row => row.trimEnd())
-    const first = trimmed.findIndex(row => row === '▎ let me think')
+    const first = trimmed.findIndex(row => row === '  ▎ let me think')
     expect(first).toBeGreaterThan(-1)
     // The bar does not break at the paragraph gap.
-    expect(trimmed[first + 1]).toBe('▎')
-    expect(trimmed[first + 2]).toBe('▎ second para')
+    expect(trimmed[first + 1]).toBe('  ▎')
+    expect(trimmed[first + 2]).toBe('  ▎ second para')
   })
 
   it('quotes streamed reasoning on the live path too', () => {
@@ -93,8 +94,8 @@ describe('StreamingAssistantComponent', () => {
     step.update({ type: 'block-start', index: 0, blockType: 'reasoning' })
     step.update({ type: 'reasoning-delta', index: 0, text: 'streamed thought' })
     const rows = step.render(40)
-    expect(rows.join('\n')).toContain('▼ ∴ Thinking…')
-    expect(rows.map(row => row.trimEnd())).toContain('▎ streamed thought')
+    expect(rows.join('\n')).toContain('∴ Thinking…')
+    expect(rows.map(row => row.trimEnd())).toContain('  ▎ streamed thought')
   })
 
   it('updates live thinking duration from the shared repaint clock', () => {
@@ -135,7 +136,7 @@ describe('StreamingAssistantComponent', () => {
       { type: 'text', text: 'answer' },
     ], STAMP + 2_000)
     const rows = step.render(40)
-    expect(rows.join('\n')).toContain('▶ Thinking for 2.0s · 1 lines')
+    expect(rows.join('\n')).toContain('∴ Thinking for 2.0s · 1 lines')
     expect(rows.join('\n')).not.toContain('▎')
     expect(rows.join('\n')).not.toContain('hidden thought')
   })
@@ -149,7 +150,7 @@ describe('StreamingAssistantComponent long-reply fold', () => {
     step.markStart(STAMP)
     step.settle([{ type: 'text', text: body }], STAMP + 2_000)
     const rows = step.render(40).map(row => row.trimEnd())
-    expect(rows).toEqual(['', 'line 1', 'line 2', 'line 3', '… +5 lines (click to expand)'])
+    expect(rows).toEqual(['', '• line 1', '  line 2', '  line 3', '  … +5 lines (click to expand)'])
   })
 
   it('expands the folded reply when its disclosure row is clicked', () => {
@@ -159,7 +160,7 @@ describe('StreamingAssistantComponent long-reply fold', () => {
     const hintRow = step.render(40).findIndex(row => row.includes('click to expand'))
     expect(step.clickTranscriptRow(hintRow, 40)).toBe(true)
     const rows = step.render(40).map(row => row.trimEnd())
-    expect(rows).toContain('line 8')
+    expect(rows).toContain('  line 8')
     expect(rows.join('\n')).not.toContain('click to expand')
     // A click anywhere else is not a disclosure.
     expect(step.clickTranscriptRow(0, 40)).toBe(false)
@@ -170,7 +171,7 @@ describe('StreamingAssistantComponent long-reply fold', () => {
     step.update({ type: 'block-start', index: 0, blockType: 'text' })
     step.update({ type: 'text-delta', index: 0, text: body })
     const rows = step.render(40).map(row => row.trimEnd())
-    expect(rows).toContain('line 8')
+    expect(rows).toContain('  line 8')
     expect(rows.join('\n')).not.toContain('click to expand')
   })
 
@@ -184,15 +185,15 @@ describe('StreamingAssistantComponent long-reply fold', () => {
 describe('ToolCardComponent header tones', () => {
   it('keeps the whole pending header in the warning color', () => {
     const card = toolCard(color, colorMd)
-    expect(card.render(80)[1]).toBe('\x1b[33m▶ ○ bash\x1b[39m')
+    expect(card.render(80)[1]?.startsWith('\x1b[33m○\x1b[39m \x1b[33mbash')).toBe(true)
   })
 
   it('settles to a dim header with only the status glyph colored', () => {
     const card = toolCard(color, colorMd)
     card.updateResult(toolResult('output line'))
-    expect(card.render(80)[1]).toBe(
-      `\x1b[2;39m▶ \x1b[22;39m\x1b[32m${TOOL_SETTLED()}\x1b[39m\x1b[2;39m bash\x1b[22;39m`,
-    )
+    expect(card.render(80)[1]?.startsWith(
+      `\x1b[32m${TOOL_SETTLED()}\x1b[39m \x1b[2;39mbash`,
+    )).toBe(true)
   })
 
   it('colors a failed settled glyph in the error role', () => {
@@ -209,6 +210,74 @@ describe('ToolCardComponent header tones', () => {
     expect(card.render(80)[1]).toContain(`\x1b[31m${TOOL_SETTLED()}\x1b[39m`)
     expect(card.render(80)[1]).toContain('\x1b[2;39m')
     expect(card.render(80).join('\n')).toContain('\x1b[31mboom')
+  })
+})
+
+describe('ToolCardComponent semantic cards', () => {
+  it('renders plan review as a dedicated plan panel', () => {
+    const card = new ToolCardComponent(
+      'exit_plan_mode',
+      parseArguments('{}'),
+      {
+        presentCall: () => ({
+          card: 'generic',
+          kind: 'plan',
+          title: 'Implementation',
+          content: [{ type: 'text', text: '# Steps\n\n- Verify behavior' }],
+        }),
+      } as never,
+      10,
+      2_000,
+      plain,
+      plainMd,
+    )
+    const rows = card.render(48).map(row => row.trimEnd())
+    expect(rows.join('\n')).toContain('Plan · Implementation · reviewing')
+    expect(rows.join('\n')).toContain('Verify behavior')
+    expect(card.render(16).every(row => visibleWidth(row) <= 16)).toBe(true)
+  })
+
+  it('names delegated work as a subagent and keeps its prompt under the card', () => {
+    const card = new ToolCardComponent(
+      'subagent',
+      parseArguments('{}'),
+      {
+        presentCall: () => ({
+          card: 'generic',
+          kind: 'delegate',
+          title: 'Delegate parser repair',
+          rawInput: 'Inspect the parser and repair the failing cases.',
+        }),
+      } as never,
+      10,
+      2_000,
+      plain,
+      plainMd,
+    )
+    const output = card.render(40).map(row => row.trimEnd()).join('\n')
+    expect(output).toContain('○ Subagent · parser repair')
+    expect(output).toContain('⎿ Inspect the parser and repair the')
+  })
+})
+
+describe('TodoComponent', () => {
+  it('keeps the plan compact until the shared detail view expands it', () => {
+    const todo = new TodoComponent(plain)
+    todo.update([
+      { content: 'Read the narrow layout', status: 'completed' },
+      { content: 'Align wrapped content under the gutter', status: 'in_progress' },
+      { content: 'Verify the terminal', status: 'pending' },
+    ])
+
+    const compact = todo.render(30).map(row => row.trimEnd())
+    expect(compact.join('\n')).toContain('Plan 1/3 · Align wrapped')
+    expect(compact.join('\n')).not.toContain('Read the narrow layout')
+
+    todo.setExpanded(true)
+    const expanded = todo.render(30).map(row => row.trimEnd())
+    expect(expanded.join('\n')).toContain('✓ Read the narrow layout')
+    expect(expanded.join('\n')).toContain('● Align wrapped content')
+    expect(expanded.every(row => visibleWidth(row) <= 30)).toBe(true)
   })
 })
 
