@@ -1849,9 +1849,7 @@ function createTuiChatInternal(
   const requestExit = (): void => {
     if (agent.status === 'running') {
       agent.cancel({ kind: 'user' })
-      appendNotice('Cancelling the active turn before exit…', 'warning')
-      void agent.whenIdle().then(() => shutdown(true))
-      return
+      appendNotice('Cancelling the active turn and exiting…', 'warning')
     }
     void shutdown(true)
   }
@@ -2365,12 +2363,12 @@ function createTuiChatInternal(
     }
     commandCtx.commands.register({
       name: 'exit',
-      description: 'Exit after the active turn reaches idle',
+      description: 'Cancel the active turn and exit the TUI',
       handler: exitHandler,
     })
     commandCtx.commands.register({
       name: 'quit',
-      description: 'Exit after the active turn reaches idle',
+      description: 'Cancel the active turn and exit the TUI',
       handler: exitHandler,
     })
     commandCtx.commands.register({

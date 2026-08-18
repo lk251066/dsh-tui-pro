@@ -28,6 +28,23 @@ The 2026-08-15 repair checks and 2026-08-16 release verification produced these 
 
 The source checks passed on the reviewed commit, and the final integration checks used the anonymous public registry rather than a workspace link or local tarball.
 
+## 1.7.1 release verification
+
+The `1.7.1` checks prove that `/exit` and `/quit` request cancellation and begin shutdown even when a running agent's `whenIdle()` promise never settles. The public-host and real-PTY checks retain the complete `1.7.0` installation and terminal coverage.
+
+| Check | Result |
+| --- | --- |
+| Focused `/quit` regression | Passed with a permanently pending `whenIdle()` promise |
+| `pnpm run typecheck` | Passed |
+| `pnpm run test` | Passed: 44 files, 522 tests |
+| `pnpm run lint` | Passed with 39 warnings and no errors |
+| `pnpm run build` | Passed |
+| `git diff --check` | Passed |
+| `pnpm run pack:artifact` | Passed: 325 files in the `1.7.1` artifact |
+| Packed-artifact audit | Passed for exports, bundle metadata, patched editor, runtime dependencies, and absence of a duplicate attachment provider |
+| Windows empty-profile installation | Passed against public dsh rc.6; `why` and `--dump-config` resolved `1.7.1` |
+| Linux empty-profile installation and real PTY | Passed in a fresh WSL `/tmp` host; the complete command sequence ended through `/quit` with status 0 |
+
 ## 1.7.0 release verification
 
 The `1.7.0` checks cover owned agent adoption and rollback, rewind replacement, guarded terminal handoff, queued-message recovery, the simplified fixed workbench, clipboard image drafts, explicit vision-model checks, and durable per-session memory. The packed-artifact checks require the memory export and bundle row while preventing a duplicate attachment provider alongside dsh-base.

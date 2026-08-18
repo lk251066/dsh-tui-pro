@@ -6,9 +6,13 @@ This document is the source of truth for making `@lk251066/dsh-tui` independentl
 
 Ship one package: `@lk251066/dsh-tui`. Its package manifest already defines `dsh.bundle.patch`, so the repository will not create or publish a separate `@lk251066/dsh-tui-bundle` compatibility package.
 
-Version `1.7.0` is the current release against public `@deepseek-ai/dsh@0.1.0-rc.6`. The package, annotated tag, checksummed GitHub Release, source version, and lockfile identify one release commit.
+Version `1.7.1` is the current release against public `@deepseek-ai/dsh@0.1.0-rc.6`. The package, annotated tag, checksummed GitHub Release, source version, and lockfile identify one release commit.
 
-The `1.7.0` release completes factory-agent ownership and rewind replacement, simplifies the fixed workbench, removes `/queue`, adds clipboard image drafts, and adds a durable per-session memory switch.
+The `1.7.1` release makes `/exit` and `/quit` cancel a running turn and begin bounded shutdown immediately. It retains the factory-agent ownership, rewind replacement, fixed workbench, queue interaction, clipboard image drafts, and durable per-session memory switch from `1.7.0`.
+
+## Version 1.7.1 bounded command exit
+
+`/exit` and `/quit` request cancellation when the active agent is running, then immediately enter the same bounded shutdown path used by idle exits. Shutdown no longer depends on `Agent.whenIdle()` settling; the existing three-second exit ceiling applies even when cancellation cannot make the agent report idle.
 
 ## Version 1.7.0 session-scoped input and lifecycle
 

@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The `v1.0.0` tag is not an installable public release: no npm package was published, and the repository-root tarball does not contain the required dsh bundle metadata. See [REPAIR_PLAN.md](REPAIR_PLAN.md) for the first verified release criteria.
 
+## [1.7.1] - 2026-08-18
+
+### Fixed
+
+- Make `/exit` and `/quit` cancel a running turn and start bounded shutdown immediately instead of waiting indefinitely for the agent to report idle.
+
 ## [1.7.0] - 2026-08-18
 
 ### Added

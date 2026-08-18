@@ -4800,14 +4800,19 @@ describe('pi-tui chat lifecycle and transcript', () => {
     await result.ctx.fiber.dispose()
   })
 
-  it('cancels before /quit while running and handles agent errors/disposal', async () => {
+  it('cancels and exits from /quit without waiting for the running agent to become idle', async () => {
     const result = await setup({ status: 'running' })
+    result.agent.whenIdle = () => new Promise<void>(() => {})
     result.terminal.send('/quit')
     result.terminal.send('\r')
     await tick()
     expect(result.agent.cancelled).toContainEqual({ kind: 'user' })
     expect(result.exit).toHaveBeenCalledWith(0)
 
+    await result.ctx.fiber.dispose()
+  })
+
+  it('handles agent errors and disposal without leaking unrelated session events', async () => {
     const events = await setup()
     const unrelatedSession = events.ctx.sessions.create(SessionId('unrelated-session'))
     const unrelatedAgent = { ...events.agent, id: unrelatedSession.id, session: unrelatedSession }

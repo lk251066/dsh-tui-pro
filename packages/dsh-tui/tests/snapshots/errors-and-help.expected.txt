@@ -33,7 +33,7 @@ buffer
   style 0-91 dim
 15| "reasoning display                                                                           "
   style 0-16 dim
-16| "/exit — Exit after the active turn reaches idle                                             "
+16| "/exit — Cancel the active turn and exit the TUI                                            "
   style 0-46 dim
 17| "/help — Show keyboard shortcuts and commands                                                "
   style 0-43 dim
@@ -41,7 +41,7 @@ buffer
   style 0-62 dim
 19| "/palette — Show every color and attribute role this terminal renders                        "
   style 0-67 dim
-20| "/quit — Exit after the active turn reaches idle                                             "
+20| "/quit — Cancel the active turn and exit the TUI                                            "
   style 0-46 dim
 21| "/reload — EXPERIMENTAL (dev): re-read loader config files and apply the diff (idle only)    "
   style 0-87 dim
