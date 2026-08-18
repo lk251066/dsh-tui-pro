@@ -366,17 +366,6 @@ export function renderDiff(
   return { lines: [...lines, ...renderDiffRows(approximate ? folded : applyWordDiff(folded), palette)], added, removed, approximate }
 }
 
-/**
- * Identity segments of the condensed one-line header: the product version
- * and the current session title.
- */
-export interface CondensedHeaderInfo {
-  /** Package version rendered as `v{version}`. */
-  readonly version: string
-  /** Session title appended as `— {title}`; `undefined`/empty omits it. */
-  readonly title: string | undefined
-}
-
 /** One suggested command row inside the welcome box. */
 export interface WelcomeSuggestion {
   /** The command as typed, e.g. `/new`. */
@@ -414,8 +403,6 @@ const WELCOME_FRAME_COLUMNS = 4
  * sweep reveal clips the box left-to-right on startup; the shimmer pass then
  * sweeps the logo inside it.
  *
- * When condensed identity data is supplied, the component renders the compact
- * workbench identity at every terminal width instead.
  */
 export class HeaderComponent implements Component {
   /** Columns of the box currently revealed; `undefined` renders it whole. */
@@ -429,11 +416,6 @@ export class HeaderComponent implements Component {
     private readonly welcome: () => WelcomeBoxInfo,
     private readonly palette: Palette,
     private readonly gradient: boolean,
-    /**
-     * Condensed identity segments, read per render; `undefined` renders the
-     * welcome box instead.
-     */
-    private readonly condensedInfo: () => CondensedHeaderInfo | undefined = () => undefined,
   ) {}
 
   /**
@@ -465,26 +447,7 @@ export class HeaderComponent implements Component {
 
   render(width: number): string[] {
     const usable = Math.max(1, width - 2)
-    const condensed = this.condensedInfo()
-    if (condensed !== undefined) return this.renderCondensed(usable, condensed)
     return this.renderWelcome(usable, this.welcome())
-  }
-
-  /**
-   * The condensed identity row: `dsh v{version} — {title}` on one line.
-   * Static by design: no reveal clip and no shimmer, whichever animation
-   * timers happen to run.
-   */
-  private renderCondensed(usable: number, info: CondensedHeaderInfo): string[] {
-    const segments = [
-      this.palette.bold(this.palette.accent('dsh')),
-      /* v8 ignore next -- an empty version only follows a failed manifest read (index.ts swallows it). */
-      ...info.version === '' ? [] : [this.palette.dim(`v${displayText(info.version)}`)],
-      /* v8 ignore next -- a titled session never folds an empty title back through the header. */
-      ...(info.title === undefined || info.title === '') ? [] : [this.palette.dim(`— ${displayText(info.title)}`)],
-    ]
-    const line = segments.join(' ')
-    return wrapTextWithAnsi(line, usable).map(wrapped => ` ${truncateToWidth(wrapped, usable, '')}`)
   }
 
   /**

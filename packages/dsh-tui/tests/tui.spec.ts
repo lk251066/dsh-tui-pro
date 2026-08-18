@@ -1702,7 +1702,7 @@ describe('pi-tui chat lifecycle and transcript', () => {
     await dispose(result)
   })
 
-  it('uses the latest log-backed title for the header subtitle and terminal window', async () => {
+  it('uses the latest log-backed title for the terminal window without restoring top chrome', async () => {
     const result = await setup({
       // A fixed short cwd keeps the footer's token counters inside the 88-column
       // fake terminal regardless of where the checkout lives; cwd rendering has
@@ -1730,11 +1730,12 @@ describe('pi-tui chat lifecycle and transcript', () => {
 
     expect(result.terminal.title).toContain('Live title \\x1b]0;unsafe\\x07 — DeepSeek Harness')
     expect(result.terminal.title).not.toContain('\u001B')
-    expect(result.terminal.output).toContain('Live title \\x1b]0;unsafe\\x07')
+    expect(result.terminal.output).toContain('Live title')
+    expect(result.terminal.output).not.toContain('dsh v')
     await dispose(result)
   })
 
-  it('renders its header, footer, replay, streaming answer, todos, and status', async () => {
+  it('renders its expanded transcript, footer, replay, streaming answer, todos, and status', async () => {
     let now = 0
     const result = await setup({
       contextWindow: 100,
@@ -1762,7 +1763,7 @@ describe('pi-tui chat lifecycle and transcript', () => {
 
     expect(result.terminal.started).toBe(1)
     expect(result.terminal.title).toBe('DeepSeek Harness')
-    expect(result.terminal.output).toContain('dsh v')
+    expect(result.terminal.output).not.toContain('dsh v')
     expect(result.terminal.output).not.toContain('Coding agent ready.')
     expect(result.terminal.output).toContain('restored prompt')
     expect(result.terminal.output).toContain('Thinking')
@@ -4368,13 +4369,11 @@ describe('pi-tui chat lifecycle and transcript', () => {
   )
 
   it('shows help and diagnostics in the main area while preserving the workspace sidebar', async () => {
-    // A seeded prompt keeps the session out of the pristine welcome box, so
-    // the main-area swap deterministically repaints the rows the sidebar
-    // sections share (the assertions read the re-emitted rows).
-    const result = await setup({
-      terminalRows: 80,
+    const terminal = new HeadlessTerminal(140, 80)
+    const result = await createTuiTestHarness(terminal, vi.fn(), {
       beforeMount(session) { appendUser(session, 'seed prompt') },
     })
+    await terminal.waitForFrame(0)
     for (const [command, title] of [
       ['/help', 'Help'],
       ['/status', 'Session status'],
@@ -4383,17 +4382,20 @@ describe('pi-tui chat lifecycle and transcript', () => {
       ['/jobs', 'Background jobs'],
       ['/settings', 'Settings'],
     ] as const) {
-      result.terminal.output = ''
-      result.terminal.send(command)
-      result.terminal.send('\r')
-      await tick()
-      expect(result.terminal.output).toContain(title)
-      expect(result.terminal.output).toContain('Workspace')
-      expect(result.terminal.output).toContain('Status')
-      result.terminal.send('\x03')
-      await tick()
+      const openedAt = terminal.frames
+      terminal.send(command)
+      terminal.send('\r')
+      await terminal.waitForFrame(openedAt)
+      const screen = await terminal.snapshot()
+      expect(screen).toContain(title)
+      expect(screen).toContain('Workspace')
+      expect(screen).toContain('Status')
+      const closedAt = terminal.frames
+      terminal.send('\x03')
+      await terminal.waitForFrame(closedAt)
     }
-    await dispose(result)
+    await disposeTuiTestHarness(result)
+    await terminal.dispose()
   })
 
   it('/effort opens the bottom selector and accepts only levels advertised by the selected model', async () => {
@@ -6646,7 +6648,7 @@ describe('TUI user-interaction dialogs', () => {
     await dispose(result)
   })
 
-  it('preserves detail text and every action when one compact header row remains', async () => {
+  it('preserves detail text and every action when one viewport row remains', async () => {
     const result = await setup({
       config: { questionDialogWidth: 20, questionDialogMaxHeight: 6 },
     })

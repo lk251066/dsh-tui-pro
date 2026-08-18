@@ -6,9 +6,13 @@ This document is the source of truth for making `@lk251066/dsh-tui` independentl
 
 Ship one package: `@lk251066/dsh-tui`. Its package manifest already defines `dsh.bundle.patch`, so the repository will not create or publish a separate `@lk251066/dsh-tui-bundle` compatibility package.
 
-Version `1.7.1` is the current release against public `@deepseek-ai/dsh@0.1.0-rc.6`. The current source targets `1.8.0`; it is not a public release until the source, artifact, profile, PTY, npm, tag, and GitHub Release records identify one commit.
+Version `1.8.0` is the current release against public `@deepseek-ai/dsh@0.1.0-rc.6`. The current source targets `1.8.1`; it is not a public release until the source, artifact, profile, PTY, npm, tag, and GitHub Release records identify one commit.
 
 The `1.8.0` source separates whole-TUI exit from project-session closing, gives the fixed assistant read-only access to visible dialogue in other Active project sessions, and completes the diagnostic, skill, throughput, plan, thinking, tool-card, and in-process subagent model-inheritance work described below.
+
+## Version 1.8.1 transcript viewport
+
+Established conversations have no persistent top header or reserved header spacing. The new-session welcome remains visible only while the session is pristine. One dim horizontal rule replaces the blank row above the fixed auxiliary and input area, so the transcript owns every other available row. Transcript scrolling, disclosure clicks, and drag selection use the expanded viewport coordinates.
 
 ## Version 1.8.0 terminal diagnostics and delegation
 

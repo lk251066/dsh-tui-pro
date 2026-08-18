@@ -7,7 +7,6 @@
 
 import { randomUUID } from 'node:crypto'
 import { stat } from 'node:fs/promises'
-import { createRequire } from 'node:module'
 import { resolve } from 'node:path'
 import {
   CombinedAutocompleteProvider,
@@ -99,7 +98,6 @@ import {
   type Config,
 } from './config.ts'
 import {
-  type CondensedHeaderInfo,
   type ToolCardVisibility,
   type WelcomeSuggestion,
   HeaderComponent,
@@ -317,25 +315,6 @@ export const inject = ['agents', 'sessions', 'commands', 'userQuestions', 'tools
 /** Model guidance for path-only file references selected through the TUI. */
 export const FILE_REFERENCE_PROMPT = 'Paths prefixed with @ are files explicitly referenced by the user. Use the read tool when their contents are needed; do not claim to have inspected a file before reading it.'
 
-/**
- * This package's version, read from its own manifest for the condensed
- * header's `v{version}` segment. Read once through `createRequire` — the
- * plain-JSON require path ignores the package `exports` map, and any read
- * failure (a bundled build without the manifest beside it) simply drops the
- * segment rather than failing the UI.
- */
-const TUI_VERSION: string = (() => {
-  try {
-    const require = createRequire(import.meta.url)
-    const manifest = require('../package.json') as { version?: unknown }
-    /* v8 ignore next -- a manifest without a string version drops the segment, same as a failed read. */
-    return typeof manifest.version === 'string' ? manifest.version : ''
-  } catch {
-    /* v8 ignore next -- only a bundled build without the manifest beside it lands here. */
-    return ''
-  }
-})()
-
 /** Width/height adapter for a modal component rendered inside the base TUI flow. */
 class InlineModalComponent extends Container {
   constructor(
@@ -451,7 +430,6 @@ function createTuiChatInternal(
   const todoContainer = new Container()
   const mainOverlayContainer = new Container()
   const questionContainer = new Container()
-  const mainHeader = new Container()
   const auxiliary = new Container()
   const inputArea = new Container()
   const inputTemplate = parseTuiPromptTemplate(displayInlineText(resolved.theme.inputPrompt))
@@ -539,18 +517,11 @@ function createTuiChatInternal(
    * lifecycle prelude (`turn/start`, `step/start`), and no title. The
    * codex-style welcome box greets only a pristine session; any conversation
    * traffic — a prompt, a streamed reply, a tool call, injected context —
-   * swaps in the condensed identity instead.
+   * removes the welcome area entirely.
    */
   const sessionPristine = (): boolean =>
     sessionTitle === undefined
     && agent.session.events.every(event => event.type === 'turn/start' || event.type === 'step/start')
-  /** Compact workbench identity read per render for session and model changes. */
-  const condensedHeaderInfo = (): CondensedHeaderInfo => ({
-    version: TUI_VERSION,
-    title: sessionTitle ?? (agent.session.events.some(event => event.type === 'user/message')
-      ? undefined
-      : config.welcome),
-  })
   // The codex-style welcome box's suggested commands, drawn from the commands
   // this bundle actually owns (see the command registrations below).
   const welcomeSuggestions: readonly WelcomeSuggestion[] = [
@@ -569,8 +540,11 @@ function createTuiChatInternal(
     }),
     palette,
     resolved.theme.color && resolved.theme.truecolor,
-    () => sessionPristine() ? undefined : condensedHeaderInfo(),
   )
+  const visibleHeader: Component = {
+    invalidate: () => { header.invalidate() },
+    render: width => sessionPristine() ? header.render(width) : [],
+  }
   let welcomeShimmer: ReturnType<typeof setInterval> | undefined
   let branch = runtime.gitBranch?.(initialCwd) ?? gitBranch(initialCwd)
   const promptValues: TuiPromptValueHandle[] = [
@@ -720,8 +694,6 @@ function createTuiChatInternal(
     parseTuiPromptTemplate(displayInlineText(resolved.theme.rightPrompt)),
     valueName => safePromptValue(valueName),
   )
-  mainHeader.addChild(header)
-  mainHeader.addChild(new Spacer(1))
   auxiliary.addChild(todoContainer)
   // Docks (goal bar, steering queue) mount into this slot in order once their
   // controllers exist; an empty container renders nothing.
@@ -1302,7 +1274,7 @@ function createTuiChatInternal(
   workbench = new WorkbenchShellComponent(palette, {
     terminalRows: () => runtime.terminal.rows,
     preferredSidebarWidth: resolved.sidebarWidth,
-    header: mainHeader,
+    header: visibleHeader,
     auxiliary,
     main: mainOverlayContainer,
     dialog: questionContainer,

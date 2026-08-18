@@ -1,6 +1,3 @@
-import { readFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import {
   appendUser,
@@ -9,12 +6,6 @@ import {
   type TuiHarnessOptions,
 } from './harness.ts'
 import { HeadlessTerminal } from './headless-terminal.ts'
-
-const { version: TUI_VERSION } = JSON.parse(
-  readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'package.json'), 'utf8'),
-) as { version: string }
-
-const CONDENSED_NAME = 'dsh v'
 
 /** Wall-clock wait for the welcome box's reveal sweep to finish (~720 ms at 6 columns per 45 ms tick). */
 const revealSettled = (): Promise<void> => new Promise(resolve => setTimeout(resolve, 900))
@@ -29,12 +20,7 @@ async function setup(
   return result
 }
 
-async function rows(terminal: HeadlessTerminal): Promise<string[]> {
-  const snapshot = await terminal.snapshot({ includeScrollback: true })
-  return snapshot.split('\n').filter(line => /^\d+[~|]?\| /.test(line))
-}
-
-describe('workbench identity header', () => {
+describe('workbench welcome area', () => {
   it('renders the welcome box for a fresh session', async () => {
     const result = await setup()
     await revealSettled()
@@ -50,22 +36,19 @@ describe('workbench identity header', () => {
     expect(frame).toContain('/new')
     expect(frame).toContain('/help')
     expect(frame).toContain('/ commands · @ files · /sessions history')
-    expect(frame).not.toContain(CONDENSED_NAME)
+    expect(frame).not.toContain('dsh v')
     await disposeTuiTestHarness(result)
     await result.terminal.dispose()
   })
 
-  it('uses the same compact identity for a resumed session', async () => {
+  it('uses no persistent top area for a resumed session', async () => {
     const result = await setup({
       beforeMount(session) {
         appendUser(session, 'restored prompt')
       },
     })
     const frame = await result.terminal.snapshot({ includeScrollback: true })
-    const headerRow = (await rows(result.terminal)).find(row => row.includes(CONDENSED_NAME))
-    expect(headerRow).toContain(`v${TUI_VERSION}`)
-    expect(headerRow).not.toContain('deepseek-v4-flash')
-    expect(headerRow).not.toContain('/workspace')
+    expect(frame).not.toContain('dsh v')
     expect(frame).not.toContain('█')
     expect(frame).not.toContain('Coding agent ready.')
     expect(frame).toContain('restored prompt')
@@ -73,7 +56,7 @@ describe('workbench identity header', () => {
     await result.terminal.dispose()
   })
 
-  it('keeps the compact identity when the first user message lands', async () => {
+  it('removes the welcome area when the first user message lands', async () => {
     const result = await setup({ omitWelcome: true })
     await revealSettled()
     const before = await result.terminal.snapshot({ includeScrollback: true })
@@ -82,13 +65,14 @@ describe('workbench identity header', () => {
     appendUser(result.session, 'first live message')
     await result.terminal.waitForFrame(frame)
     const after = await result.terminal.snapshot({ includeScrollback: true })
-    expect(after).toContain(CONDENSED_NAME)
+    expect(after).not.toContain('dsh v')
     expect(after).not.toContain('█')
+    expect(after).toContain('first live message')
     await disposeTuiTestHarness(result)
     await result.terminal.dispose()
   })
 
-  it('appends the session title to the compact identity', async () => {
+  it('keeps a session title out of the transcript chrome', async () => {
     const result = await setup({
       omitWelcome: true,
       beforeMount(session) {
@@ -100,27 +84,29 @@ describe('workbench identity header', () => {
         })
       },
     })
-    const headerRow = (await rows(result.terminal)).find(row => row.includes(CONDENSED_NAME))
-    expect(headerRow).toContain('— Renderer review')
-    expect(headerRow).not.toContain('Coding agent ready.')
+    const frame = await result.terminal.snapshot({ includeScrollback: true })
+    expect(frame).toContain('Renderer review')
+    expect(frame).not.toContain('dsh v')
+    expect(frame).not.toContain('Coding agent ready.')
+    expect(frame).toContain('titled session prompt')
     await disposeTuiTestHarness(result)
     await result.terminal.dispose()
   })
 
-  it('omits the model segment when no target is selected', async () => {
+  it('does not restore top chrome when no target is selected', async () => {
     const result = await setup({
       agentOptions: {},
       beforeMount(session) { appendUser(session, 'resume without a target') },
     })
-    const headerRow = (await rows(result.terminal)).find(row => row.includes(CONDENSED_NAME))
-    expect(headerRow).toContain(`v${TUI_VERSION}`)
-    expect(headerRow).not.toContain('/workspace')
-    expect(headerRow).not.toContain(' · ')
+    const frame = await result.terminal.snapshot({ includeScrollback: true })
+    expect(frame).not.toContain('dsh v')
+    expect(frame).not.toContain('Coding agent ready.')
+    expect(frame).toContain('resume without a target')
     await disposeTuiTestHarness(result)
     await result.terminal.dispose()
   })
 
-  it('keeps compact identity data on narrow terminals', async () => {
+  it('keeps the transient welcome responsive on narrow terminals', async () => {
     const fresh = await setup({}, { columns: 40, rows: 24 })
     await revealSettled()
     const freshFrame = await fresh.terminal.snapshot({ includeScrollback: true })
@@ -138,23 +124,22 @@ describe('workbench identity header', () => {
       },
     }, { columns: 40, rows: 24 })
     const resumedFrame = await resumed.terminal.snapshot({ includeScrollback: true })
-    expect(resumedFrame).toContain('dsh')
+    expect(resumedFrame).not.toContain('dsh v')
     expect(resumedFrame).not.toContain('Coding agent ready.')
     expect(resumedFrame).not.toContain('█')
+    expect(resumedFrame).toContain('narrow restored prompt')
     await disposeTuiTestHarness(resumed)
     await resumed.terminal.dispose()
   })
 
-  it('styles the compact name through the accent palette', async () => {
+  it('does not leave an accented identity row in a colored resumed session', async () => {
     const result = await setup({
       config: { theme: { color: true } },
       beforeMount(session) { appendUser(session, 'styled resume') },
     })
     const frame = await result.terminal.snapshot({ includeScrollback: true })
-    const headerIndex = frame.split('\n').findIndex(line => line.includes(CONDENSED_NAME))
-    expect(headerIndex).toBeGreaterThan(-1)
-    const lines = frame.split('\n')
-    expect(lines.slice(headerIndex, headerIndex + 4).join('\n')).toContain('fg=bright-magenta bold')
+    expect(frame).not.toContain('dsh v')
+    expect(frame).toContain('styled resume')
     await disposeTuiTestHarness(result)
     await result.terminal.dispose()
   })

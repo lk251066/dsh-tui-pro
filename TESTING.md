@@ -2,6 +2,20 @@
 
 `@lk251066/dsh-tui` is a Cordis plugin and dsh profile bundle. Verification must cover the source tree, packed npm artifact, dsh profile composition, and interactive terminal behavior.
 
+## 1.8.1 source verification
+
+The `1.8.1` checks cover removal of the established-session top header, the expanded transcript viewport, the dim input separator, welcome removal after the first message, transcript scrolling, disclosure clicks, drag selection, terminal titles, sidebar titles, and main-area diagnostics.
+
+| Check | Result |
+| --- | --- |
+| Complete source tests | Passed: 46 files, 591 tests |
+| Focused workbench layout | Passed: 17 tests, including headerless viewport rows and updated drag coordinates |
+| `pnpm run typecheck` | Passed |
+| `pnpm run lint` | Passed with 38 existing warnings and no errors |
+| `pnpm run build` | Passed |
+| `pnpm run pack:artifact` | Passed: 328 files, 747.5 kB, SHA-1 `44ec8386334ae0e8c74ed71160e4ec00a33ff053` |
+| Local `tui` profile | Installed from the `1.8.1` tarball; dependency listing, installed manifest, and `--dump-config` resolve the local package |
+
 ## 1.8.0 source verification
 
 The `1.8.0` checks cover split command semantics, assistant-only conversation reads, weighted-average throughput, plan styling, scrollable diagnostics, skill selection and completion, live thinking time, and structured read/search/web/tool/diff cards. `/exit` retains bounded process shutdown. `/quit` and empty-input `Delete` cancel and close a project session, preserve history, return to the assistant, release owned handles, and restore the project when Active detachment fails. The assistant conversation tool enforces Active membership, paginates from the newest messages, retains image placeholders, and excludes reasoning, tools, injected context, and unfinished output.

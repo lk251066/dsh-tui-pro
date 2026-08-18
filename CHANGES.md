@@ -1,5 +1,11 @@
 # Terminal Workbench
 
+## 1.8.1 source changes
+
+Established conversations no longer reserve a persistent top header or its surrounding blank rows. The transcript begins at the top of the main column and uses every row above the fixed input area. The new-session welcome remains visible only before conversation activity begins.
+
+One dim horizontal rule replaces the blank gap above auxiliary state and the editor. The rule identifies the transcript boundary without reducing its previous height. Scrolling, disclosure clicks, and drag selection use the expanded viewport coordinates.
+
 ## 1.8.0 source changes
 
 `/exit` closes the whole TUI. `/quit` and empty-input `Delete` close the current project session: a running turn is cancelled, Active membership and the mounted session slot are removed, owned agent resources are released, history remains available through `/sessions`, and the fixed assistant becomes current. The assistant itself cannot be closed.

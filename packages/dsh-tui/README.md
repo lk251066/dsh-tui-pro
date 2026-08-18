@@ -4,7 +4,9 @@ Interactive terminal UI plugin and profile bundle for [DeepSeek Harness](https:/
 
 ## Release status
 
-Version [`1.7.1`](https://www.npmjs.com/package/@lk251066/dsh-tui/v/1.7.1) is the current release. The current source targets `1.8.0`; its verification status is recorded in [TESTING.md](../../TESTING.md).
+Version [`1.8.0`](https://www.npmjs.com/package/@lk251066/dsh-tui/v/1.8.0) is the current release. The current source targets `1.8.1`; its verification status is recorded in [TESTING.md](../../TESTING.md).
+
+The `1.8.1` source gives established conversations the full main-column height above one dim input separator. Persistent top chrome and its blank padding are removed; the welcome box remains limited to pristine sessions.
 
 ## Installation
 

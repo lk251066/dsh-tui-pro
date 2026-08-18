@@ -4,11 +4,13 @@ Community-maintained interactive terminal UI plugin for [DeepSeek Harness](https
 
 ## Release status
 
-Version [`1.7.1`](https://www.npmjs.com/package/@lk251066/dsh-tui/v/1.7.1) is the current release. The current source targets `1.8.0`; its verification status is recorded in [TESTING.md](TESTING.md).
+Version [`1.8.0`](https://www.npmjs.com/package/@lk251066/dsh-tui/v/1.8.0) is the current release. The current source targets `1.8.1`; its verification status is recorded in [TESTING.md](TESTING.md).
 
 Do not use the existing `v1.0.0` GitHub tag; it predates the repaired source and bundle metadata. Install from npm or a verified GitHub Release.
 
 The `1.8.0` source reserves `/exit` for whole-TUI shutdown. `/quit` and empty-input `Delete` close the current project session, preserve its history, and return to the fixed assistant. The assistant can read user/assistant dialogue and image placeholders from another Active project session without exposing reasoning or tool traffic. See [REPAIR_PLAN.md](REPAIR_PLAN.md) for the implementation record.
+
+The `1.8.1` source removes persistent top chrome from established conversations and replaces the blank row above the input area with one dim separator. The transcript owns every other available row while the pristine-session welcome remains unchanged.
 
 ## Intended installation
 

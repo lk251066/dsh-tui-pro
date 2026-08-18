@@ -67,7 +67,14 @@ describe('WorkbenchShellComponent', () => {
     const sidebar = content.map(line => line.slice(line.indexOf('│', 1) + 1, -1).trim())
 
     expect(plain).toHaveLength(8)
-    expect(main).toEqual(['header', '', 'row 11', '', 'queue', 'dsh >'])
+    expect(main).toEqual([
+      'header',
+      'row 10',
+      'row 11',
+      '─'.repeat(65),
+      'queue',
+      'dsh >',
+    ])
     expect(sidebar).toEqual(['Workspace', 'Sessions', 'Status', '', '', ''])
   })
 
@@ -79,7 +86,7 @@ describe('WorkbenchShellComponent', () => {
     const scrolled = workbench.render(100).map(stripSgr)
     const content = scrolled.slice(1, -1)
     expect(content.map(line => line.slice(1, line.indexOf('│', 1)).trim()))
-      .toEqual(['header', '', 'row 10', '', 'queue', 'dsh >'])
+      .toEqual(['header', 'row 8', 'row 9', '─'.repeat(65), 'queue', 'dsh >'])
     expect(content.map(line => line.slice(line.indexOf('│', 1) + 1, -1).trim()))
       .toEqual(['Workspace', 'Sessions', 'Status', '', '', ''])
 
@@ -105,16 +112,16 @@ describe('WorkbenchShellComponent', () => {
     const workbench = createWorkbench({ rows: 9, transcript: 'alpha\nbeta', auxiliary: 'queue', input: 'dsh >' })
 
     expect(workbench.handleMouse({
-      kind: 'press', button: 'left', column: 2, row: 4,
+      kind: 'press', button: 'left', column: 2, row: 3,
       shift: false, alt: false, ctrl: false, wheelRows: 0,
     }, 100)).toEqual({ consumed: true })
     expect(workbench.handleMouse({
-      kind: 'move', button: 'left', column: 6, row: 5,
+      kind: 'move', button: 'left', column: 6, row: 4,
       shift: false, alt: false, ctrl: false, wheelRows: 0,
     }, 100)).toEqual({ consumed: true })
     expect(workbench.render(100).join('\n')).toContain('\x1b[7m')
     expect(workbench.handleMouse({
-      kind: 'release', button: 'none', column: 6, row: 5,
+      kind: 'release', button: 'none', column: 6, row: 4,
       shift: false, alt: false, ctrl: false, wheelRows: 0,
     }, 100)).toEqual({ consumed: true, copiedText: 'alpha\nbeta' })
 
@@ -122,6 +129,22 @@ describe('WorkbenchShellComponent', () => {
     expect(plain[0]).toBe(`┌${'─'.repeat(98)}┐`)
     expect(plain.some(line => line.includes('Workspace'))).toBe(true)
     expect(plain.some(line => line.includes('dsh >'))).toBe(true)
+  })
+
+  it('gives an established conversation every row above the input separator', () => {
+    const transcript = Array.from({ length: 12 }, (_, index) => `row ${String(index)}`).join('\n')
+    const plain = createWorkbench({ rows: 8, header: '', transcript }).render(100).map(stripSgr)
+    const content = plain.slice(1, -1)
+    const main = content.map(line => line.slice(1, line.indexOf('│', 1)).trim())
+
+    expect(main).toEqual([
+      'row 9',
+      'row 10',
+      'row 11',
+      '─'.repeat(65),
+      'queue',
+      'dsh >',
+    ])
   })
 
   it('includes the character cells at both ends of forward and reverse drags', () => {

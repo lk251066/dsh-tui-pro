@@ -5,6 +5,7 @@ import type { Session } from '@deepseek-ai/dsh-session'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
 import { CollapsedToolGroupComponent, ToolCardComponent } from '../src/components/transcript.ts'
 import { TOOL_SETTLED } from '../src/components/figures.ts'
+import { TOOL_SPINNER_FRAMES } from '../src/chat/timing.ts'
 import { parseArguments } from '../src/components/content.ts'
 import { createPalette, markdownTheme } from '../src/components/theme.ts'
 import {
@@ -229,7 +230,9 @@ describe('transcript tool grouping', () => {
     await tick()
     // While the batch still runs, the summary carries the pending glyph and
     // the newest call's label; settling swaps in the settled dot.
-    expect(result.terminal.output).toContain('○ Read 3 files')
+    expect(['○', ...TOOL_SPINNER_FRAMES].some(glyph =>
+      result.terminal.output.includes(`${glyph} Read 3 files`),
+    )).toBe(true)
     for (const id of ['g1', 'g2', 'g3']) appendToolResult(result.session, id)
     await tick()
     expect(result.terminal.output).toContain(`${TOOL_SETTLED()} Read 3 files`)
