@@ -4,17 +4,17 @@
 
 ## 1.8.1 source verification
 
-The `1.8.1` checks cover removal of the established-session top header and repeated role labels, the expanded transcript viewport, the dim input separator, welcome removal after the first message, transcript scrolling, disclosure clicks, drag selection, terminal titles, sidebar titles, and main-area diagnostics.
+The `1.8.1` checks cover removal of the established-session top header and repeated role labels, the expanded transcript viewport, the dim input separator, welcome removal after the first message, transcript scrolling, disclosure clicks, drag selection, terminal titles, sidebar titles, and main-area diagnostics. They also cover the prefix-free editor prompt, one-row user-to-assistant spacing, and a current-step `token/s` estimate that refreshes from the latest two seconds of streaming output and clears at step completion.
 
 | Check | Result |
 | --- | --- |
-| Complete source tests | Passed: 46 files, 590 tests |
+| Complete source tests | Passed: 47 files, 592 tests |
 | Focused workbench layout | Passed: 17 tests, including headerless viewport rows and updated drag coordinates |
 | `pnpm run typecheck` | Passed |
-| `pnpm run lint` | Passed with 38 existing warnings and no errors |
+| `pnpm run lint` | Passed with 34 existing warnings and no errors |
 | `pnpm run build` | Passed |
-| `pnpm run pack:artifact` | Passed: 328 files, 746.9 kB, SHA-1 `26ecf08019a84eeaf35f9f042389d076ef84525c` |
-| Local `tui` profile | Installed from the `1.8.1` tarball; dependency listing, installed manifest, and `--dump-config` resolve the local package |
+| `pnpm run pack:artifact` | Passed: 331 files, 747.4 kB, SHA-1 `cc6e717afe7c6f7d588b6100cc03f1b751064f76`, SHA-256 `f4df8628df62810ac21177717bc3b1bb70352d477a63dfc27cc4eec1c3962ad2` |
+| Local `tui` profile | Reinstalled from the `1.8.1` tarball; installed JavaScript contains the prefix-free prompt and live-rate module, `why` and `--dump-config` resolve the package, and direct non-TTY launch reaches the intentional TTY requirement after plugin loading |
 
 ## 1.8.0 source verification
 

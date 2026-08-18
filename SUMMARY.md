@@ -6,6 +6,6 @@ The `1.8.0` source reserves `/exit` for whole-TUI shutdown. `/quit` and empty-in
 
 Help and read-only diagnostics open over the main chat area without adding rows to the transcript. `/status` reports the latest session event time, while `/context`, `/agents`, `/jobs`, and `/settings` use the same bounded view with line, page, and endpoint scrolling.
 
-The `1.8.1` source removes the persistent top header from established conversations. A single dim rule separates the expanded transcript viewport from the fixed input area; the welcome box remains limited to pristine sessions. User bands and assistant Markdown distinguish speakers without separate `You` or `Assistant` heading rows.
+The `1.8.1` source removes the persistent top header from established conversations. A single dim rule separates the expanded transcript viewport from the fixed input area; the welcome box remains limited to pristine sessions. User bands and assistant Markdown distinguish speakers without separate `You` or `Assistant` heading rows. Assistant replies begin one row after user messages, the input prompt has no `dsh` prefix, and the bottom line shows the current step's rolling output rate only while streaming.
 
 [CHANGES.md](CHANGES.md) owns current behavior. [REPAIR_PLAN.md](REPAIR_PLAN.md) records release readiness, and [TESTING.md](TESTING.md) defines the required evidence.

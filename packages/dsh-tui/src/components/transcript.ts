@@ -641,13 +641,12 @@ const FOLDED_BODY_HINT = /^… \+\d+ lines \(click to expand\)$/u
 
 /**
  * Children of a settled assistant message: optional reasoning block then the
- * response text. The first visible step in a turn opens the message-level
- * two-row gap; later steps are one-row-gap continuations. A settled
- * step folds its reasoning to one dim `∴ Thinking` line unless expanded
- * (Claude Code's default), while a streaming step keeps the reasoning live;
- * a folded continuation with no visible body renders nothing at all, so
- * tool-only steps leave no blank segment behind. Shown reasoning renders as a
- * Markdown blockquote, so the quote style's dim `▎` bar gives the thinking
+ * response text. Every visible reply opens a single-row gap below the user
+ * message or preceding tool output. A settled step folds its reasoning to one
+ * dim `∴ Thinking` line unless expanded (Claude Code's default), while a
+ * streaming step keeps the reasoning live. A step with no visible body renders
+ * nothing, so tool-only steps leave no blank segment behind. Shown reasoning
+ * renders as a Markdown blockquote, so the quote style's dim `▎` bar gives the thinking
  * block a left edge apart from tool output and the reply. A settled reply
  * body longer than `maxMessageLines` rendered rows folds behind a
  * click-to-expand disclosure row; a streaming reply always renders in full.
@@ -655,7 +654,6 @@ const FOLDED_BODY_HINT = /^… \+\d+ lines \(click to expand\)$/u
 function assistantMessageChildren(
   content: readonly ContentBlock[],
   showReasoning: boolean,
-  foldedContinuation: boolean,
   palette: Palette,
   mdTheme: MarkdownTheme,
   settled: boolean,
@@ -668,7 +666,7 @@ function assistantMessageChildren(
   const showsReasoning = reasoning !== '' && (!settled || showReasoning)
   const foldsReasoning = settled && reasoning !== '' && !showReasoning
   if (!showsReasoning && !foldsReasoning && text === '') return []
-  const children: Component[] = [new Spacer(foldedContinuation ? 1 : 2)]
+  const children: Component[] = [new Spacer(1)]
   const duration = thinkingMs === undefined ? '' : ` for ${formatStatusDuration(thinkingMs)}`
   const liveDuration = thinkingMs === undefined ? '…' : `… ${formatStatusDuration(thinkingMs)}`
   const reasoningLines = reasoning === '' ? 0 : reasoning.split('\n').length
@@ -705,7 +703,6 @@ interface StreamingBlock {
 export class StreamingAssistantComponent extends Container {
   private readonly blocks = new Map<number, StreamingBlock>()
   private settledContent: readonly ContentBlock[] | undefined
-  private foldedContinuation = false
   private startedAt: number | undefined
   private thinkingStartedAt: number | undefined
   private thinkingMs: number | undefined
@@ -826,27 +823,6 @@ export class StreamingAssistantComponent extends Container {
     return false
   }
 
-  /**
-   * Mark this step as a folded continuation of its turn. Continuations use a
-   * one-row internal gap, and a step with no visible body renders nothing.
-   * @param folded - Whether to render with continuation spacing.
-   */
-  setFoldedContinuation(folded: boolean): void {
-    if (this.foldedContinuation === folded) return
-    this.foldedContinuation = folded
-    this.rebuild()
-  }
-
-  /**
-   * Whether the step currently renders visible reasoning or text.
-   * @returns `true` when the step would render a reasoning or response body.
-   */
-  hasVisibleBody(): boolean {
-    const content = this.presentedContent()
-    return textBlocks(content, 'text').trim() !== ''
-      || textBlocks(content, 'reasoning').trim() !== ''
-  }
-
   /** The settled content when available, otherwise the streamed blocks in model order. */
   private presentedContent(): readonly ContentBlock[] {
     return this.settledContent ?? [...this.blocks.entries()]
@@ -863,7 +839,6 @@ export class StreamingAssistantComponent extends Container {
     const children = assistantMessageChildren(
       this.presentedContent(),
       this.showReasoning,
-      this.foldedContinuation,
       this.palette,
       this.mdTheme,
       this.settledContent !== undefined,

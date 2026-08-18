@@ -175,7 +175,6 @@ import {
   jobsLines,
   openStaticDialog,
   settingsLines,
-  throughputStrip,
   writeExport,
   type InsightsDeps,
 } from './chat/insights.ts'
@@ -554,7 +553,6 @@ function createTuiChatInternal(
     ctx.tuiPrompt.register('model'),
     ctx.tuiPrompt.register('context'),
     ctx.tuiPrompt.register('queued'),
-    ctx.tuiPrompt.register('symbol', palette.bold(palette.accent('dsh'))),
     ctx.tuiPrompt.register('indicator', palette.dim('> ')),
     ctx.tuiPrompt.register('permission'),
     ctx.tuiPrompt.register('plan'),
@@ -563,11 +561,11 @@ function createTuiChatInternal(
   ]
   const [
     cwdValue, gitValue, tokenValue, modelValue, contextValue, queuedValue,
-    symbolValue, indicatorValue, permissionValue, planValue, throughputValue, memoryValue,
+    indicatorValue, permissionValue, planValue, throughputValue, memoryValue,
   ] = promptValues
   /* v8 ignore next -- the fixed built-in registration list always supplies each handle. */
   if (cwdValue === undefined || gitValue === undefined || tokenValue === undefined || modelValue === undefined
-    || contextValue === undefined || queuedValue === undefined || symbolValue === undefined || indicatorValue === undefined
+    || contextValue === undefined || queuedValue === undefined || indicatorValue === undefined
     || permissionValue === undefined || planValue === undefined || throughputValue === undefined || memoryValue === undefined) {
     throw new Error('TUI prompt built-ins failed to initialize')
   }
@@ -633,8 +631,8 @@ function createTuiChatInternal(
     planValue.set(planActive
       ? palette.bold(palette.plan('  ⎇ plan'))
       : undefined)
-    const throughput = throughputStrip(insights)
-    throughputValue.set(throughput === undefined ? undefined : palette.dim(`  ${throughput}`))
+    const throughput = channel.liveTokenRate()
+    throughputValue.set(throughput === undefined ? undefined : palette.dim(`  ${throughput} tok/s`))
     // The `${memory}` fragment keeps the session's memory switch visible after
     // the transient /memory notice fades; an absent service or a disabled
     // switch renders nothing so the status row stays clean.
@@ -652,7 +650,6 @@ function createTuiChatInternal(
       permission: preset,
       plan: planActive,
     })
-    symbolValue.set(palette.bold(palette.accent('dsh')))
     compactionStatusLine.setText(channel.isCompacting()
       ? palette.dim(`Context being compacted ${formatStatusDuration(renderTime - (channel.compactingStartedAt() ?? renderTime))}`)
       : occupancy !== undefined && contextPressureLevel(occupancy) === 'critical'
@@ -1512,9 +1509,6 @@ function createTuiChatInternal(
   const rebuildTranscript = (populateHistory: boolean): void => {
     channel.rebuildTranscript(populateHistory)
   }
-  const applyTurnFolding = (turn: number): void => {
-    channel.applyTurnFolding(turn)
-  }
   const clearStatus = (): void => {
     channel.clearStatus()
   }
@@ -1526,9 +1520,6 @@ function createTuiChatInternal(
     // below then re-apply the phase to the rebuilt components idempotently.
     if (channel.hasCompactionCheckpoint()) rebuildTranscript(false)
     channel.applyToolsVisibility(toolsVisibility)
-    // Keep the first visible reply at turn spacing and later steps at tighter
-    // continuation spacing after card visibility changes.
-    for (const turn of channel.assistantStepTurns()) applyTurnFolding(turn)
     // State-switch feedback: transient receipt, not transcript history.
     showTransientNotice(toolsVisibility === 'hidden' ? 'Tool cards hidden.' : `Tool and context cards ${toolsVisibility}.`)
   }

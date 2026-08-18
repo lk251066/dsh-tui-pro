@@ -58,6 +58,7 @@ import {
 } from './helpers.ts'
 import type { TuiTerminalLike } from './terminal.ts'
 import { TranscriptContainer } from '../components/transcript-container.ts'
+import { LiveTokenRate } from './live-token-rate.ts'
 
 /** Complete durable reference required to retrieve one image. */
 type ImageAttachmentRef = Extract<ContentBlock, { type: 'image' }>['attachment']
@@ -175,6 +176,8 @@ export interface SessionChannel {
   isRunning(): boolean
   /** Whether a compaction is live (working-line input). */
   isCompacting(): boolean
+  /** Rolling output speed for the current model step. */
+  liveTokenRate(): number | undefined
   /** Render clock of the running turn's start (working-line input). */
   runningStartedAt(): number | undefined
   /** Render clock of the live compaction's start, when one runs. */
@@ -191,8 +194,6 @@ export interface SessionChannel {
   ): { glyph: string; level: number } | undefined
   /** Re-apply the current visibility phase to cards, groups, and context cards. */
   applyToolsVisibility(visibility: ToolCardVisibility): void
-  /** Turns that currently carry registered assistant steps. */
-  assistantStepTurns(): Iterable<number>
   /** Steering submissions not yet claimed or discarded (prompt badge). */
   pendingSteeringCount(): number
   /**
@@ -206,7 +207,7 @@ export interface SessionChannel {
   /** Unregister the listeners `attach` registered. */
   detach(): void
   /** Render one session event into the transcript. */
-  renderEvent(event: SessionEvent, options: { addHistory: boolean; renderChunks: boolean }): void
+  renderEvent(event: SessionEvent, options: { addHistory: boolean; renderChunks: boolean; trackLive: boolean }): void
   /** Re-derive the whole transcript from the session log. */
   rebuildTranscript(populateHistory: boolean): void
   /**
@@ -218,8 +219,6 @@ export interface SessionChannel {
   refreshStatus(): void
   /** Drop every status indicator, including a live compaction bracket. */
   clearStatus(): void
-  /** Re-derive hidden-mode folding for one turn's assistant steps. */
-  applyTurnFolding(turn: number): void
   /** Whether the session log carries at least one compaction checkpoint. */
   hasCompactionCheckpoint(): boolean
   /** Track a steering submission until it is claimed or discarded. */
@@ -239,9 +238,6 @@ export function createSessionChannel(deps: SessionChannelDeps): SessionChannel {
   const todo = new TodoComponent(palette)
   let streaming: StreamingAssistantComponent | undefined
   let completedStreaming: StreamingAssistantComponent | undefined
-  // Assistant step components in model order per turn. The first visible
-  // reply owns the turn-level gap; later steps use continuation spacing.
-  const assistantSteps = new Map<number, StreamingAssistantComponent[]>()
   let runningStatus: RunningStatus | undefined
   let fadingStatus: FadingStatus | undefined
   /**
@@ -363,46 +359,13 @@ export function createSessionChannel(deps: SessionChannelDeps): SessionChannel {
   const verbBase = Date.now() % 997
   let streamedChars = 0
   let lastOutputAt: number | undefined
-
-  /**
-   * Re-derive turn spacing. The first step with a visible body owns the larger
-   * turn-level gap; every later step renders as a tighter continuation.
-   */
-  const applyTurnFolding = (turn: number): void => {
-    const steps = assistantSteps.get(turn)
-    if (steps === undefined) return
-    let visibleStepSeen = false
-    for (const step of steps) {
-      if (!visibleStepSeen && step.hasVisibleBody()) {
-        visibleStepSeen = true
-        step.setFoldedContinuation(false)
-      } else {
-        step.setFoldedContinuation(true)
-      }
-    }
-  }
-
-  const registerAssistantStep = (component: StreamingAssistantComponent): void => {
-    const steps = assistantSteps.get(component.position.turn) ?? []
-    steps.push(component)
-    assistantSteps.set(component.position.turn, steps)
-    applyTurnFolding(component.position.turn)
-  }
+  const liveTokenRate = new LiveTokenRate()
 
   const removeStreaming = (current: StreamingAssistantComponent | undefined): void => {
     if (current === undefined) return
     const index = chat.children.indexOf(current)
     /* v8 ignore next -- streaming components are retained only while attached to the chat. */
     if (index >= 0) chat.children.splice(index, 1)
-    const steps = assistantSteps.get(current.position.turn)
-    /* v8 ignore next -- every attached streaming component is registered in the fold map. */
-    if (steps === undefined) return
-    const stepIndex = steps.indexOf(current)
-    /* v8 ignore next -- registration precedes attachment, so the component is present until this removal. */
-    if (stepIndex < 0) return
-    steps.splice(stepIndex, 1)
-    // A retracted step may have owned the turn-level gap.
-    applyTurnFolding(current.position.turn)
   }
 
   const clearStreaming = (): void => {
@@ -430,7 +393,6 @@ export function createSessionChannel(deps: SessionChannelDeps): SessionChannel {
 
   const attachStreaming = (): void => {
     if (streaming === undefined || chat.children.includes(streaming)) return
-    registerAssistantStep(streaming)
     chat.addChild(streaming)
   }
 
@@ -439,6 +401,7 @@ export function createSessionChannel(deps: SessionChannelDeps): SessionChannel {
     options: {
       addHistory: boolean
       renderChunks: boolean
+      trackLive: boolean
     },
   ): void => {
     // Foldable grouping: a run of adjacent low-signal calls ends at any event
@@ -499,21 +462,25 @@ export function createSessionChannel(deps: SessionChannelDeps): SessionChannel {
         break
       }
       case 'step/start':
+        if (options.trackLive) liveTokenRate.begin()
         startAssistantStep(event.data, event.time)
         break
       case 'assistant/chunk': {
-        // Working-line extras: every streamed character feeds the token
-        // estimate and refreshes the stall clock, regardless of whether this
-        // pass renders the chunk.
         const chunk = event.data.chunk
-        if (chunk.type === 'text-delta' || chunk.type === 'reasoning-delta') streamedChars += chunk.text.length
-        lastOutputAt = event.time
+        if (options.trackLive) {
+          const output = chunk.type === 'text-delta' || chunk.type === 'reasoning-delta'
+            ? chunk.text
+            : chunk.type === 'tool-call-delta' ? chunk.argumentsDelta : undefined
+          if (output !== undefined) {
+            streamedChars += output.length
+            liveTokenRate.record(output, deps.now())
+            lastOutputAt = deps.now()
+          }
+          if (chunk.type === 'finish') liveTokenRate.end()
+        }
         if (options.renderChunks && streaming !== undefined) {
           attachStreaming()
           streaming.update(event.data.chunk, event.time)
-          // The first streamed text/reasoning may make this step the turn's
-          // turn-level gap owner (or a continuation with a visible body).
-          applyTurnFolding(streaming.position.turn)
         }
         break
       }
@@ -527,10 +494,11 @@ export function createSessionChannel(deps: SessionChannelDeps): SessionChannel {
         if (streaming !== undefined) {
           attachStreaming()
           streaming.settle(event.data.message.content, event.time)
-          applyTurnFolding(streaming.position.turn)
         }
+        if (options.trackLive) liveTokenRate.end()
         break
       case 'llm/retry': {
+        if (options.trackLive) liveTokenRate.begin()
         retractFailedStreaming()
         const retryLimit = event.data.mode === 'always' ? '∞' : String(event.data.maxRetries)
         deps.appendNotice(
@@ -605,11 +573,13 @@ export function createSessionChannel(deps: SessionChannelDeps): SessionChannel {
       case 'turn/start':
         streamedChars = 0
         lastOutputAt = undefined
+        if (options.trackLive) liveTokenRate.end()
         break
       case 'session/title':
         deps.onSessionTitle(event.data.title)
         break
       case 'step/end':
+        if (options.trackLive) liveTokenRate.end()
         if (streaming === undefined) startAssistantStep(event.data, event.time)
         completedStreaming = streaming
         streaming = undefined
@@ -618,6 +588,7 @@ export function createSessionChannel(deps: SessionChannelDeps): SessionChannel {
       // presented by the settled assistant message and its Completed timing
       // header; every other kind appends an explicit notice.
       case 'turn/end': {
+        if (options.trackLive) liveTokenRate.end()
         clearStreaming()
         const reason = event.data.reason
         switch (reason.kind) {
@@ -718,7 +689,6 @@ export function createSessionChannel(deps: SessionChannelDeps): SessionChannel {
     toolGroups.clear()
     openToolGroup = undefined
     contextCards.clear()
-    assistantSteps.clear()
     streaming = undefined
     todo.update([])
     const transcriptCalls = transcriptToolCallIds(agent.session)
@@ -751,7 +721,7 @@ export function createSessionChannel(deps: SessionChannelDeps): SessionChannel {
       const renderChunks = event.type === 'assistant/chunk'
         && activeStep?.turn === event.data.turn
         && activeStep.step === event.data.step
-      renderEvent(event, { addHistory: populateHistory, renderChunks })
+      renderEvent(event, { addHistory: populateHistory, renderChunks, trackLive: false })
     }
     deps.requestRender()
   }
@@ -762,6 +732,7 @@ export function createSessionChannel(deps: SessionChannelDeps): SessionChannel {
     if (status === 'running') clearTurnStatus()
     else if (fadeOutGlyph !== undefined) beginFadeOut(fadeOutGlyph)
     else clearTurnStatus()
+    if (status !== 'running') liveTokenRate.end()
     // Running keeps the steering placeholder; idle plan mode carries its own;
     // plain idle carries the queue hint or the example-commands hint.
     if (status === 'running') {
@@ -784,6 +755,7 @@ export function createSessionChannel(deps: SessionChannelDeps): SessionChannel {
   /** Hard clear: drop every indicator, including a live compaction bracket. */
   const clearStatus = (): void => {
     compacting = undefined
+    liveTokenRate.end()
     clearTurnStatus()
   }
 
@@ -868,7 +840,7 @@ export function createSessionChannel(deps: SessionChannelDeps): SessionChannel {
       deps.requestRender()
       return
     }
-    renderEvent(event, { addHistory: false, renderChunks: true })
+    renderEvent(event, { addHistory: false, renderChunks: true, trackLive: true })
     deps.requestRender()
   }
 
@@ -890,6 +862,7 @@ export function createSessionChannel(deps: SessionChannelDeps): SessionChannel {
     tokens: () => tokens,
     isRunning: () => runningStatus !== undefined,
     isCompacting: () => compacting !== undefined,
+    liveTokenRate: () => liveTokenRate.rate(deps.now()),
     runningStartedAt: () => runningStatus?.startedAt ?? compacting?.startedAt,
     compactingStartedAt: () => compacting?.startedAt,
     noteRenderedStatusGlyph: (glyph) => {
@@ -917,7 +890,6 @@ export function createSessionChannel(deps: SessionChannelDeps): SessionChannel {
       // they never hide: the hidden phase reads as their collapsed preview.
       for (const card of contextCards) card.setExpanded(visibility === 'expanded')
     },
-    assistantStepTurns: () => assistantSteps.keys(),
     pendingSteeringCount: () => pendingSteering.size,
     tickSpinner,
     attach(): void {
@@ -985,7 +957,6 @@ export function createSessionChannel(deps: SessionChannelDeps): SessionChannel {
     setStatus,
     refreshStatus: renderStatus,
     clearStatus,
-    applyTurnFolding,
     hasCompactionCheckpoint: () => lastCompactCheckpointIndex(agent.session.events) >= 0,
     addPendingSteering: (id) => {
       pendingSteering.add(id)

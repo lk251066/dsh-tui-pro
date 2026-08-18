@@ -1,8 +1,8 @@
 /**
  * Insight surfaces for the terminal: the `/context` occupancy breakdown, the
- * prompt-row stats strip, the `/agents` and `/jobs` monitors, `/settings`, and
- * the `/export` markdown transcript. All read optional services (`ctx.get`) so
- * the TUI mounts in embedder bundles without them.
+ * `/agents` and `/jobs` monitors, `/settings`, and the `/export` markdown
+ * transcript. All read optional services (`ctx.get`) so the TUI mounts in
+ * embedder bundles without them.
  * @module @deepseek-ai/dsh-tui/chat/insights
  */
 
@@ -22,33 +22,6 @@ import type { ChannelNotice, ChatChannelDeps } from './channel.ts'
 export interface InsightsDeps extends ChatChannelDeps, ChannelNotice {
   /** The agent whose session every surface reads. */
   agent: Agent
-}
-
-/** The `sessionStats` projection shape (absent when the plugin is not mounted). */
-interface SessionStats {
-  turns?: number
-  steps?: number
-  llmMs?: number
-  ttftMs?: number
-  ttftSteps?: number
-  decodeMs?: number
-  decodeTokens?: number
-}
-
-/**
- * Average decoded-token throughput for completed model steps. The projection
- * reports aggregate decoded tokens and time, so this is a session-weighted
- * average rather than a live per-chunk rate.
- * @param deps - Active session and projection registry.
- * @returns A compact `tok/s` value, or `undefined` before a measured step.
- */
-export function throughputStrip(deps: InsightsDeps): string | undefined {
-  const stats = projectionValue<SessionStats>(deps, 'sessionStats')
-  if (stats === undefined) return undefined
-  if (stats.decodeMs !== undefined && stats.decodeTokens !== undefined && stats.decodeMs > 0 && stats.decodeTokens > 0) {
-    return `${Math.round(stats.decodeTokens / (stats.decodeMs / 1000))} tok/s`
-  }
-  return undefined
 }
 
 /** Read one projection value off the optional projection registry. */

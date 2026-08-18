@@ -6,7 +6,11 @@ Established conversations no longer reserve a persistent top header or its surro
 
 One dim horizontal rule replaces the blank gap above auxiliary state and the editor. The rule identifies the transcript boundary without reducing its previous height. Scrolling, disclosure clicks, and drag selection use the expanded viewport coordinates.
 
-User message bands and assistant Markdown now provide the speaker distinction directly. The repeated `You` and `Assistant` heading rows and their heading timestamps are removed, while turn spacing, message wrapping, reasoning, tool cards, and reply folding remain unchanged.
+User message bands and assistant Markdown now provide the speaker distinction directly. The repeated `You` and `Assistant` heading rows and their heading timestamps are removed, while message wrapping, reasoning, tool cards, and reply folding remain unchanged.
+
+Assistant replies now open one row below the preceding user message or tool output. The editor prompt no longer repeats `dsh`; it contains only the idle caret or the current running-state glyph.
+
+The bottom status line now reports the current model step's rolling output rate instead of the completed-session weighted average. It estimates tokens from text and tool-argument deltas emitted during the latest two seconds, refreshes while streaming, resets for each step, and disappears when that step finishes.
 
 ## 1.8.0 source changes
 

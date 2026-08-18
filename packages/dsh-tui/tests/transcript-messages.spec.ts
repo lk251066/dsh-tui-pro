@@ -61,20 +61,9 @@ describe('UserMessageComponent', () => {
 })
 
 describe('StreamingAssistantComponent', () => {
-  it('opens a two-row turn gap without a repeated role label', () => {
+  it('opens one row below the user message without a repeated role label', () => {
     const step = new StreamingAssistantComponent({ turn: 1, step: 1 }, false, plain, plainMd, 30)
     step.markStart(STAMP)
-    step.settle([{ type: 'text', text: 'answer' }], STAMP + 2_000)
-    const rows = step.render(40)
-    expect(rows[0]).toBe('')
-    expect(rows[1]).toBe('')
-    expect(rows[2]?.trimEnd()).toBe('answer')
-  })
-
-  it('keeps a one-row gap for folded continuations', () => {
-    const step = new StreamingAssistantComponent({ turn: 1, step: 2 }, false, plain, plainMd, 30)
-    step.markStart(STAMP)
-    step.setFoldedContinuation(true)
     step.settle([{ type: 'text', text: 'answer' }], STAMP + 2_000)
     const rows = step.render(40)
     expect(rows[0]).toBe('')
@@ -160,7 +149,7 @@ describe('StreamingAssistantComponent long-reply fold', () => {
     step.markStart(STAMP)
     step.settle([{ type: 'text', text: body }], STAMP + 2_000)
     const rows = step.render(40).map(row => row.trimEnd())
-    expect(rows).toEqual(['', '', 'line 1', 'line 2', 'line 3', '… +5 lines (click to expand)'])
+    expect(rows).toEqual(['', 'line 1', 'line 2', 'line 3', '… +5 lines (click to expand)'])
   })
 
   it('expands the folded reply when its disclosure row is clicked', () => {

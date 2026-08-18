@@ -2,32 +2,12 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { agentsLines, jobsLines, settingsLines, throughputStrip, writeExport } from '../src/chat/insights.ts'
+import { agentsLines, jobsLines, settingsLines, writeExport } from '../src/chat/insights.ts'
 import { createPalette } from '../src/components/theme.ts'
 
 const plain = createPalette(false, 'dark')
 
 describe('insight commands', () => {
-  it('reports aggregate decoded throughput without adding turn-count noise', () => {
-    const deps = {
-      agent: { session: { id: 'throughput-test' } },
-      ctx: {
-        get: (name: string) => name === 'sessionProjections'
-          ? { snapshot: () => ({ values: { sessionStats: { turns: 4, decodeTokens: 600, decodeMs: 12_000 } } }) }
-          : undefined,
-      },
-    }
-    expect(throughputStrip(deps as never)).toBe('50 tok/s')
-  })
-
-  it('does not invent throughput before a completed decode sample', () => {
-    const deps = {
-      agent: { session: { id: 'throughput-empty' } },
-      ctx: { get: () => ({ snapshot: () => ({ values: { sessionStats: { decodeTokens: 0, decodeMs: 0 } } }) }) },
-    }
-    expect(throughputStrip(deps as never)).toBeUndefined()
-  })
-
   it('reads the rc.6 settings documentPath getter as a property', () => {
     let getterReads = 0
     const settings = {

@@ -104,7 +104,7 @@ const truecolorSchema = z.boolean()
 const themeNameSchema = z.string()
 const DEFAULT_LEFT_PROMPT = '${cwd}${git/worktree}${model}${context}${memory}${plan}${throughput}'
 const DEFAULT_RIGHT_PROMPT = ''
-const DEFAULT_INPUT_PROMPT = '${symbol} ${indicator}'
+const DEFAULT_INPUT_PROMPT = '${indicator}'
 const DEFAULT_INPUT_PLACEHOLDER = 'Enter steer · Tab queue · Esc cancel'
 const TuiThemeConfigSchema: z<TuiThemeConfig> = z.object({
   color: colorSchema,
