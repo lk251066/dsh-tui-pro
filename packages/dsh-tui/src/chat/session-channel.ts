@@ -34,6 +34,8 @@ import {
   STATUS_ANIMATION_INTERVAL_MS,
   STATUS_FADE_MS,
   TIMING_BUCKET_GLYPHS,
+  TOOL_SPINNER_FRAMES,
+  TOOL_SPINNER_INTERVAL_MS,
   type StepPosition,
 } from './timing.ts'
 import type { ResolvedTuiConfig } from '../config.ts'
@@ -73,6 +75,7 @@ const FOLDABLE_TOOLS: ReadonlySet<string> = new Set(['read', 'grep', 'glob'])
 
 /** An adjacent run of foldable calls below this count keeps its standalone cards. */
 const TOOL_GROUP_MIN_CARDS = 3
+const SPINNER_STATUS_TICKS = Math.max(1, Math.round(TOOL_SPINNER_INTERVAL_MS / STATUS_ANIMATION_INTERVAL_MS))
 
 /**
  * Transcript row standing in for one compacted range while the full history is
@@ -116,7 +119,9 @@ export interface SessionChannelDeps {
   /** Terminal façade for the progress bit; the host's `runtime.terminal`. */
   readonly terminal: TuiTerminalLike
   /** Redraw the channel (also refreshes prompt values and chrome). */
-  requestRender(): void
+  requestRender(light?: boolean): void
+  /** Refresh only running-status prompt values and repaint the current frame. */
+  requestStatusRender(): void
   /** Append a durable notice row to the transcript. */
   appendNotice(message: string, kind?: 'info' | 'warning' | 'error'): void
   /** Resolve one stored image attachment's bytes (optional store). */
@@ -159,7 +164,7 @@ export interface SessionChannelDeps {
    * Agent-level error observed on the event stream: the host retains it for
    * its live-error set and appends the durable notice.
    */
-  onAgentError(stepKey: string, error: unknown): void
+  onAgentError(error: unknown): void
   /** The channel's agent left the registry; the host marks itself disposed. */
   onAgentDisposed(): void
 }
@@ -210,12 +215,16 @@ export interface SessionChannel {
   renderEvent(event: SessionEvent, options: { addHistory: boolean; renderChunks: boolean; trackLive: boolean }): void
   /** Re-derive the whole transcript from the session log. */
   rebuildTranscript(populateHistory: boolean): void
+  /** Re-derive the transcript only when the detached channel missed log events. */
+  syncTranscript(populateHistory: boolean): boolean
+  /** Track compaction lifecycle events that arrive while this channel is detached. */
+  observeBackgroundEvent(event: SessionEvent): void
   /**
    * The channel half of the status state machine (running/fading glyphs,
    * progress bit); the host's `setStatus` wraps it with editor chrome.
    */
   setStatus(status: AgentStatus): void
-  /** Invalidate the live streaming component and redraw (steering badge edges). */
+  /** Redraw status and steering indicators without invalidating transcript content. */
   refreshStatus(): void
   /** Drop every status indicator, including a live compaction bracket. */
   clearStatus(): void
@@ -238,6 +247,7 @@ export function createSessionChannel(deps: SessionChannelDeps): SessionChannel {
   const todo = new TodoComponent(palette)
   let streaming: StreamingAssistantComponent | undefined
   let completedStreaming: StreamingAssistantComponent | undefined
+  let renderedEventCount = 0
   let runningStatus: RunningStatus | undefined
   let fadingStatus: FadingStatus | undefined
   /**
@@ -263,6 +273,8 @@ export function createSessionChannel(deps: SessionChannelDeps): SessionChannel {
   const allToolCards = new Set<ToolCardComponent>()
   /** Every collapsed tool group in the transcript, for visibility and animation passes. */
   const toolGroups = new Set<CollapsedToolGroupComponent>()
+  /** Pending member cards mapped to the collapsed row that presents them. */
+  const pendingGroups = new Map<ToolCardComponent, CollapsedToolGroupComponent>()
   /**
    * The run of adjacent foldable calls currently accumulating toward a group:
    * `cards` holds the member cards (which render standalone in the chat until
@@ -275,9 +287,9 @@ export function createSessionChannel(deps: SessionChannelDeps): SessionChannel {
   } | undefined
   const contextCards = new Set<ContextCardComponent>()
 
-  const renderStatus = (): void => {
-    streaming?.invalidate()
-    deps.requestRender()
+  const renderStatus = (light = false): void => {
+    if (light) deps.requestStatusRender()
+    else deps.requestRender()
   }
 
   /**
@@ -287,17 +299,26 @@ export function createSessionChannel(deps: SessionChannelDeps): SessionChannel {
    * a timer (previously three `setInterval` sites with entangled lifecycles).
    */
   let statusTimer: ReturnType<typeof setInterval> | undefined
+  let attached = false
+  let statusTicks = 0
+  let spinnerFrame = 0
 
   /** One shared-tick frame: retire an expired fade-out, then re-render. */
   const statusTick = (): void => {
     if (fadingStatus !== undefined && deps.now() - fadingStatus.endedAt >= STATUS_FADE_MS) clearTurnStatus()
-    renderStatus()
+    if (statusTicks++ % SPINNER_STATUS_TICKS === 0) {
+      const frame = TOOL_SPINNER_FRAMES[spinnerFrame++ % TOOL_SPINNER_FRAMES.length] ?? TOOL_SPINNER_FRAMES[0]
+      tickSpinner(frame)
+    }
+    renderStatus(true)
   }
 
   /** Start the shared tick while any status state needs it; stop it when none does. */
   const syncStatusTimer = (): void => {
-    const needed = runningStatus !== undefined || fadingStatus !== undefined
+    const needed = attached && (
+      runningStatus !== undefined || fadingStatus !== undefined
       || (compacting !== undefined && compacting.ownsTimer)
+    )
     if (needed && statusTimer === undefined) {
       statusTimer = setInterval(statusTick, STATUS_ANIMATION_INTERVAL_MS)
     } else if (!needed && statusTimer !== undefined) {
@@ -348,8 +369,7 @@ export function createSessionChannel(deps: SessionChannelDeps): SessionChannel {
    * group replaces (mirroring `removeStreaming`'s direct children splice).
    */
   const removeChatChild = (component: Component): void => {
-    const index = chat.children.indexOf(component)
-    if (index >= 0) chat.children.splice(index, 1)
+    chat.removeChild(component)
   }
 
   // Working-line extras: one random fun verb per turn (seeded off the turn
@@ -363,9 +383,7 @@ export function createSessionChannel(deps: SessionChannelDeps): SessionChannel {
 
   const removeStreaming = (current: StreamingAssistantComponent | undefined): void => {
     if (current === undefined) return
-    const index = chat.children.indexOf(current)
-    /* v8 ignore next -- streaming components are retained only while attached to the chat. */
-    if (index >= 0) chat.children.splice(index, 1)
+    chat.removeChild(current)
   }
 
   const clearStreaming = (): void => {
@@ -456,7 +474,16 @@ export function createSessionChannel(deps: SessionChannelDeps): SessionChannel {
           // Message-level spacing: two blank rows set a user bubble apart from
           // the previous block; turn-internal gaps stay at one row.
           chat.addChild(new Spacer(2))
-          chat.addChild(new UserMessageComponent(text, palette, images, ref => deps.loadAttachmentImage(ref)))
+          chat.addChild(new UserMessageComponent(
+            text,
+            palette,
+            images,
+            ref => deps.loadAttachmentImage(ref),
+            () => {
+              chat.markDirty()
+              deps.requestRender()
+            },
+          ))
           if (options.addHistory && text) deps.addToEditorHistory(text)
         }
         break
@@ -481,6 +508,7 @@ export function createSessionChannel(deps: SessionChannelDeps): SessionChannel {
         if (options.renderChunks && streaming !== undefined) {
           attachStreaming()
           streaming.update(event.data.chunk, event.time)
+          chat.markDirty(streaming)
         }
         break
       }
@@ -494,6 +522,7 @@ export function createSessionChannel(deps: SessionChannelDeps): SessionChannel {
         if (streaming !== undefined) {
           attachStreaming()
           streaming.settle(event.data.message.content, event.time)
+          chat.markDirty(streaming)
         }
         if (options.trackLive) liveTokenRate.end()
         break
@@ -531,10 +560,12 @@ export function createSessionChannel(deps: SessionChannelDeps): SessionChannel {
           const component = new CollapsedToolGroupComponent(group.cards, palette)
           component.setVisibility(deps.toolsVisibility())
           toolGroups.add(component)
+          for (const member of group.cards) pendingGroups.set(member, component)
           chat.addChild(component)
           group.component = component
         } else {
           group.component.add(card)
+          pendingGroups.set(card, group.component)
         }
         break
       }
@@ -561,7 +592,9 @@ export function createSessionChannel(deps: SessionChannelDeps): SessionChannel {
           openToolGroup = undefined
         }
         card.updateResult(event.data, event.time)
+        chat.markDirty(card)
         toolCards.delete(callId)
+        pendingGroups.delete(card)
         // A member's result changes every group summary that reads it (settled
         // glyph, pending hint); drop their cached rows.
         for (const group of toolGroups) group.refresh()
@@ -682,11 +715,12 @@ export function createSessionChannel(deps: SessionChannelDeps): SessionChannel {
    * it, which the live listener has necessarily just rendered. A loaded log is a
    * replay boundary, so the pairing is re-derived here instead of assumed.
    */
-  const rebuildTranscript = (populateHistory: boolean): void => {
+  const rebuildTranscript = (populateHistory: boolean, requestFrame = true): void => {
     chat.clear()
     toolCards.clear()
     allToolCards.clear()
     toolGroups.clear()
+    pendingGroups.clear()
     openToolGroup = undefined
     contextCards.clear()
     streaming = undefined
@@ -723,7 +757,14 @@ export function createSessionChannel(deps: SessionChannelDeps): SessionChannel {
         && activeStep.step === event.data.step
       renderEvent(event, { addHistory: populateHistory, renderChunks, trackLive: false })
     }
-    deps.requestRender()
+    renderedEventCount = events.length
+    if (requestFrame) deps.requestRender()
+  }
+
+  const syncTranscript = (populateHistory: boolean): boolean => {
+    if (renderedEventCount === agent.session.events.length) return false
+    rebuildTranscript(populateHistory, false)
+    return true
   }
 
   const setStatus = (status: AgentStatus): void => {
@@ -766,10 +807,7 @@ export function createSessionChannel(deps: SessionChannelDeps): SessionChannel {
   // when idle, so the tick is effectively self-gating.
   let workShown = false
   const tickSpinner = (frame: string): void => {
-    let pending: ToolCardComponent | undefined
-    for (const card of allToolCards) {
-      if (card.isPending()) pending = card
-    }
+    const pending = Array.from(toolCards.values()).at(-1)
     const running = runningStatus !== undefined || compacting !== undefined
     // Idle steady state (nothing pending, nothing running): the previous tick
     // already rendered the empty line, so skip — this keeps the timer free.
@@ -779,8 +817,10 @@ export function createSessionChannel(deps: SessionChannelDeps): SessionChannel {
     }
     workShown = true
     if (pending !== undefined) pending.setSpinner(frame)
-    // A collapsed group whose newest member pends animates its summary glyph.
-    for (const group of toolGroups) group.setSpinner(frame)
+    const pendingGroup = pending === undefined ? undefined : pendingGroups.get(pending)
+    pendingGroup?.setSpinner(frame)
+    if (pending !== undefined) chat.markDirty(pending)
+    if (pendingGroup !== undefined) chat.markDirty(pendingGroup)
     deps.onSpinnerFrame(running, runningStatus?.startedAt ?? compacting?.startedAt, pending?.label(), frame, {
       verb: pickSpinnerVerb(verbBase + (runningStatus?.turn ?? 0)),
       emittedTokens: Math.floor(streamedChars / 4),
@@ -795,6 +835,7 @@ export function createSessionChannel(deps: SessionChannelDeps): SessionChannel {
 
   const renderSessionEvent = (event: SessionEvent): void => {
     recordEventUsage(tokens, event)
+    renderedEventCount = agent.session.events.length
     if (event.type === 'turn/start' && runningStatus !== undefined) runningStatus.turn = event.data.turn
     // Docks re-derive from the log: the goal bar on goal changes, the queue
     // dock on inbox-affecting events; plan-mode switches re-derive the hint.
@@ -841,7 +882,8 @@ export function createSessionChannel(deps: SessionChannelDeps): SessionChannel {
       return
     }
     renderEvent(event, { addHistory: false, renderChunks: true, trackLive: true })
-    deps.requestRender()
+    if (event.type === 'assistant/chunk') deps.requestStatusRender()
+    else deps.requestRender()
   }
 
   const settlePendingSteering = (id: MessageId): void => {
@@ -890,10 +932,14 @@ export function createSessionChannel(deps: SessionChannelDeps): SessionChannel {
       // they never hide: the hidden phase reads as their collapsed preview.
       for (const card of contextCards) card.setExpanded(visibility === 'expanded')
       todo.setExpanded(visibility === 'expanded')
+      chat.markDirty()
     },
     pendingSteeringCount: () => pendingSteering.size,
     tickSpinner,
     attach(): void {
+      if (attached) return
+      attached = true
+      deps.terminal.setProgress(compacting !== undefined)
       disposeSessionEvents = ctx.on('session/event', (session, event) => {
         if (session !== agent.session) return
         if (event.type === 'tool/result') deps.onToolResult()
@@ -920,9 +966,9 @@ export function createSessionChannel(deps: SessionChannelDeps): SessionChannel {
         if (status !== 'running') pendingSteering.clear()
         deps.applyStatus(status)
       })
-      disposeError = ctx.on('agent/error', ({ agent: source, turn, step, error }) => {
+      disposeError = ctx.on('agent/error', ({ agent: source, error }) => {
         if (source !== agent) return
-        deps.onAgentError(`${turn}:${step}`, error)
+        deps.onAgentError(error)
       })
       disposeAgentDisposed = ctx.on('agent/disposed', ({ agent: source }) => {
         if (source !== agent) return
@@ -936,8 +982,11 @@ export function createSessionChannel(deps: SessionChannelDeps): SessionChannel {
         clearStatus()
         deps.onAgentDisposed()
       })
+      syncStatusTimer()
     },
     detach(): void {
+      attached = false
+      syncStatusTimer()
       disposeSessionEvents?.()
       disposeDequeued?.()
       disposeDiscarded?.()
@@ -955,6 +1004,18 @@ export function createSessionChannel(deps: SessionChannelDeps): SessionChannel {
     },
     renderEvent,
     rebuildTranscript,
+    syncTranscript,
+    observeBackgroundEvent(event): void {
+      if (event.type === 'compaction/start' && compacting === undefined) {
+        compacting = {
+          turn: event.data.turn,
+          startedAt: event.time,
+          ownsTimer: event.data.turn === null || runningStatus === undefined,
+        }
+      } else if (event.type === 'compaction/end' && compacting?.turn === event.data.turn) {
+        compacting = undefined
+      }
+    },
     setStatus,
     refreshStatus: renderStatus,
     clearStatus,

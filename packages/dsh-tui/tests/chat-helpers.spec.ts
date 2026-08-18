@@ -1,9 +1,14 @@
-import { execFileSync } from 'node:child_process'
+import { execFile } from 'node:child_process'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { gitBranch, workspaceLabel } from '../src/chat/helpers.ts'
 
 vi.mock('node:child_process', () => ({
-  execFileSync: vi.fn(() => 'main\n'),
+  execFile: vi.fn((
+    _file: string,
+    _args: string[],
+    _options: object,
+    callback: (error: Error | null, stdout: string) => void,
+  ) => { callback(null, 'main\n') }),
 }))
 
 afterEach(() => {
@@ -12,11 +17,11 @@ afterEach(() => {
 })
 
 describe('chat helpers', () => {
-  it('scrubs ambient credentials and DSH names from the Git child', () => {
+  it('scrubs ambient credentials and DSH names from the Git child', async () => {
     vi.stubEnv('TUI_TEST_PASSWORD', 'ambient-password')
     vi.stubEnv('DSH_TUI_TEST_FLAG', 'ambient-harness-state')
-    expect(gitBranch('/workspace')).toBe('main')
-    const call = vi.mocked(execFileSync).mock.calls[0] as unknown as [
+    await expect(gitBranch('/workspace')).resolves.toBe('main')
+    const call = vi.mocked(execFile).mock.calls[0] as unknown as [
       string,
       string[],
       { env: NodeJS.ProcessEnv },

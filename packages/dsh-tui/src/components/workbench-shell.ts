@@ -77,7 +77,7 @@ export interface WorkbenchMouseResult {
 export class WorkbenchShellComponent implements Component {
   private transcript: Component
   private readonly preferredSidebarWidth: number
-  private readonly transcriptStates = new Map<Component, TranscriptViewportState>()
+  private readonly transcriptStates = new WeakMap<Component, TranscriptViewportState>()
   private selection: TranscriptSelection | undefined
   private selectionOrigin: SelectionPoint | undefined
   private selectionDragging = false

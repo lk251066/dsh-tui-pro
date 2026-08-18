@@ -617,9 +617,9 @@ describe('multi-session switching (/new, /sessions)', () => {
       await tick()
       expect(created).toHaveLength(1)
 
-      // The active workspace row follows the workspace heading and the newly
-      // created session, so the original main session is the next row.
-      harness.terminal.send('\x1b[<0;60;11M')
+      // The project rows follow the fixed assistant section; the newly created
+      // session comes first, followed by the original main session.
+      harness.terminal.send('\x1b[<0;60;8M')
       await tick()
       submit(harness, 'message after sidebar click')
 
@@ -643,7 +643,7 @@ describe('multi-session switching (/new, /sessions)', () => {
 
       // Select the original session in the sidebar, then remove that current
       // session from the active workspace list with two immediate key presses.
-      harness.terminal.send('\x1b[<0;60;11M')
+      harness.terminal.send('\x1b[<0;60;8M')
       await tick()
       const workspace = harness.ctx.workspaceRegistry.list()[0]!
       const detach = vi.spyOn(workspace, 'detachSession')
@@ -871,6 +871,30 @@ describe('multi-session switching (/new, /sessions)', () => {
       submit(harness, 'after remount')
       await tick()
       expect(created[0]?.followups).toEqual(['after remount'])
+    } finally {
+      await disposeTuiTestHarness(harness)
+    }
+  })
+
+  it('restores standalone compaction status that starts while a session is detached', async () => {
+    const { harness, created } = await switchHarness()
+    try {
+      submit(harness, '/new')
+      await tick()
+      const background = created[0]?.agent
+      expect(background).toBeDefined()
+
+      await switchTo(harness, 'main-session')
+      background!.session.append('compaction/start', { turn: null })
+      await tick()
+
+      harness.terminal.output = ''
+      await switchTo(harness, String(background!.session.id))
+      expect(harness.terminal.output).toContain('Context being compacted')
+      expect(harness.terminal.progress.at(-1)).toBe(true)
+
+      background!.session.append('compaction/end', { turn: null })
+      await tick()
     } finally {
       await disposeTuiTestHarness(harness)
     }

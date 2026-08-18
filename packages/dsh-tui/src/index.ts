@@ -90,8 +90,6 @@ import {
   formatStatusDuration,
   pulseLevel,
   runningPhaseGlyph,
-  TOOL_SPINNER_FRAMES,
-  TOOL_SPINNER_INTERVAL_MS,
 } from './chat/timing.ts'
 import {
   resolveTuiConfig,
@@ -356,8 +354,8 @@ export interface TuiSessionSlot extends SessionSlot {
   readonly goalBar: GoalBarController
   /** The next-turn queue dock for this session. */
   readonly queueDock: QueueDockController
-  /** Ordinary editor submissions in their real submission order. */
-  readonly submissions: Array<{ readonly text: string; readonly messageId: MessageId }>
+  /** Latest ordinary editor submission used by empty-input Up recall. */
+  lastSubmission: { readonly text: string; readonly messageId: MessageId } | undefined
   /** Persisted images waiting for this session's next user message. */
   readonly imageDraft: ImageDraft
   /** Answers `approval/request` for this slot's agent only. */
@@ -447,6 +445,7 @@ function createTuiChatInternal(
   }
   const renderInputPrompt = (): string => renderTuiPromptTemplate(inputTemplate, safePromptValue)
   const initialInputPrompt = renderInputPrompt()
+  let currentInputPrompt = initialInputPrompt
   const editor = new HintEditor(ui, {
     borderColor: palette.dim,
     selectList: selectTheme(palette),
@@ -469,8 +468,12 @@ function createTuiChatInternal(
   // Optional: skills mount conditionally, so read the global service store
   // rather than declaring an injection that would make the TUI require them.
   const skills = ctx.get('skills')
-  const initialCwd = agent.session.header.cwd ?? process.cwd()
-  const activeCwd = (): string => agent.session.header.cwd ?? initialCwd
+  const initialCwd = agent.session.id === ASSISTANT_SESSION_ID
+    ? process.cwd()
+    : agent.session.header.cwd ?? process.cwd()
+  const activeSessionCwd = (): string | undefined =>
+    agent.session.id === ASSISTANT_SESSION_ID ? undefined : agent.session.header.cwd
+  const activeCwd = (): string => activeSessionCwd() ?? initialCwd
   const fileSearchConfig = {
     maxResults: resolved.fileSearchMaxResults,
     maxEntries: resolved.fileSearchMaxEntries,
@@ -478,7 +481,6 @@ function createTuiChatInternal(
   }
   let fileSearch = new WorkspaceFileSearch(initialCwd, fileSearchConfig)
   const skillAbort = new AbortController()
-  const liveErrors = new Set<string>()
   const commandControllers = new Set<AbortController>()
   const referenceControllers = new Set<AbortController>()
   let tuiServiceFiber: Fiber | undefined
@@ -510,7 +512,10 @@ function createTuiChatInternal(
     disposed || construction.failed || ctx.fiber.state >= FIBER_FAILED
 
   let sessionTitle = foldSessionTitle(agent.session.events)?.title
-  let formattedCwd = displayText(runtime.formatCwd?.(agent.session.header.cwd) ?? formatCwd(agent.session.header.cwd))
+  const firstSessionCwd = activeSessionCwd()
+  let formattedCwd = agent.session.id === ASSISTANT_SESSION_ID
+    ? undefined
+    : displayText(runtime.formatCwd?.(firstSessionCwd) ?? formatCwd(firstSessionCwd))
   /**
    * Whether the session log is still pristine: nothing beyond the opening
    * lifecycle prelude (`turn/start`, `step/start`), and no title. The
@@ -534,7 +539,7 @@ function createTuiChatInternal(
     () => ({
       welcome: sessionTitle ?? config.welcome,
       model: target.current === undefined ? 'model unset' : compactTargetLabel(target.current),
-      directory: formattedCwd,
+      ...formattedCwd === undefined ? {} : { directory: formattedCwd },
       suggestions: welcomeSuggestions,
     }),
     palette,
@@ -545,9 +550,29 @@ function createTuiChatInternal(
     render: width => sessionPristine() ? header.render(width) : [],
   }
   let welcomeShimmer: ReturnType<typeof setInterval> | undefined
-  let branch = runtime.gitBranch?.(initialCwd) ?? gitBranch(initialCwd)
+  let branch: string | undefined
+  let branchGeneration = 0
+  const branchQueries = new Map<string, Promise<string | undefined>>()
+  const queryBranch = (cwd: string): Promise<string | undefined> => {
+    const cached = branchQueries.get(cwd)
+    if (cached !== undefined) return cached
+    let query: Promise<string | undefined>
+    try {
+      query = runtime.gitBranch === undefined
+        ? gitBranch(cwd)
+        : Promise.resolve(runtime.gitBranch(cwd))
+    } catch {
+      query = Promise.resolve(undefined)
+    }
+    query = query.catch(() => undefined)
+    branchQueries.set(cwd, query)
+    void query.then(() => {
+      if (branchQueries.get(cwd) === query) branchQueries.delete(cwd)
+    })
+    return query
+  }
   const promptValues: TuiPromptValueHandle[] = [
-    ctx.tuiPrompt.register('cwd', palette.dim(formattedCwd)),
+    ctx.tuiPrompt.register('cwd', formattedCwd === undefined ? undefined : palette.dim(formattedCwd)),
     ctx.tuiPrompt.register('git/worktree', branch === undefined ? undefined : palette.dim(` (${displayText(branch)})`)),
     ctx.tuiPrompt.register('token_meter/cache_hit_rate'),
     ctx.tuiPrompt.register('model'),
@@ -590,15 +615,51 @@ function createTuiChatInternal(
     }
   }
 
+  const updateDynamicPromptValues = (renderTime: number, occupancy?: number): void => {
+    const throughput = channel.liveTokenRate()
+    throughputValue.set(throughput === undefined ? undefined : palette.text(`  ${throughput} tok/s`))
+    if (channel.isCompacting()) {
+      compactionStatusLine.setText(palette.dim(
+        `Context being compacted ${formatStatusDuration(renderTime - (channel.compactingStartedAt() ?? renderTime))}`,
+      ))
+    } else if (occupancy !== undefined) {
+      compactionStatusLine.setText(contextPressureLevel(occupancy) === 'critical'
+        ? palette.error(
+            `Context low · ${Math.round(occupancy)}% used`
+            + (ctx.commands.list(agent).some(command => command.name === 'compact') ? ' · run /compact to free space' : ''),
+          )
+        : '')
+    }
+    const statusGlyph = runningPhaseGlyph(
+      agent.session.events,
+      channel.isRunning(),
+      channel.isCompacting(),
+    )
+    channel.noteRenderedStatusGlyph(statusGlyph)
+    const envelope = channel.statusGlyphEnvelope(statusGlyph, renderTime)
+    const caret = envelope === undefined
+      ? palette.dim('>')
+      : fadeGlyph(
+        envelope.glyph,
+        palette,
+        resolved.theme.color,
+        resolved.theme.color && resolved.theme.truecolor,
+        envelope.level * pulseLevel(renderTime),
+        envelope.level >= 0.5,
+      )
+    indicatorValue.set(`${caret}${palette.dim(' ')}`)
+  }
+
   const updatePromptValues = (): void => {
     const renderTime = now()
     sessionLayout?.refresh()
     const tokens = channel.tokens()
-    cwdValue.set(palette.dim(formattedCwd))
+    cwdValue.set(formattedCwd === undefined ? undefined : palette.dim(formattedCwd))
     gitValue.set(branch === undefined ? undefined : palette.dim(` (${displayText(branch)})`))
     const rate = cacheHitRate(tokens)
     const usage = `↑${formatTokens(tokens.input)} ↓${formatTokens(tokens.output)}`
-    modelValue.set(`  ${palette.text(displayText(target.current === undefined ? 'model unset' : compactTargetLabel(target.current)))}`)
+    const modelGap = formattedCwd === undefined && branch === undefined ? '' : '  '
+    modelValue.set(`${modelGap}${palette.text(displayText(target.current === undefined ? 'model unset' : compactTargetLabel(target.current)))}`)
     tokenValue.set(`  ${palette.dim(rate === undefined ? usage : `${usage}  cache ${rate}%`)}`)
     const pressure = contextPressure()
     const usedTokens = pressure?.projectedTokens ?? pressure?.pressureTokens
@@ -631,8 +692,6 @@ function createTuiChatInternal(
     planValue.set(planActive
       ? palette.bold(palette.plan('  ⎇ plan'))
       : undefined)
-    const throughput = channel.liveTokenRate()
-    throughputValue.set(throughput === undefined ? undefined : palette.text(`  ${throughput} tok/s`))
     // The `${memory}` fragment keeps the session's memory switch visible after
     // the transient /memory notice fades; an absent service or a disabled
     // switch renders nothing so the status row stays clean.
@@ -641,8 +700,6 @@ function createTuiChatInternal(
       ? palette.dim(' mem on')
       : undefined)
     sessionLayout?.updateStatus({
-      cwd: displayText(activeCwd()),
-      branch: branch === undefined ? undefined : displayText(branch),
       status: agent.status,
       inputTokens: tokens.input,
       outputTokens: tokens.output,
@@ -650,41 +707,7 @@ function createTuiChatInternal(
       permission: preset,
       plan: planActive,
     })
-    compactionStatusLine.setText(channel.isCompacting()
-      ? palette.dim(`Context being compacted ${formatStatusDuration(renderTime - (channel.compactingStartedAt() ?? renderTime))}`)
-      : occupancy !== undefined && contextPressureLevel(occupancy) === 'critical'
-        ? palette.error(
-            `Context low · ${Math.round(occupancy)}% used`
-            + (ctx.commands.list(agent).some(command => command.name === 'compact') ? ' · run /compact to free space' : ''),
-          )
-        : '')
-    // `${indicator}` owns the caret column and its trailing gap before the
-    // cursor. The active status glyph replaces the `>` caret in place — same
-    // width every frame — fading in when work starts, throbbing while it runs,
-    // and fading out after it ends before the plain `>` returns. Only the gray
-    // brightness changes, so the cursor never shifts.
-    const statusGlyph = runningPhaseGlyph(
-      agent.session.events,
-      channel.isRunning(),
-      channel.isCompacting(),
-    )
-    channel.noteRenderedStatusGlyph(statusGlyph)
-    // The fade envelope gates appear/disappear; the active throb breathes the
-    // glyph throughout the operation. Truecolor opacity is envelope × throb; the
-    // non-truecolor fallback keys visibility off the envelope alone, so the
-    // throb never blinks it. `envelope` clamps to [0, 1].
-    const envelope = channel.statusGlyphEnvelope(statusGlyph, renderTime)
-    const caret = envelope === undefined
-      ? palette.dim('>')
-      : fadeGlyph(
-        envelope.glyph,
-        palette,
-        resolved.theme.color,
-        resolved.theme.color && resolved.theme.truecolor,
-        envelope.level * pulseLevel(renderTime),
-        envelope.level >= 0.5,
-      )
-    indicatorValue.set(`${caret}${palette.dim(' ')}`)
+    updateDynamicPromptValues(renderTime, occupancy)
   }
   const promptContext = new PromptContextComponent(
     parseTuiPromptTemplate(displayInlineText(resolved.theme.leftPrompt)),
@@ -718,21 +741,48 @@ function createTuiChatInternal(
    * only repaints, so the token meter, session layout, and prompt templates
    * do not recompute on every animation frame.
    */
+  const refreshPromptSurface = (): void => {
+    const inputPrompt = renderInputPrompt()
+    if (inputPrompt !== currentInputPrompt) {
+      currentInputPrompt = inputPrompt
+      editor.setPrompt({ first: inputPrompt, continuation: ' '.repeat(visibleWidth(inputPrompt)) })
+      editor.hintPrefix = inputPrompt
+    }
+    promptContext.invalidate()
+  }
   const requestRender = (light = false): void => {
     if (isDisposed()) return
     if (!light) {
       updatePromptValues()
-      const inputPrompt = renderInputPrompt()
-      editor.setPrompt({ first: inputPrompt, continuation: ' '.repeat(visibleWidth(inputPrompt)) })
-      editor.hintPrefix = inputPrompt
-      promptContext.invalidate()
+      refreshPromptSurface()
     }
     ui.requestRender()
+  }
+  const requestStatusRender = (): void => {
+    if (isDisposed()) return
+    updateDynamicPromptValues(now())
+    refreshPromptSurface()
+    ui.requestRender()
+  }
+  const refreshBranch = (cwd: string | undefined): void => {
+    const generation = ++branchGeneration
+    branch = undefined
+    if (cwd === undefined) return
+    void queryBranch(cwd).then(value => {
+      if (isDisposed() || generation !== branchGeneration) return
+      branch = value
+      requestRender()
+    })
   }
   // A prompt value that changes on its own schedule (e.g. a plugin-owned
   // `${custom}` fragment) redraws through the registry's coalesced notification;
   // built-ins are already covered by the state-change callers of requestRender.
-  const disposePromptChanges = ctx.tuiPrompt.subscribe(requestRender)
+  const disposePromptChanges = ctx.tuiPrompt.subscribe(() => {
+    if (isDisposed()) return
+    refreshPromptSurface()
+    ui.requestRender()
+  })
+  refreshBranch(activeSessionCwd())
 
   const appendNotice = (message: string, kind: 'info' | 'warning' | 'error' = 'info'): void => {
     const color = kind === 'error' ? palette.error : kind === 'warning' ? palette.warning : palette.dim
@@ -958,6 +1008,7 @@ function createTuiChatInternal(
       now,
       terminal: runtime.terminal,
       requestRender,
+      requestStatusRender,
       appendNotice,
       loadAttachmentImage,
       addToEditorHistory: (text) => {
@@ -987,15 +1038,12 @@ function createTuiChatInternal(
       onSpinnerFrame: (running, startedAt, label, frame, extras) => {
         if (!isActiveAgent()) return
         workingLine.update(running, startedAt, label, frame, extras)
-        requestRender()
       },
       onSpinnerIdle: () => {
         if (!isActiveAgent()) return
         workingLine.update(false, undefined, undefined, undefined)
-        requestRender()
       },
-      onAgentError: (stepKey, error) => {
-        liveErrors.add(stepKey)
+      onAgentError: (error) => {
         // Full cause chain: wrapper messages like `fetch failed` carry the
         // actionable transport detail on `cause`.
         appendNotice(errorChain(error), 'error')
@@ -1018,7 +1066,7 @@ function createTuiChatInternal(
       channel: slotChannel,
       goalBar: slotGoalBar,
       queueDock: slotQueueDock,
-      submissions: [],
+      lastSubmission: undefined,
       imageDraft: new ImageDraft(),
       approvals: createApprovalAnswerer({
         ctx,
@@ -1120,24 +1168,27 @@ function createTuiChatInternal(
       if (previous === undefined) return
       // The switched-in channel was detached while backgrounded: re-derive
       // its transcript from the log so events it missed render now.
-      next.channel.rebuildTranscript(false)
+      next.channel.syncTranscript(false)
       void ctx.sessions.flush(previous.agent.session).catch(() => {})
-      const nextCwd = next.agent.session.header.cwd ?? initialCwd
+      const nextSessionCwd = next.agent.session.id === ASSISTANT_SESSION_ID
+        ? undefined
+        : next.agent.session.header.cwd
+      const nextCwd = nextSessionCwd ?? initialCwd
       fileSearch.dispose()
       fileSearch = new WorkspaceFileSearch(nextCwd, fileSearchConfig)
-      formattedCwd = displayText(runtime.formatCwd?.(nextCwd) ?? formatCwd(nextCwd))
-      branch = runtime.gitBranch?.(nextCwd) ?? gitBranch(nextCwd)
+      formattedCwd = next.agent.session.id === ASSISTANT_SESSION_ID
+        ? undefined
+        : displayText(runtime.formatCwd?.(nextSessionCwd) ?? formatCwd(nextSessionCwd))
+      refreshBranch(nextSessionCwd)
       sessionTitle = foldSessionTitle(next.agent.session.events)?.title
       modelController.activateSelection()
       header.invalidate()
       updateTerminalTitle()
-      setStatus(next.agent.status)
+      setStatus(next.agent.status, false)
       refreshCommandAutocomplete()
       if (skills !== undefined) refreshSkillCommands(skills)
-      updatePromptValues()
       next.goalBar.refresh()
       refreshQueueDock()
-      sessionLayout?.refresh()
       requestRender()
     },
     maxLiveSlots: DEFAULT_MAX_LIVE_SLOTS,
@@ -1246,13 +1297,12 @@ function createTuiChatInternal(
     })
   }
 
-  // The personal assistant (`/assistant`): a fixed-id session with workspace
-  // management tools, resumed across processes when its log exists.
+  // The personal assistant (`/assistant`): a fixed-id session outside project
+  // workspaces, with workspace-management tools and a durable transcript.
   const assistant = createAssistantController({
     ctx,
     registry,
     workspaceSessions,
-    cwd: initialCwd,
     appendNotice,
     showTransientNotice,
     isDisposed,
@@ -1367,13 +1417,14 @@ function createTuiChatInternal(
       requestRender()
     }, () => {})
   }
-  // Mounted channels already request renders for their own events. Background
-  // channels are detached, so wake the shared chrome when one of their rows
-  // changes; updatePromptValues() then rebuilds the full live-session list.
+  // Detached channels catch up from their logs when mounted. Background chunks
+  // must not wake the foreground; title changes alone affect visible chrome.
   const disposeBackgroundSessionEvents = ctx.on('session/event', (sourceSession, event) => {
     const slot = registry.slots().find(candidate => candidate.agent.session === sourceSession)
+    if (slot !== undefined && !registry.isActive(slot)) slot.channel.observeBackgroundEvent(event)
+    if (event.type !== 'session/title') return
+    rereadPendingTitle(sourceSession.id)
     if (slot !== undefined && !registry.isActive(slot)) requestRender()
-    if (event.type === 'session/title') rereadPendingTitle(sourceSession.id)
   })
   // A pending stopped session that is still live but slotless (LRU-evicted)
   // delivers its title to persistence at the flush checkpoint; re-read there.
@@ -1477,7 +1528,7 @@ function createTuiChatInternal(
     return text => palette.dim(text)
   }
 
-  const setStatus = (status: AgentStatus): void => {
+  const setStatus = (status: AgentStatus, render = true): void => {
     editor.borderColor = editorBorderColor()
     // Running keeps the steering placeholder; idle plan mode carries its own;
     // plain idle carries the queue hint or the example-commands hint.
@@ -1491,20 +1542,8 @@ function createTuiChatInternal(
       undefined,
       undefined,
     )
-    requestRender()
+    if (render) requestRender()
   }
-
-  // One process-wide spinner tick: the newest pending tool card animates its
-  // braille frame, and the working line above the input mirrors the same
-  // frame plus the call's verb label. While nothing pends (or the agent is
-  // idle) the card update is skipped; the working line itself renders empty
-  // when idle, so the tick is effectively self-gating.
-  let spinnerFrame = 0
-  const spinnerTimer = setInterval(() => {
-    if (disposed) return
-    const frame = TOOL_SPINNER_FRAMES[spinnerFrame++ % TOOL_SPINNER_FRAMES.length] ?? TOOL_SPINNER_FRAMES[0]
-    channel.tickSpinner(frame)
-  }, TOOL_SPINNER_INTERVAL_MS)
 
   const rebuildTranscript = (populateHistory: boolean): void => {
     channel.rebuildTranscript(populateHistory)
@@ -1789,7 +1828,7 @@ function createTuiChatInternal(
         items.map(item => ({
           id: item.id,
           title: item.title,
-          workspace: item.workspace,
+          ...item.kind === 'project' ? { workspace: item.workspace } : {},
           status: item.status,
           current: item.isActive,
         })),
@@ -1900,7 +1939,6 @@ function createTuiChatInternal(
       overlayManager.beginShutdown()
       modelController.resetContextResolution()
       clearStatus()
-      clearInterval(spinnerTimer)
       for (const controller of commandControllers) controller.abort(new Error('TUI disposed'))
       commandControllers.clear()
       for (const controller of referenceControllers) controller.abort(new Error('TUI disposed'))
@@ -2165,13 +2203,14 @@ function createTuiChatInternal(
       : target.current.reasoningEffort === undefined
         ? 'default'
         : displayText(target.current.reasoningEffort)
+    const sessionCwd = agent.session.id === ASSISTANT_SESSION_ID ? undefined : activeCwd()
     const section = (title: string): string => palette.bold(palette.accent(title))
     const field = (label: string, value: string): string => `  ${palette.dim(label.padEnd(11))}${value}`
     const lines = [
       section('Session'),
       field('ID', displayText(agent.session.id)),
       field('Title', displayText(sessionTitle ?? 'untitled')),
-      field('Directory', displayText(activeCwd())),
+      ...sessionCwd === undefined ? [] : [field('Directory', displayText(sessionCwd))],
       field('Model', `${model} ${palette.dim(`(effort ${effort}; reasoning ${showReasoning ? 'shown' : 'hidden'})`)}`),
       '',
       section('Activity'),
@@ -2557,7 +2596,8 @@ function createTuiChatInternal(
   }
 
   const recordSubmission = (targetAgent: Agent, text: string, message: UserMessage): void => {
-    registry.get(targetAgent.session.id)?.submissions.push({ text, messageId: message.id })
+    const slot = registry.get(targetAgent.session.id)
+    if (slot !== undefined) slot.lastSubmission = { text, messageId: message.id }
   }
 
   /** Load a manually invoked skill and deliver its rendered body to the session that issued the command. */
@@ -2862,7 +2902,7 @@ function createTuiChatInternal(
       if (result?.copiedText !== undefined) {
         void writeClipboardText(result.copiedText)
       }
-      if (result?.consumed === true) requestRender()
+      if (result?.consumed === true) requestRender(true)
       return { consume: true }
     }
 
@@ -2896,12 +2936,12 @@ function createTuiChatInternal(
     }
     if (matchesKey(data, Key.pageUp)) {
       workbench?.scrollPageUp(runtime.terminal.columns)
-      requestRender()
+      requestRender(true)
       return { consume: true }
     }
     if (matchesKey(data, Key.pageDown)) {
       workbench?.scrollPageDown(runtime.terminal.columns)
-      requestRender()
+      requestRender(true)
       return { consume: true }
     }
 
@@ -2934,7 +2974,7 @@ function createTuiChatInternal(
       && editor.getText() === ''
       && !editor.isShowingAutocomplete()
     ) {
-      const latest = registry.active().submissions.at(-1)
+      const latest = registry.active().lastSubmission
       if (latest !== undefined) {
         if (!queueDock.armForEdit(latest.messageId)) editor.setText(latest.text)
         requestRender()
@@ -3078,7 +3118,6 @@ function createTuiChatInternal(
       },
     )
     clearStatus()
-    clearInterval(spinnerTimer)
     questions.unregister()
     ui.stop()
     throw error

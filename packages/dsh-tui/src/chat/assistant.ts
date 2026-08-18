@@ -48,8 +48,6 @@ export interface AssistantControllerDeps {
   readonly workspaceSessions: WorkspaceSessions
   /** Consume handles created or resumed by assistant workflows. */
   readonly adoptOwnedAgent: AdoptOwnedAgent
-  /** Workspace recorded on a freshly created assistant session. */
-  readonly cwd: string
   /** Durable transcript notice. */
   appendNotice(message: string, kind?: 'info' | 'warning' | 'error'): void
   /** Transient operation receipt. */
@@ -126,7 +124,6 @@ export function createAssistantController(deps: AssistantControllerDeps): { open
       const handle = await ctx.agents.create({
         sessionId: ASSISTANT_SESSION_ID,
         seed: [],
-        meta: { cwd: deps.cwd },
         setup: agentCtx => setupAssistant(agentCtx, registry, deps.workspaceSessions, deps.adoptOwnedAgent),
       })
       await adoptHandle(handle, 'Assistant session created.')

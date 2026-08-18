@@ -23,8 +23,12 @@ export function TOOL_SETTLED(platform: NodeJS.Platform = process.platform): stri
 export const RESULT_MARKER = '  ⎿ '
 /** Indent aligning a card's continuation rows under the marker's text column. */
 export const RESULT_CONTINUATION = '    '
-/** Glyph opening the folded reasoning line (`∴ Thinking`). */
-export const THINKING_GLYPH = '∴'
+/** Directional marker for the user's own message. */
+export const USER_GLYPH = '❯'
+/** Four-point marker for assistant prose. */
+export const ASSISTANT_GLYPH = '✦'
+/** Lighter starburst opening a thinking line. */
+export const THINKING_GLYPH = '✻'
 
 /**
  * A shortcut hint in the Claude Code form `(ctrl+o to expand)`: the shortcut

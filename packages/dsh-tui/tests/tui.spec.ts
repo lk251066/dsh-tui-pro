@@ -1586,7 +1586,7 @@ describe('pi-tui chat lifecycle and transcript', () => {
     const viewport = await terminal.snapshot()
     expect(viewport).toContain('0| "')
     expect(viewport).toContain('23| "')
-    expect(viewport).toContain('│ Workspace')
+    expect(viewport).toContain('│ Assistant')
     expect(viewport).not.toContain(`┌${'─'.repeat(98)}┐`)
 
     await disposeTuiTestHarness(result)
@@ -1644,7 +1644,7 @@ describe('pi-tui chat lifecycle and transcript', () => {
     const latest = await terminal.snapshot()
     expect(latest).toContain('history row 39')
     expect(latest).not.toContain('history row 0')
-    expect(latest).toContain('Workspace')
+    expect(latest).toContain('Assistant')
     expect(latest).toContain('> type / for commands')
 
     const before = terminal.frames
@@ -1652,7 +1652,7 @@ describe('pi-tui chat lifecycle and transcript', () => {
     await terminal.waitForFrame(before)
     const older = await terminal.snapshot()
     expect(older).not.toContain('history row 39')
-    expect(older).toContain('Workspace')
+    expect(older).toContain('Assistant')
     expect(older).toContain('> type / for commands')
 
     const beforeDown = terminal.frames
@@ -1679,7 +1679,7 @@ describe('pi-tui chat lifecycle and transcript', () => {
     await terminal.waitForFrame(before)
     const older = await terminal.snapshot()
     expect(older).not.toContain('wheel row 39')
-    expect(older).toContain('Workspace')
+    expect(older).toContain('Assistant')
     expect(older).toContain('> type / for commands')
 
     terminal.send('clean prompt')
@@ -2394,7 +2394,7 @@ describe('pi-tui chat lifecycle and transcript', () => {
     }
     await terminal.waitForFrame(beforeLongTranscript)
     const longTranscript = await terminal.snapshot()
-    expect(longTranscript).toContain('Workspace')
+    expect(longTranscript).toContain('Assistant')
     expect(longTranscript).toContain('Status')
     expect(longTranscript).toContain('Queued')
 
@@ -2932,9 +2932,9 @@ describe('pi-tui chat lifecycle and transcript', () => {
     // Without truecolor there is no per-frame gray: below the fade midpoint the
     // glyph slot is blank; past it the glyph is visible in the prompt.
     const early = await frameAt(60)
-    expect(early).not.toContain('●')
+    expect(stripSgr(early)).not.toMatch(/●\s+(?:Enter steer|type \/ for commands)/u)
     const shown = await frameAt(300)
-    expect(shown).toContain('●')
+    expect(stripSgr(shown)).toMatch(/●\s+(?:Enter steer|type \/ for commands)/u)
 
     await dispose(result)
   })
@@ -3038,7 +3038,7 @@ describe('pi-tui chat lifecycle and transcript', () => {
     // User input starts directly with the prompt marker on the bubble fill and
     // keeps the markdown source verbatim, fences included.
     expect(result.terminal.output).not.toContain('\x1b[1m\x1b[94mYou')
-    expect(result.terminal.output).toContain('\x1b[1m\x1b[2;39m›\x1b[22;39m\x1b[22m # Heading')
+    expect(result.terminal.output).toContain('\x1b[1m\x1b[36m❯\x1b[39m\x1b[22m # Heading')
     expect(result.terminal.output).toContain('```ts')
     // Assistant fenced code renders through the syntax highlighter: keywords
     // take the accent role and numbers the warning role rather than one flat
@@ -4397,7 +4397,7 @@ describe('pi-tui chat lifecycle and transcript', () => {
     },
   )
 
-  it('shows help and diagnostics in the main area while preserving the workspace sidebar', async () => {
+  it('shows help and diagnostics in the main area while preserving the session sidebar', async () => {
     const terminal = new HeadlessTerminal(140, 80)
     const result = await createTuiTestHarness(terminal, vi.fn(), {
       beforeMount(session) { appendUser(session, 'seed prompt') },
@@ -4417,7 +4417,7 @@ describe('pi-tui chat lifecycle and transcript', () => {
       await terminal.waitForFrame(openedAt)
       const screen = await terminal.snapshot()
       expect(screen).toContain(title)
-      expect(screen).toContain('Workspace')
+      expect(screen).toContain('Assistant')
       expect(screen).toContain('Status')
       const closedAt = terminal.frames
       terminal.send('\x03')
@@ -7486,6 +7486,19 @@ describe('terminal mounting', () => {
     await tick()
     expect(terminal.output).toMatch(/\x1b\[2;39m~[\\/]/u)
     expect(terminal.output).toContain('\x1b[2;39m (tui-staging)')
+    await disposeTuiTestHarness(result)
+  })
+
+  it('treats an asynchronous git branch lookup failure as an absent branch', async () => {
+    const terminal = new FakeTerminal()
+    const result = await createTuiTestHarness(terminal, vi.fn(), {
+      gitBranch: async () => { throw new Error('git unavailable') },
+    })
+    await tick()
+    await tick()
+
+    expect(terminal.output).toContain('deepseek-v4-flash')
+    expect(terminal.output).not.toContain('git unavailable')
     await disposeTuiTestHarness(result)
   })
 })

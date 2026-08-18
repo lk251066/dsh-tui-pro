@@ -4,19 +4,22 @@
 
 ## 1.8.1 source verification
 
-The `1.8.1` checks cover the borderless fixed workbench, expanded transcript viewport, one-column outer whitespace, and dim separator between the transcript and sidebar. Transcript content uses one symbol gutter for user, assistant, thinking, tool, and nested-result rows with hanging indentation at narrow widths. Plan and delegate calls use their structured presentation kinds, todo progress has a compact current-step row with `Ctrl+O` expansion, and scrolling, disclosure clicks, drag selection, terminal titles, sidebar titles, main-area diagnostics, the prefix-free editor prompt, compact message spacing, and current-step `token/s` remain covered.
+The `1.8.1` checks cover the borderless fixed workbench, expanded transcript viewport, one-column outer whitespace, and dim separator between the transcript and sidebar. The fixed assistant occupies its own sidebar section, has no workspace or cwd, and is excluded from the Active project-session count; only project rows are grouped by workspace. Transcript content uses one symbol gutter for user `❯`, assistant `✦`, thinking `✻`, tool, and nested-result rows with hanging indentation at narrow widths. User, assistant, thinking, and running-tool markers have independent theme roles, while settled tool states keep their success and error colors. Plan and delegate calls use their structured presentation kinds, todo progress has a compact current-step row with `Ctrl+O` expansion, and scrolling, disclosure clicks, drag selection, terminal titles, sidebar titles, main-area diagnostics, the prefix-free editor prompt, compact message spacing, and current-step `token/s` remain covered.
 
 | Check | Result |
 | --- | --- |
-| Complete source tests | Passed: 47 files, 595 tests |
+| Complete source tests | Passed: 48 files, 604 tests |
 | Focused transcript and workbench layout | Passed: 45 tests, including gutter wrapping, Plan and Delegate cards, compact todo progress, borderless viewport rows, and updated pointer coordinates |
+| Focused semantic gutter and theme roles | Passed: 47 tests covering the `❯`, `✦`, and `✻` markers, hanging indentation, independent role colors, and running/settled tool tones |
 | `pnpm run typecheck` | Passed |
 | `pnpm run lint` | Passed with 34 existing warnings and no errors |
 | `pnpm run build` | Passed |
-| `pnpm run pack:artifact` | Passed: 331 files, 747.8 kB, SHA-1 `0f1c9dde56f278decedcd414a1e9c2da7c9a82a6`, SHA-256 `5aa6da270f7f928d6047c4af669655a9b708d0cbcd8d2343f7da9fb565ee7345` |
+| `pnpm run bench:transcript` | Passed: hot cached render 0.0001-0.0004 ms for 100-1,000 turns; 2,000 streamed chunks coalesced in 4.543 ms |
+| `pnpm run docs:screenshot` | Passed: deterministic 1,448x720 PNG, SHA-256 `6f2e7a15b8d7946fc49010e9c6a7ee367f03237c9610e9885007e7808756a055` |
+| `pnpm run pack:artifact` | Passed: 332 files, 805.8 kB, SHA-1 `fd05e5b7d9a8f8edd40cde0a4e223af08f376c11`, SHA-256 `40c5e630f9fbf0a6e5d6cdb7b557b60fe12c198ccb1631800eb57577f1a7c75b` |
 | Windows empty-profile public-host installation | Passed against public dsh rc.6; profile installation, `why`, `--dump-config`, and non-TTY module loading resolved the reviewed tarball |
-| Linux real PTY | Passed at 80x24 and 120x35 for the borderless fixed workbench, single sidebar separator, fixed editor, commands, session switching, memory, image-paste failure, export, and shutdown |
-| Local `tui` profile | Reinstalled from the `1.8.1` tarball; installed JavaScript contains the expanded viewport, simplified working row and session marker, reduced user fill, footer hierarchy, prefix-free prompt, and live-rate module; `why` and `--dump-config` resolve the package, and direct non-TTY launch reaches the intentional TTY requirement after plugin loading |
+| Linux real PTY | Passed at 140x32 for the borderless fixed workbench, single sidebar separator, fixed editor, commands, session switching, memory, image-paste failure, export, and shutdown |
+| Local `tui` profile | Reinstalled from the reviewed `1.8.1` tarball; installed JavaScript contains the semantic marker roles and new gutter glyphs alongside the expanded viewport, simplified working row, reduced user fill, footer hierarchy, prefix-free prompt, and live-rate module; `why` and `--dump-config` resolve the package |
 
 ## 1.8.0 source verification
 
@@ -266,15 +269,15 @@ The TUI's Service Definition packages remain peers supplied by the dsh host. Plu
 Exercise these behaviors through the installed profile:
 
 1. Initial render reaches an editable prompt without an exception.
-2. Workspace shows the active project and Git branch without terminal control characters; Active sessions are grouped by workspace without repeating the workspace on every session row.
-3. The bottom line shows cwd, branch, model, and context. Sidebar Status shows agent state, input/output tokens, cache hit rate, permission preset, and plan mode before and after a model turn.
+2. Assistant appears in its own fixed section; Active sessions counts only project sessions and groups those rows by workspace without a `personal` pseudo-workspace.
+3. A project bottom line shows cwd, branch, model, and context. The fixed assistant omits cwd and branch. Sidebar Status shows agent state, input/output tokens, cache hit rate, permission preset, and plan mode before and after a model turn.
 4. A second session created with `/new` appears under Active and switches without duplicate UI children; detached title and running-state changes update without first switching to that session.
 5. `/sessions` replaces only the left chat area with complete history; the outer whitespace, separator, and sidebar stay fixed, and search, Up, Down, Enter, Tab, Space, and Escape perform their documented actions without sending text to the model.
 6. The queue dock changes through insert, claim, discard, Esc recovery, and unrelated durable transcript updates without a duplicate Queue row in the sidebar.
 7. Approval, question, tool output, reasoning visibility, and compaction status render correctly.
 8. Removing an active session retains it in complete history, and adding it restores its sidebar entry without changing the log.
 9. `sidebarWidth: 36` changes the right-sidebar width on a wide terminal; terminals below 65 columns hide the sidebar and retain the full-width main area.
-10. At 32, 24, and 10 rows, inspect which rows remain in the viewport; use at least 24 rows when verifying that Workspace, Active, Status, and the editor are visible together.
+10. At 32, 24, and 10 rows, inspect which rows remain in the viewport; use at least 24 rows when verifying that Assistant, Active sessions, Status, and the editor are visible together.
 11. The launch enters the alternate screen and the exit restores the shell without adding TUI history to normal scrollback.
 12. Page Up and Page Down move only the transcript; the header, editor, dialog area, outer frame, and sidebar remain fixed, and each session preserves its own scroll position.
 13. `/new` uses the active workspace, `/new <path>` validates and uses another project, `/assistant` opens the fixed assistant, and file and skill completion follow the active session's workspace.
@@ -299,7 +302,7 @@ Exercise these behaviors through the installed profile:
 32. `/queue` is absent from command help and autocomplete; Tab, Up, and Esc provide the complete queue interaction.
 33. Fork, rewind, resume, assistant recovery, workspace-attachment failure, and UI-adoption failure leave no unowned agent handle or unintended Active membership. The assistant rejects fork and rewind.
 
-`scripts/verify-interactive-pty.sh` drives the packed plugin through a Python standard-library PTY. The driver answers terminal capability queries, exercises welcome and compact headers, memory status and toggles, clipboard-image failure, valid command paths, session creation and switching, history, export, and shutdown. The captured ANSI stream is replayed through `@xterm/headless` at the requested terminal size; the check requires the borderless fixed workbench, current sidebar sections, Workspace to the right of the single separator, the editor to the left, and no duplicate attachment service. The repository snapshot suite remains the keyless evidence for stable rendered output.
+`scripts/verify-interactive-pty.sh` drives the packed plugin through a Python standard-library PTY. The driver answers terminal capability queries, exercises welcome and compact headers, memory status and toggles, clipboard-image failure, valid command paths, session creation and switching, history, export, and shutdown. The captured ANSI stream is replayed through `@xterm/headless` at the requested terminal size; the check requires the borderless fixed workbench, the Assistant section to the right of the single separator, Active project sessions, the editor to the left, and no duplicate attachment service. The repository snapshot suite remains the keyless evidence for stable rendered output.
 
 ## Registry verification
 

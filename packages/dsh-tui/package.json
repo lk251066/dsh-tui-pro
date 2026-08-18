@@ -35,6 +35,7 @@
     "lib/**/*.d.ts",
     "lib/**/*.d.ts.map",
     "cordis.patch.yml",
+    "assets/overview.png",
     "README.md",
     "LICENSE"
   ],

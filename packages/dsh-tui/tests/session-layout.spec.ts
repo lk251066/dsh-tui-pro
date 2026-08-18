@@ -45,6 +45,9 @@ describe('session layout titles', () => {
     const slot = liveSlot('live-untitled', events)
     const layout = layoutOver(slot)
     layout.refresh()
+    const assistant = layout.sessionList.getItems().find(item => item.id === 'assistant')
+    expect(assistant?.kind).toBe('assistant')
+    expect(assistant).not.toHaveProperty('workspace')
     const titles = (): string[] => layout.sessionList.getItems().map(item => item.title)
     // No title anywhere: the bare session id renders.
     expect(titles()).toContain('live-untitled')

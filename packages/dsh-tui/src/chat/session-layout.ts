@@ -14,7 +14,6 @@ import {
 import type { ChannelRegistry } from './channel-registry.ts'
 import type { TuiSessionSlot } from '../index.ts'
 import { ASSISTANT_SESSION_ID } from './assistant.ts'
-import { workspaceLabel } from './helpers.ts'
 import type { WorkspaceSessions } from './workspace-sessions.ts'
 
 /** Controls the persistent live-session sidebar. */
@@ -55,26 +54,25 @@ function titleOf(slot: TuiSessionSlot): string | undefined {
   return undefined
 }
 
-function workspaceOf(slot: TuiSessionSlot): string {
-  return workspaceLabel(displayText(slot.agent.session.header.cwd ?? '(unknown)'))
-}
-
 function itemOf(
   slot: TuiSessionSlot,
   activeId: SessionId,
   now: number,
   persistedTitles: ReadonlyMap<SessionId, string>,
+  workspace?: string,
 ): SessionListItem {
   const events = slot.agent.session.events
   const lastActivityAt = events.at(-1)?.time ?? slot.agent.session.header.createdAt
-  return {
+  const item = {
     id: String(slot.sessionId),
     title: titleOf(slot) ?? persistedTitles.get(slot.sessionId) ?? displayText(String(slot.sessionId)),
-    workspace: workspaceOf(slot),
     status: slot.agent.status,
     lastActivityAgo: formatAge(Math.max(0, now - lastActivityAt)),
     isActive: slot.sessionId === activeId,
   }
+  return workspace === undefined
+    ? { ...item, kind: 'assistant' }
+    : { ...item, kind: 'project', workspace: displayText(workspace) }
 }
 
 /**
@@ -85,9 +83,9 @@ function itemOf(
 export function createSessionLayout(deps: SessionLayoutDeps): SessionLayoutController {
   const persistedTitles = new Map<SessionId, string>()
   const sessionList = new SessionListComponent(deps.palette, {
-    // Workspace and status sections retain their rows; sessions consume the
-    // remaining viewport and scroll around the selected item.
-    maxRows: () => Math.max(3, deps.terminalRows() - 12),
+    // The assistant and status sections retain their rows; projects consume
+    // the remaining viewport and scroll around the selected item.
+    maxRows: () => Math.max(7, deps.terminalRows() - 6),
   })
   const sidebar = new WorkspaceSidebarComponent(deps.palette, sessionList, {
     terminalRows: deps.terminalRows,
@@ -96,15 +94,23 @@ export function createSessionLayout(deps: SessionLayoutDeps): SessionLayoutContr
   const refresh = (): void => {
     const activeId = deps.registry.activeId()
     const now = deps.now()
+    const workspaces = deps.workspaceSessions.list()
+    const retainedTitles = new Set<SessionId>([
+      ASSISTANT_SESSION_ID,
+      ...workspaces.map(workspace => workspace.sessionId),
+    ])
+    for (const sessionId of persistedTitles.keys()) {
+      if (!retainedTitles.has(sessionId)) persistedTitles.delete(sessionId)
+    }
     const assistantSlot = deps.registry.get(ASSISTANT_SESSION_ID)
     const assistant = assistantSlot === undefined
-      ? stoppedItem(ASSISTANT_SESSION_ID, 'personal', activeId, persistedTitles.get(ASSISTANT_SESSION_ID) ?? 'Assistant')
+      ? stoppedItem(ASSISTANT_SESSION_ID, activeId, persistedTitles.get(ASSISTANT_SESSION_ID) ?? 'Assistant')
       : rememberTitle(persistedTitles, assistantSlot, itemOf(assistantSlot, activeId, now, persistedTitles))
-    const projects = deps.workspaceSessions.list().map(({ sessionId, workspace }) => {
+    const projects = workspaces.map(({ sessionId, workspace }) => {
       const slot = deps.registry.get(sessionId)
       return slot === undefined
-        ? stoppedItem(sessionId, workspace.title, activeId, persistedTitles.get(sessionId))
-        : rememberTitle(persistedTitles, slot, itemOf(slot, activeId, now, persistedTitles))
+        ? stoppedItem(sessionId, activeId, persistedTitles.get(sessionId), workspace.title)
+        : rememberTitle(persistedTitles, slot, itemOf(slot, activeId, now, persistedTitles, workspace.title))
     })
     sessionList.setItems([assistant, ...projects])
   }
@@ -135,16 +141,18 @@ function rememberTitle(
 
 function stoppedItem(
   sessionId: SessionId,
-  workspace: string,
   activeId: SessionId,
   title?: string,
+  workspace?: string,
 ): SessionListItem {
-  return {
+  const item = {
     id: String(sessionId),
     title: title ?? displayText(String(sessionId)),
-    workspace: displayText(workspace),
-    status: 'stopped',
+    status: 'stopped' as const,
     lastActivityAgo: '',
     isActive: sessionId === activeId,
   }
+  return workspace === undefined
+    ? { ...item, kind: 'assistant' }
+    : { ...item, kind: 'project', workspace: displayText(workspace) }
 }

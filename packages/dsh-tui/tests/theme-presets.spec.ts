@@ -6,7 +6,7 @@ describe('theme presets', () => {
   it('ships the adaptive default, three dark themes, and the color-blind theme', () => {
     expect(THEME_PRESET_NAMES).toEqual(['deepseek', 'dracula', 'nord', 'catppuccin-mocha', 'daltonism'])
     // The adaptive default keeps every adaptive role terminal-owned; its only
-    // overrides are the CC-derived semantic colors every preset shares.
+    // overrides are the semantic colors that must retain deliberate identities.
     expect(THEME_PRESETS.deepseek?.colors).toEqual({
       permission: { rgb: [87, 105, 247], ansi16: '94' },
       plan: { rgb: [72, 150, 140], ansi16: '37' },
@@ -16,6 +16,10 @@ describe('theme presets', () => {
         close: '22;39',
         truecolorAttribute: { open: '1', close: '22' },
       },
+      user: { rgb: [104, 177, 199], ansi16: '36' },
+      assistant: { rgb: [111, 139, 255], ansi16: '94' },
+      thinking: { rgb: [159, 143, 202], ansi16: '95' },
+      tool: { rgb: [91, 176, 158], ansi16: '36' },
       diffRemovedWord: {
         rgb: [179, 89, 107],
         ansi16: '1;31',
@@ -35,6 +39,10 @@ describe('theme presets', () => {
       const colors = THEME_PRESETS[name]?.colors ?? {}
       expect(colors.permission, name).toEqual({ rgb: [87, 105, 247], ansi16: '94' })
       expect(colors.plan, name).toEqual({ rgb: [72, 150, 140], ansi16: '37' })
+      expect(colors.user, name).toBeDefined()
+      expect(colors.assistant, name).toBeDefined()
+      expect(colors.thinking, name).toBeDefined()
+      expect(colors.tool, name).toBeDefined()
     }
     // The diff word-level colors are live palette roles: CC's hues with bold
     // composed on both color paths, so changed words stand out inside an
@@ -73,6 +81,20 @@ describe('theme presets', () => {
     const adaptive = createPalette(true, 'dark')
     expect(adaptive.permission('x')).toBe('\x1b[94mx\x1b[39m')
     expect(adaptive.plan('x')).toBe('\x1b[37mx\x1b[39m')
+  })
+
+  it('gives transcript actors and activity separate theme roles', () => {
+    const themed = createPalette(true, 'dark', { preset: THEME_PRESETS.deepseek, truecolor: true })
+    expect(themed.user('x')).toBe('\x1b[38;2;104;177;199mx\x1b[39m')
+    expect(themed.assistant('x')).toBe('\x1b[38;2;111;139;255mx\x1b[39m')
+    expect(themed.thinking('x')).toBe('\x1b[38;2;159;143;202mx\x1b[39m')
+    expect(themed.tool('x')).toBe('\x1b[38;2;91;176;158mx\x1b[39m')
+
+    const fallback = createPalette(true, 'dark')
+    expect(fallback.user('x')).toBe('\x1b[36mx\x1b[39m')
+    expect(fallback.assistant('x')).toBe('\x1b[94mx\x1b[39m')
+    expect(fallback.thinking('x')).toBe('\x1b[95mx\x1b[39m')
+    expect(fallback.tool('x')).toBe('\x1b[36mx\x1b[39m')
   })
 
   it('paints preset roles as 24-bit SGR on truecolor terminals', () => {

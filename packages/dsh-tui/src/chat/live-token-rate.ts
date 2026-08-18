@@ -23,12 +23,16 @@ export class LiveTokenRate {
   private active = false
   private firstOutputAt: number | undefined
   private readonly samples: OutputSample[] = []
+  private sampleHead = 0
+  private sampleCharacters = 0
 
   /** Open a new model step and discard the previous step's samples. */
   begin(): void {
     this.active = true
     this.firstOutputAt = undefined
     this.samples.length = 0
+    this.sampleHead = 0
+    this.sampleCharacters = 0
   }
 
   /** Close the current model step and remove its rate from the status row. */
@@ -36,6 +40,8 @@ export class LiveTokenRate {
     this.active = false
     this.firstOutputAt = undefined
     this.samples.length = 0
+    this.sampleHead = 0
+    this.sampleCharacters = 0
   }
 
   /**
@@ -49,8 +55,9 @@ export class LiveTokenRate {
     const sampleAt = Math.max(this.samples.at(-1)?.at ?? at, at)
     this.firstOutputAt ??= sampleAt
     this.samples.push({ at: sampleAt, characters: text.length })
+    this.sampleCharacters += text.length
     const cutoff = sampleAt - LIVE_TOKEN_RATE_WINDOW_MS
-    while (this.samples[0] !== undefined && this.samples[0].at < cutoff) this.samples.shift()
+    this.prune(cutoff)
   }
 
   /**
@@ -62,11 +69,22 @@ export class LiveTokenRate {
   rate(at: number): number | undefined {
     if (!this.active || this.firstOutputAt === undefined) return undefined
     const windowStart = Math.max(this.firstOutputAt, at - LIVE_TOKEN_RATE_WINDOW_MS)
+    this.prune(at - LIVE_TOKEN_RATE_WINDOW_MS)
     const elapsedMs = at - windowStart
     if (elapsedMs <= 0) return undefined
-    const characters = this.samples
-      .filter(sample => sample.at >= windowStart)
-      .reduce((total, sample) => total + sample.characters, 0)
-    return Math.round(characters / CHARS_PER_TOKEN / (elapsedMs / 1_000))
+    return Math.round(this.sampleCharacters / CHARS_PER_TOKEN / (elapsedMs / 1_000))
+  }
+
+  private prune(cutoff: number): void {
+    while (this.sampleHead < this.samples.length) {
+      const sample = this.samples[this.sampleHead]
+      if (sample === undefined || sample.at >= cutoff) break
+      this.sampleCharacters -= sample.characters
+      this.sampleHead += 1
+    }
+    if (this.sampleHead >= 128 && this.sampleHead * 2 >= this.samples.length) {
+      this.samples.splice(0, this.sampleHead)
+      this.sampleHead = 0
+    }
   }
 }

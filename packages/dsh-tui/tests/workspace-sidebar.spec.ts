@@ -13,14 +13,25 @@ function stripSgr(text: string): string {
 
 function createSidebar(rows = 32): WorkspaceSidebarComponent {
   const sessions = new SessionListComponent(palette, { maxRows: () => 8 })
-  sessions.setItems([{
-    id: 'main',
-    title: 'Main session',
-    workspace: 'deepseekharness',
-    status: 'running',
-    lastActivityAgo: 'now',
-    isActive: true,
-  }], 'main')
+  sessions.setItems([
+    {
+      kind: 'assistant',
+      id: 'assistant',
+      title: 'Assistant',
+      status: 'idle',
+      lastActivityAgo: '2m',
+      isActive: false,
+    },
+    {
+      kind: 'project',
+      id: 'main',
+      title: 'Main session',
+      workspace: 'deepseekharness',
+      status: 'running',
+      lastActivityAgo: 'now',
+      isActive: true,
+    },
+  ])
   return new WorkspaceSidebarComponent(palette, sessions, {
     terminalRows: () => rows,
     activity: { render: () => [] },
@@ -31,8 +42,6 @@ describe('WorkspaceSidebarComponent', () => {
   it('keeps workspace, sessions, and active status visible in one pane', () => {
     const sidebar = createSidebar()
     sidebar.update({
-      cwd: 'D:\\work\\deepseekharness',
-      branch: 'feature/sidebar',
       status: 'running',
       inputTokens: 1_234,
       outputTokens: 987,
@@ -44,12 +53,10 @@ describe('WorkspaceSidebarComponent', () => {
     const lines = sidebar.render(32)
     const text = stripSgr(lines.join('\n'))
 
-    expect(text).toContain('Workspace')
-    expect(text).toContain('deepseekharness')
-    expect(text).toContain('feature/sideb')
+    expect(text).toContain('Assistant')
+    expect(text).not.toContain('Workspace')
     expect(text).toContain('Active sessions · 1')
     expect(text).toContain('Main session')
-    expect(text).not.toContain('Current')
     expect(text).toContain('Status')
     expect(text).toContain('Running')
     expect(text).not.toContain('deepseek-v4-flash')

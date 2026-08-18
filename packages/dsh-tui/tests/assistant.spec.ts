@@ -83,6 +83,7 @@ class RecordingTerminal implements Terminal {
 interface FactoryCall {
   kind: 'create' | 'resume'
   sessionId: string
+  meta?: object
   setup?: (agentCtx: never) => void
 }
 
@@ -126,6 +127,7 @@ async function assistantHarness(options: AssistantHarnessOptions = {}): Promise<
           calls.push({
             kind: 'create',
             sessionId: String(createOptions.sessionId),
+            meta: createOptions.meta,
             setup: createOptions.setup as (agentCtx: never) => void,
           })
           // The real factory mints a SCOPED agent context and awaits setup on
@@ -188,6 +190,12 @@ describe('/assistant', () => {
         expect(harness.terminal.output).toContain('Assistant session created.')
       })
       expect(calls).toEqual([expect.objectContaining({ kind: 'create', sessionId: 'assistant' })])
+      expect(calls[0]?.meta).toBeUndefined()
+      // The fake agent deliberately carries an old cwd; fixed-assistant
+      // identity still removes project location from the shared footer.
+      expect(created[0]?.agent.session.header.cwd).toBe('/workspace')
+      expect(harness.ctx.tuiPrompt.get('cwd')).toBeUndefined()
+      expect(harness.ctx.tuiPrompt.get('git/worktree')).toBeUndefined()
       // Input now routes to the assistant agent.
       submit(harness, '今天天气怎么样')
       await tick()

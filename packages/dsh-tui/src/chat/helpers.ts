@@ -6,7 +6,7 @@
  * @module @deepseek-ai/dsh-tui/chat/helpers
  */
 
-import { execFileSync } from 'node:child_process'
+import { execFile } from 'node:child_process'
 import { homedir } from 'node:os'
 import { isAbsolute, relative, resolve, sep } from 'node:path'
 import {
@@ -66,20 +66,27 @@ export function formatCwd(cwd: string | undefined): string {
  * @param cwd - operational working directory to query.
  * @returns branch name, or `undefined` outside a worktree or on any failure.
  */
-export function gitBranch(cwd: string): string | undefined {
-  try {
-    const branch = execFileSync('git', ['branch', '--show-current'], {
-      cwd,
-      encoding: 'utf8',
-      env: scrubbedParentEnv(),
-      stdio: ['ignore', 'pipe', 'ignore'],
-      timeout: 1_000,
-    }).trim()
-    /* v8 ignore next -- detached-HEAD behavior is exercised by the runtime smoke, not the unit checkout. */
-    return branch === '' ? undefined : branch
-  } catch {
-    return undefined
-  }
+export function gitBranch(cwd: string): Promise<string | undefined> {
+  return new Promise(resolveBranch => {
+    try {
+      execFile('git', ['branch', '--show-current'], {
+        cwd,
+        encoding: 'utf8',
+        env: scrubbedParentEnv(),
+        windowsHide: true,
+        timeout: 1_000,
+      }, (error, stdout) => {
+        if (error !== null) {
+          resolveBranch(undefined)
+          return
+        }
+        const branch = stdout.trim()
+        resolveBranch(branch === '' ? undefined : branch)
+      })
+    } catch {
+      resolveBranch(undefined)
+    }
+  })
 }
 
 /**

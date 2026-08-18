@@ -35,14 +35,14 @@ function toolCard(palette: typeof plain, mdTheme: typeof plainMd): ToolCardCompo
 }
 
 describe('UserMessageComponent', () => {
-  it('renders the › marker with a hanging indent and no repeated role label', () => {
+  it('renders the directional marker with a hanging indent and no repeated role label', () => {
     const rows = new UserMessageComponent('one\ntwo', plain).render(40).map(row => row.trimEnd())
-    expect(rows).toEqual(['› one', '  two'])
+    expect(rows).toEqual(['❯ one', '  two'])
   })
 
   it('indents soft-wrapped continuation rows under the marker column', () => {
     const rows = new UserMessageComponent('aaaaaaaaaaaaaaaaaaaa', plain).render(12).map(row => row.trimEnd())
-    expect(rows).toEqual(['› aaaaaaaaaa', '  aaaaaaaaaa'])
+    expect(rows).toEqual(['❯ aaaaaaaaaa', '  aaaaaaaaaa'])
   })
 
   it('fills every row to the component width with the bubble background', () => {
@@ -57,7 +57,7 @@ describe('UserMessageComponent', () => {
 
   it('skips the fill and the padding when color is off', () => {
     const rows = new UserMessageComponent('hi', plain).render(24).map(row => row.trimEnd())
-    expect(rows).toEqual(['› hi'])
+    expect(rows).toEqual(['❯ hi'])
   })
 })
 
@@ -68,7 +68,7 @@ describe('StreamingAssistantComponent', () => {
     step.settle([{ type: 'text', text: 'answer' }], STAMP + 2_000)
     const rows = step.render(40)
     expect(rows[0]).toBe('')
-    expect(rows[1]?.trimEnd()).toBe('• answer')
+    expect(rows[1]?.trimEnd()).toBe('✦ answer')
   })
 
   it('renders shown reasoning as a quoted block with the ▎ bar', () => {
@@ -79,7 +79,7 @@ describe('StreamingAssistantComponent', () => {
       { type: 'text', text: 'answer' },
     ], STAMP + 2_000)
     const rows = step.render(40)
-    expect(rows.join('\n')).toContain('∴ Thinking for 2.0s')
+    expect(rows.join('\n')).toContain('✻ Thinking for 2.0s')
     const trimmed = rows.map(row => row.trimEnd())
     const first = trimmed.findIndex(row => row === '  ▎ let me think')
     expect(first).toBeGreaterThan(-1)
@@ -94,7 +94,7 @@ describe('StreamingAssistantComponent', () => {
     step.update({ type: 'block-start', index: 0, blockType: 'reasoning' })
     step.update({ type: 'reasoning-delta', index: 0, text: 'streamed thought' })
     const rows = step.render(40)
-    expect(rows.join('\n')).toContain('∴ Thinking…')
+    expect(rows.join('\n')).toContain('✻ Thinking…')
     expect(rows.map(row => row.trimEnd())).toContain('  ▎ streamed thought')
   })
 
@@ -136,7 +136,7 @@ describe('StreamingAssistantComponent', () => {
       { type: 'text', text: 'answer' },
     ], STAMP + 2_000)
     const rows = step.render(40)
-    expect(rows.join('\n')).toContain('∴ Thinking for 2.0s · 1 lines')
+    expect(rows.join('\n')).toContain('✻ Thinking for 2.0s · 1 lines')
     expect(rows.join('\n')).not.toContain('▎')
     expect(rows.join('\n')).not.toContain('hidden thought')
   })
@@ -150,7 +150,7 @@ describe('StreamingAssistantComponent long-reply fold', () => {
     step.markStart(STAMP)
     step.settle([{ type: 'text', text: body }], STAMP + 2_000)
     const rows = step.render(40).map(row => row.trimEnd())
-    expect(rows).toEqual(['', '• line 1', '  line 2', '  line 3', '  … +5 lines (click to expand)'])
+    expect(rows).toEqual(['', '✦ line 1', '  line 2', '  line 3', '  … +5 lines (click to expand)'])
   })
 
   it('expands the folded reply when its disclosure row is clicked', () => {
@@ -183,9 +183,9 @@ describe('StreamingAssistantComponent long-reply fold', () => {
 })
 
 describe('ToolCardComponent header tones', () => {
-  it('keeps the whole pending header in the warning color', () => {
+  it('keeps the whole pending header in the running-tool color', () => {
     const card = toolCard(color, colorMd)
-    expect(card.render(80)[1]?.startsWith('\x1b[33m○\x1b[39m \x1b[33mbash')).toBe(true)
+    expect(card.render(80)[1]?.startsWith('\x1b[36m○\x1b[39m \x1b[36mbash')).toBe(true)
   })
 
   it('settles to a dim header with only the status glyph colored', () => {

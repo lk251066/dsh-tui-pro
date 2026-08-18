@@ -54,7 +54,7 @@ export interface ModelDialogSelection {
 export interface SessionSwitchChoice {
   readonly id: string
   readonly title: string
-  readonly workspace: string
+  readonly workspace?: string
   readonly status: 'idle' | 'running' | 'stopped'
   readonly current: boolean
 }
@@ -73,7 +73,7 @@ export class SessionSwitchDialog implements Component {
       value: choice.id,
       label: displayText(choice.title),
       description: [
-        displayText(choice.workspace),
+        ...choice.workspace === undefined ? [] : [displayText(choice.workspace)],
         choice.status,
         ...choice.current ? ['current'] : [],
       ].join(' · '),

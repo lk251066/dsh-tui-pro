@@ -16,6 +16,8 @@
     "build": "pnpm -r run build",
     "test": "vitest run",
     "test:watch": "vitest",
+    "bench:transcript": "tsx scripts/benchmark-transcript.ts",
+    "docs:screenshot": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/capture-readme-screenshot.ps1",
     "typecheck": "tsc -b tsconfig.host.json",
     "lint": "oxlint packages",
     "pack:artifact": "node scripts/pack-artifact.mjs",

@@ -44,10 +44,9 @@ export type AttributeRole = <T extends string>(text: T) => T
 /**
  * Theme-agnostic role colors and SGR attribute wrappers.
  *
- * One role per visual meaning: `dim` is the single recessed tone, `accent` the
- * single emphasis color, and `success`/`error` double as a diff's added/removed
- * pair. Roles that resolved to the same escape were merged rather than kept as
- * aliases, so a reader cannot pick a name that silently renders as another.
+ * One role per visual meaning: `dim` is the single recessed tone, `accent`
+ * emphasizes controls, transcript roles distinguish actors and activity, and
+ * `success`/`error` double as a diff's added/removed pair.
  *
  * Colors and attributes are separately typed: `bold(accent(x))` and
  * `accent(bold(x))` both compile, while `accent(error(x))` does not.
@@ -67,6 +66,14 @@ export interface Palette {
   permission: ColorRole
   /** Plan-mode surfaces, CC's plan teal (reserved until the plan chip lands). */
   plan: ColorRole
+  /** User-message gutter marker. */
+  user: ColorRole
+  /** Assistant-message gutter marker. */
+  assistant: ColorRole
+  /** Thinking gutter marker, distinct from visible reasoning text. */
+  thinking: ColorRole
+  /** Running tool marker and title; settled state colors still take precedence. */
+  tool: ColorRole
   code: ColorRole
   /** Changed words on a diff's added lines: bold over the line color. */
   diffAddedWord: ColorRole
@@ -90,7 +97,24 @@ export interface Palette {
 }
 
 /** Names of the palette's color roles, in the order `/palette` prints them. */
-export const COLOR_ROLES = ['text', 'dim', 'accent', 'brand', 'code', 'success', 'warning', 'error', 'permission', 'plan', 'diffAddedWord', 'diffRemovedWord'] as const
+export const COLOR_ROLES = [
+  'text',
+  'dim',
+  'accent',
+  'brand',
+  'user',
+  'assistant',
+  'thinking',
+  'tool',
+  'code',
+  'success',
+  'warning',
+  'error',
+  'permission',
+  'plan',
+  'diffAddedWord',
+  'diffRemovedWord',
+] as const
 
 /** One color role's name. */
 export type ColorRoleName = typeof COLOR_ROLES[number]
@@ -144,6 +168,10 @@ export function paletteSpec(scheme: TerminalColorScheme): {
       dim: { open: '2;39', close: '22;39', purpose: 'The one recessed tone: tool bodies, chrome, footers' },
       accent: { open: '95', close: '39', purpose: 'The one emphasis color: prompt, borders, and active controls' },
       brand: { open: '34', close: '39', purpose: 'DeepSeek brand art when truecolor is unavailable' },
+      user: { open: '36', close: '39', purpose: 'User-message gutter marker' },
+      assistant: { open: '94', close: '39', purpose: 'Assistant-message gutter marker' },
+      thinking: { open: '95', close: '39', purpose: 'Thinking gutter marker' },
+      tool: { open: '36', close: '39', purpose: 'Running tool marker and title' },
       // ANSI 36 (cyan) is difficult to read on a light background — use ANSI 34
       // (blue) which is legible on both light and dark schemes.
       code: scheme === 'light'

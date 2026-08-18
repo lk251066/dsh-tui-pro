@@ -36,9 +36,11 @@ import {
 } from './logo.ts'
 import { contentText, type ParsedArguments } from './content.ts'
 import {
+  ASSISTANT_GLYPH,
   shortcutHint,
   THINKING_GLYPH,
   TOOL_SETTLED,
+  USER_GLYPH,
 } from './figures.ts'
 import { progressiveTitle, settledTitle } from '../chat/tool-verbs.ts'
 import {
@@ -398,16 +400,16 @@ export interface WelcomeSuggestion {
 
 /**
  * Contents of the welcome box shown before the first user message: the
- * configured welcome line (or the default), the live model and working
- * directory, and a few suggested commands.
+ * configured welcome line (or the default), the live model, an optional
+ * project directory, and a few suggested commands.
  */
 export interface WelcomeBoxInfo {
   /** Configured welcome line; `undefined` renders the default. */
   readonly welcome: string | undefined
   /** Current model label. */
   readonly model: string
-  /** Formatted working directory. */
-  readonly directory: string
+  /** Formatted project directory; absent for the fixed assistant. */
+  readonly directory?: string
   /** Suggested commands, one `command description` row each. */
   readonly suggestions: readonly WelcomeSuggestion[]
 }
@@ -421,7 +423,7 @@ const WELCOME_FRAME_COLUMNS = 4
  * a dim rounded frame (the framed editor's `╭─╮│╰─╯`) sized to its content,
  * holding the block-letter logo painted through the brand gradient (or,
  * below logo width, one compact brand line), the welcome line, the live
- * model and directory, suggested commands, and the shortcut tips row. The
+ * model, optional project directory, suggested commands, and the shortcut tips row. The
  * sweep reveal clips the box left-to-right on startup; the shimmer pass then
  * sweeps the logo inside it.
  *
@@ -494,7 +496,9 @@ export class HeaderComponent implements Component {
     content.push(this.palette.dim(displayText(info.welcome ?? DEFAULT_WELCOME)))
     content.push('')
     content.push(`${this.palette.dim('model:')} ${displayText(info.model)}`)
-    content.push(`${this.palette.dim('directory:')} ${displayText(info.directory)}`)
+    if (info.directory !== undefined) {
+      content.push(`${this.palette.dim('directory:')} ${displayText(info.directory)}`)
+    }
     content.push('')
     for (const suggestion of info.suggestions) {
       content.push(`${displayText(suggestion.command)} ${this.palette.dim(suggestion.description)}`)
@@ -536,6 +540,7 @@ export class ImageBlockComponent extends Container {
     ref: ImageAttachmentRef,
     load: (ref: ImageAttachmentRef) => Promise<Uint8Array | undefined>,
     palette: Palette,
+    onUpdate: () => void = () => {},
   ) {
     super()
     const attachmentId = String(ref.attachmentId)
@@ -553,6 +558,7 @@ export class ImageBlockComponent extends Container {
         ))
       }
       this.invalidate()
+      onUpdate()
     })
   }
 
@@ -562,8 +568,8 @@ export class ImageBlockComponent extends Container {
 }
 
 /**
- * User message body rows: the first visual row carries codex's `› ` prompt
- * marker (bold over dim), continuation rows align under its text column.
+ * User message body rows: the first visual row carries a directional `❯`
+ * marker, continuation rows align under its text column.
  * Wrapping happens here rather than in pi-tui's `Text` so the hanging indent
  * survives soft wraps.
  */
@@ -573,7 +579,7 @@ class UserBodyComponent implements Component {
   constructor(text: string, palette: Palette) {
     this.gutter = new TranscriptGutterComponent(
       new Text(text, 0, 0),
-      palette.bold(palette.dim('›')),
+      palette.bold(palette.user(USER_GLYPH)),
     )
   }
 
@@ -599,6 +605,7 @@ export class UserMessageComponent extends Container {
     private readonly palette: Palette,
     images: readonly ImageAttachmentRef[] = [],
     loadImage?: (ref: ImageAttachmentRef) => Promise<Uint8Array | undefined>,
+    onImageUpdate?: () => void,
   ) {
     super()
     if (text !== '') this.addChild(new UserBodyComponent(displayText(text), palette))
@@ -609,6 +616,7 @@ export class UserMessageComponent extends Container {
         image,
         loader,
         palette,
+        onImageUpdate,
       ))
     }
   }
@@ -672,7 +680,7 @@ const FOLDED_BODY_HINT = /^… \+\d+ lines \(click to expand\)$/u
  * Children of a settled assistant message: optional reasoning block then the
  * response text. Every visible reply opens a single-row gap below the user
  * message or preceding tool output. A settled step folds its reasoning to one
- * dim `∴ Thinking` line unless expanded (Claude Code's default), while a
+ * dim `✻ Thinking` line unless expanded, while a
  * streaming step keeps the reasoning live. A step with no visible body renders
  * nothing, so tool-only steps leave no blank segment behind. Shown reasoning
  * renders as a Markdown blockquote, so the quote style's dim `▎` bar gives the thinking
@@ -704,7 +712,7 @@ function assistantMessageChildren(
       new Text(palette.italic(palette.dim(
         `Thinking${duration} · ${String(reasoningLines)} lines ${shortcutHint('ctrl+r', 'expand')}`,
       )), 0, 0),
-      palette.dim(THINKING_GLYPH),
+      palette.thinking(THINKING_GLYPH),
     ))
   } else if (showsReasoning) {
     // Quote-prefix every line (blank lines keep a bare `>` so the bar does not
@@ -715,7 +723,7 @@ function assistantMessageChildren(
         new Text(palette.italic(palette.dim(
           `Thinking${settled ? duration : liveDuration}${settled ? ` ${shortcutHint('ctrl+r', 'collapse')}` : ''}`,
         )), 0, 0),
-        palette.dim(THINKING_GLYPH),
+        palette.thinking(THINKING_GLYPH),
       ),
       new TranscriptGutterComponent(
         new Markdown(quoted, 0, 0, mdTheme, { color: value => palette.dim(value), italic: true }),
@@ -728,7 +736,7 @@ function assistantMessageChildren(
       settled
         ? new FoldableBodyComponent(text, maxMessageLines, textExpanded, palette, mdTheme)
         : new Markdown(text, 0, 0, mdTheme, { color: value => palette.text(value) }),
-      palette.bold('•'),
+      palette.bold(palette.assistant(ASSISTANT_GLYPH)),
     ))
   }
   return children
@@ -749,6 +757,7 @@ export class StreamingAssistantComponent extends Container {
   private thinkingMs: number | undefined
   /** Whether a settled over-long reply body is expanded past its fold. */
   private textExpanded = false
+  private dirty = true
   constructor(
     /** The step's turn/step coordinates, used to group steps into its turn. */
     readonly position: StepPosition,
@@ -761,7 +770,6 @@ export class StreamingAssistantComponent extends Container {
     private readonly now: () => number = Date.now,
   ) {
     super()
-    this.rebuild()
   }
 
   /**
@@ -772,6 +780,7 @@ export class StreamingAssistantComponent extends Container {
    */
   markStart(time: number | undefined): void {
     this.startedAt = time
+    this.dirty = true
   }
 
   /**
@@ -787,7 +796,7 @@ export class StreamingAssistantComponent extends Container {
     if (this.thinkingMs === undefined && at !== undefined && timingStart !== undefined) {
       this.thinkingMs = Math.max(0, at - timingStart)
     }
-    this.rebuild()
+    this.dirty = true
   }
 
   /**
@@ -799,7 +808,7 @@ export class StreamingAssistantComponent extends Container {
   }
 
   override invalidate(): void {
-    this.rebuild()
+    this.dirty = true
     super.invalidate()
   }
 
@@ -826,13 +835,14 @@ export class StreamingAssistantComponent extends Container {
     } else if (chunk.type === 'block-end' && (chunk.block.type === 'text' || chunk.block.type === 'reasoning')) {
       this.blocks.set(chunk.index, { type: chunk.block.type, text: chunk.block.text })
     }
-    this.rebuild()
+    this.dirty = true
   }
 
   override render(width: number): string[] {
     if (this.settledContent === undefined && this.thinkingStartedAt !== undefined && this.thinkingMs === undefined) {
-      this.rebuild()
+      this.dirty = true
     }
+    this.ensureRebuilt()
     return super.render(width)
   }
 
@@ -842,7 +852,7 @@ export class StreamingAssistantComponent extends Container {
    */
   setShowReasoning(show: boolean): void {
     this.showReasoning = show
-    this.rebuild()
+    this.dirty = true
   }
 
   /**
@@ -858,7 +868,7 @@ export class StreamingAssistantComponent extends Container {
     }
     if (!this.textExpanded && FOLDED_BODY_HINT.test(line.trim())) {
       this.textExpanded = true
-      this.rebuild()
+      this.dirty = true
       return true
     }
     return false
@@ -888,6 +898,12 @@ export class StreamingAssistantComponent extends Container {
       this.textExpanded,
     )
     for (const child of children) this.addChild(child)
+  }
+
+  private ensureRebuilt(): void {
+    if (!this.dirty) return
+    this.dirty = false
+    this.rebuild()
   }
 }
 
@@ -1120,13 +1136,13 @@ export class ToolCardComponent extends CachedCardComponent {
     // The header is one card row: the marker glyph, a verb title naming what
     // THIS call does (progressive while pending, the presenter's settled label
     // once resolved), and the wall-clock duration once settled. While pending
-    // the whole row carries the warning color; once settled only the status
+    // the whole row carries the running-tool color; once settled only the status
     // glyph keeps the success/error color and the prose drops to dim, so a
     // screen of finished cards does not shout over the conversation. Body rows
     // sit under a `⎿` continuation marker so the output reads as the call's
     // result.
     const statusColor = pending
-      ? this.palette.warning
+      ? this.palette.tool
       : isError ? this.palette.error : this.palette.success
     const label = pending
       ? progressiveTitle(this.name, this.callView)
@@ -1142,7 +1158,7 @@ export class ToolCardComponent extends CachedCardComponent {
       : `${displayInlineText(label)}`
     const headerText = `${semanticLabel}${duration}`
     const header = new TranscriptGutterComponent(
-      new Text(pending ? this.palette.warning(headerText) : this.palette.dim(headerText), 0, 0),
+      new Text(pending ? this.palette.tool(headerText) : this.palette.dim(headerText), 0, 0),
       statusColor(glyph),
     ).render(width)[0] ?? ''
     // The blank first row is the card's own paragraph gap (no external Spacer),

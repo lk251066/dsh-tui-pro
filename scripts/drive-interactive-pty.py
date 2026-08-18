@@ -17,7 +17,7 @@ import time
 from pathlib import Path
 
 
-FRAME_MARKERS = (b"Workspace", b"Active", b"Status", b"Perm", b"plan")
+FRAME_MARKERS = (b"Assistant", b"Active", b"Status", b"Perm", b"plan")
 FORBIDDEN_MARKERS = (
     b"fatal load failure",
     b"plugin tree failed to load",

@@ -3,8 +3,7 @@
  * with fixed RGB values painted as 24-bit SGR on truecolor terminals, falling
  * back to a hand-picked standard-ANSI code otherwise; the `deepseek` default
  * keeps the terminal's own 16-color scheme authoritative for every adaptive
- * role, overriding only the fixed CC-derived semantic colors every preset
- * shares (permission, plan, and the diff word-level colors).
+ * role while semantic roles retain deliberate identities.
  * @module @deepseek-ai/dsh-tui/components/theme-presets
  */
 
@@ -83,6 +82,14 @@ const semanticColors = {
   diffRemovedWord: diffRemovedWordColor,
 } as const
 
+/** DeepSeek's restrained conversation-marker quartet. */
+const deepseekConversationColors = {
+  user: { rgb: [104, 177, 199], ansi16: '36' },
+  assistant: { rgb: [111, 139, 255], ansi16: '94' },
+  thinking: { rgb: [159, 143, 202], ansi16: '95' },
+  tool: { rgb: [91, 176, 158], ansi16: '36' },
+} as const
+
 /**
  * The shipped themes, in picker order. `deepseek` is the adaptive default.
  */
@@ -90,7 +97,7 @@ export const THEME_PRESETS: Readonly<Record<string, ThemePreset>> = {
   deepseek: {
     description: 'Adaptive DeepSeek — the terminal\'s own 16-color scheme',
     dark: false,
-    colors: { ...semanticColors },
+    colors: { ...semanticColors, ...deepseekConversationColors },
   },
   dracula: {
     description: 'Dracula — purple accent on deep night',
@@ -106,6 +113,10 @@ export const THEME_PRESETS: Readonly<Record<string, ThemePreset>> = {
       error: { rgb: [255, 85, 85], ansi16: '31' },
       dim: dimColor([98, 114, 164]),
       ...semanticColors,
+      user: { rgb: [139, 233, 253], ansi16: '36' },
+      assistant: { rgb: [189, 147, 249], ansi16: '35' },
+      thinking: { rgb: [255, 121, 198], ansi16: '95' },
+      tool: { rgb: [80, 250, 123], ansi16: '32' },
     },
   },
   nord: {
@@ -122,6 +133,10 @@ export const THEME_PRESETS: Readonly<Record<string, ThemePreset>> = {
       error: { rgb: [191, 97, 106], ansi16: '31' },
       dim: dimColor([97, 110, 136]),
       ...semanticColors,
+      user: { rgb: [136, 192, 208], ansi16: '36' },
+      assistant: { rgb: [129, 161, 193], ansi16: '94' },
+      thinking: { rgb: [180, 142, 173], ansi16: '95' },
+      tool: { rgb: [143, 188, 187], ansi16: '36' },
     },
   },
   'catppuccin-mocha': {
@@ -138,6 +153,10 @@ export const THEME_PRESETS: Readonly<Record<string, ThemePreset>> = {
       error: { rgb: [243, 139, 168], ansi16: '31' },
       dim: dimColor([147, 153, 178]),
       ...semanticColors,
+      user: { rgb: [137, 220, 235], ansi16: '36' },
+      assistant: { rgb: [180, 190, 254], ansi16: '94' },
+      thinking: { rgb: [203, 166, 247], ansi16: '95' },
+      tool: { rgb: [148, 226, 213], ansi16: '36' },
     },
   },
   daltonism: {
@@ -148,6 +167,10 @@ export const THEME_PRESETS: Readonly<Record<string, ThemePreset>> = {
       // the diff's added lines through it) plus the added-word emphasis.
       // Warning and error keep the adaptive hues.
       ...semanticColors,
+      user: { rgb: [51, 153, 255], ansi16: '38;5;75' },
+      assistant: { rgb: [126, 170, 255], ansi16: '94' },
+      thinking: { rgb: [180, 180, 200], ansi16: '37' },
+      tool: { rgb: [91, 192, 222], ansi16: '36' },
       success: { rgb: [51, 153, 255], ansi16: '38;5;75' },
       diffAddedWord: {
         rgb: [51, 153, 255],

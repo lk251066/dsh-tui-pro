@@ -38,11 +38,11 @@ export interface TuiRuntime {
    */
   formatCwd?: (cwd: string | undefined) => string
   /**
-   * Override the Git branch shown in the prompt context line; production resolves it once at mount.
+   * Override the Git branch shown in the prompt context line.
    * @param cwd - Operational working directory from the session header.
    * @returns Unescaped branch name, or `undefined` outside a Git worktree.
    */
-  gitBranch?: (cwd: string) => string | undefined
+  gitBranch?: (cwd: string) => string | undefined | Promise<string | undefined>
   /** Monotonic-enough wall clock for elapsed status rendering. Defaults to `Date.now`. */
   now?(): number
   /** Host-owned process handoff; absent leaves the session selectable but not resumable in place. */

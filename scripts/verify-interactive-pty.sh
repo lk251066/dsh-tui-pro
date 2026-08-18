@@ -49,7 +49,7 @@ grep -aqF $'\x1b[?1002h\x1b[?1006h' "$capture"
 grep -aqF $'\x1b[?1006l\x1b[?1002l' "$capture"
 grep -aqF 'Switch active session' "$capture"
 test -f "$export_path"
-grep -qF 'Workspace' "$readable"
+grep -qF 'Assistant' "$readable"
 grep -qF 'Active' "$readable"
 grep -qF 'Status' "$readable"
 grep -qF 'Perm' "$readable"
@@ -59,13 +59,13 @@ from pathlib import Path
 import sys
 
 lines = Path(sys.argv[1]).read_text(encoding='utf-8').splitlines()
-workspace = next((line for line in lines if 'Workspace' in line and '│' in line), None)
+assistant = next((line for line in lines if 'Assistant' in line and '│' in line), None)
 editor_bottom = next((line for line in reversed(lines) if '╰' in line and '│' in line), None)
 if not lines or lines[0].startswith('┌') or lines[-1].startswith('└'):
     raise SystemExit('removed outer frame is still rendered across the terminal viewport')
-workspace_separators = [] if workspace is None else [index for index, value in enumerate(workspace) if value == '│']
-if workspace is None or len(workspace_separators) != 1 or workspace.index('Workspace') < workspace_separators[0]:
-    raise SystemExit('Workspace is not rendered in the right sidebar')
+assistant_separators = [] if assistant is None else [index for index, value in enumerate(assistant) if value == '│']
+if assistant is None or len(assistant_separators) != 1 or assistant.index('Assistant') < assistant_separators[0]:
+    raise SystemExit('Assistant is not rendered in the right sidebar')
 editor_separators = [] if editor_bottom is None else [index for index, value in enumerate(editor_bottom) if value == '│']
 if editor_bottom is None or len(editor_separators) != 1 or editor_bottom.index('╰') > editor_separators[0]:
     raise SystemExit('editor is not rendered in the left main area')

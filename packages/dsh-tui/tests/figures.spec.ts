@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import {
+  ASSISTANT_GLYPH,
   RESULT_CONTINUATION,
   RESULT_MARKER,
   shortcutHint,
   THINKING_GLYPH,
   TOOL_SETTLED,
+  USER_GLYPH,
 } from '../src/components/figures.ts'
 
 describe('figures', () => {
@@ -29,6 +31,8 @@ describe('figures', () => {
   it('pins the shared marker glyphs', () => {
     expect(RESULT_MARKER).toBe('  ⎿ ')
     expect(RESULT_CONTINUATION).toBe('    ')
-    expect(THINKING_GLYPH).toBe('∴')
+    expect(USER_GLYPH).toBe('❯')
+    expect(ASSISTANT_GLYPH).toBe('✦')
+    expect(THINKING_GLYPH).toBe('✻')
   })
 })

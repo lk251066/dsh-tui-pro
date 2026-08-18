@@ -1,6 +1,6 @@
 /**
- * Persistent workspace sidebar: project identity, live sessions, and the
- * active agent's operational status in one fixed navigation pane.
+ * Persistent session sidebar: the fixed assistant, active project sessions,
+ * and the active agent's operational status in one navigation pane.
  * @module @lk251066/dsh-tui/components/workspace-sidebar
  */
 
@@ -8,16 +8,13 @@ import {
   type Component,
 } from '@earendil-works/pi-tui'
 import type { AgentStatus } from '@deepseek-ai/dsh-agent'
-import { workspaceLabel } from '../chat/helpers.ts'
 import { formatTokens } from '../chat/tokens.ts'
 import { SessionListComponent } from './session-list.ts'
-import { displayText, padToWidth } from './text.ts'
+import { padToWidth } from './text.ts'
 import type { Palette } from './theme.ts'
 
 /** Live values rendered below the session navigator. */
 export interface WorkspaceSidebarState {
-  readonly cwd: string
-  readonly branch: string | undefined
   readonly status: AgentStatus
   readonly inputTokens: number
   readonly outputTokens: number
@@ -39,11 +36,9 @@ function sectionTitle(title: string, width: number, palette: Palette): string[] 
   ]
 }
 
-/** Renders persistent project, session, and status sections in the right sidebar. */
+/** Renders persistent assistant, project-session, and status sections. */
 export class WorkspaceSidebarComponent implements Component {
   private state: WorkspaceSidebarState = {
-    cwd: '(unknown)',
-    branch: undefined,
     status: 'idle',
     inputTokens: 0,
     outputTokens: 0,
@@ -58,7 +53,7 @@ export class WorkspaceSidebarComponent implements Component {
     private readonly options: WorkspaceSidebarOptions,
   ) {}
 
-  /** Replace the active workspace and agent values for the next render. */
+  /** Replace the active agent values for the next render. */
   update(state: WorkspaceSidebarState): void {
     this.state = state
   }
@@ -84,8 +79,6 @@ export class WorkspaceSidebarComponent implements Component {
   } | undefined {
     if (width <= 0) return undefined
     const { state, palette } = this
-    const cwd = displayText(state.cwd)
-    const workspace = workspaceLabel(cwd)
     const statusGlyph = state.status === 'running'
       ? palette.accent('●')
       : palette.dim('○')
@@ -94,10 +87,6 @@ export class WorkspaceSidebarComponent implements Component {
     const cache = state.cacheHitRate === undefined ? palette.dim('unknown') : `${state.cacheHitRate}%`
     const permission = state.permission ?? palette.dim('unavailable')
 
-    const workspaceLines = [
-      ...sectionTitle('Workspace', width, palette),
-      padToWidth(` ${palette.bold(palette.accent(workspace))}${state.branch === undefined ? '' : palette.dim(` · ${state.branch}`)}`, width),
-    ]
     const plan = state.plan ? palette.plan('plan on') : palette.dim('plan off')
     const cacheSuffix = state.cacheHitRate === undefined ? '' : palette.dim(` · cache ${cache}`)
     const statusLines = [
@@ -107,11 +96,9 @@ export class WorkspaceSidebarComponent implements Component {
       padToWidth(` ${palette.dim('Perm')} ${permission}`, width),
     ]
     const topLines = [
-      ...workspaceLines,
-      '',
       ...this.sessionList.render(width),
     ]
-    const sessionStart = workspaceLines.length + 1
+    const sessionStart = 0
     const bottomLines = ['', ...statusLines]
     const height = Math.max(1, Math.floor(this.options.terminalRows()))
     const filler = Math.max(0, height - topLines.length - bottomLines.length)
