@@ -4,6 +4,7 @@
  */
 
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
+import type { Editor } from '@earendil-works/pi-tui'
 import {
   ClipboardImageError,
   readClipboardImage,
@@ -86,10 +87,64 @@ export class ImageDraft {
     return this.#images.map(({ attachment }) => ({ type: 'image', attachment }))
   }
 
+  /**
+   * Drop every draft image whose placeholder no longer appears in the editor
+   * text, then return the surviving content blocks. Submit calls this so a
+   * placeholder the user deleted keeps its image out of the message.
+   * @param text - Current editor text.
+   * @returns Image content blocks for the placeholders still present.
+   */
+  pruneToText(text: string): ContentBlock[] {
+    for (let index = this.#images.length - 1; index >= 0; index -= 1) {
+      const image = this.#images[index]
+      /* v8 ignore next -- the index walks the array's own range. */
+      if (image === undefined) continue
+      if (!text.includes(image.placeholder)) this.#images.splice(index, 1)
+    }
+    return this.contentBlocks()
+  }
+
   /** @returns Total encoded bytes referenced by the current draft. */
   totalBytes(): number {
     return this.#images.reduce((total, image) => total + image.attachment.bytes, 0)
   }
+}
+
+/** Matches a complete `[Image #N]` placeholder ending at the cursor column. */
+const IMAGE_PLACEHOLDER_AT_CURSOR = /\[Image #(\d+)\]$/u
+
+/**
+ * Delete a whole `[Image #N]` placeholder immediately before the editor cursor
+ * and remove the referenced image from the draft when present. Backspace over
+ * a placeholder removes the token atomically instead of one character at a
+ * time; anything else returns false so the editor's default backspace runs.
+ *
+ * pi-tui's `Editor` exposes the cursor through `getCursor` but no setter, and
+ * `setText` resets the cursor to the end of the text. The cursor is therefore
+ * restored through the editor's private `state` — the same fields its own
+ * `setCursorCol` writes. If pi-tui grows a public cursor setter, use it here.
+ * @param editor - Editor whose text holds the placeholder.
+ * @param draft - Draft whose matching image is removed.
+ * @returns Whether a placeholder token was deleted.
+ */
+export function deleteImagePlaceholderAtCursor(editor: Editor, draft: ImageDraft): boolean {
+  const { line, col } = editor.getCursor()
+  const lines = editor.getLines()
+  const current = lines[line]
+  if (current === undefined || col === 0) return false
+  const match = IMAGE_PLACEHOLDER_AT_CURSOR.exec(current.slice(0, col))
+  const number = match?.[1]
+  if (match === null || number === undefined) return false
+  lines[line] = current.slice(0, match.index) + current.slice(col)
+  editor.setText(lines.join('\n'))
+  const internals = editor as unknown as {
+    state: { cursorLine: number }
+    setCursorCol(col: number): void
+  }
+  internals.state.cursorLine = line
+  internals.setCursorCol(match.index)
+  draft.remove(Number(number))
+  return true
 }
 
 /** Optional platform and process controls for clipboard persistence. */

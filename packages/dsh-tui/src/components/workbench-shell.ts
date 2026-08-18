@@ -4,7 +4,6 @@
  */
 
 import {
-  truncateToWidth,
   visibleWidth,
   type Component,
 } from '@earendil-works/pi-tui'
@@ -17,6 +16,7 @@ import {
   type TranscriptSelection,
 } from './transcript-selection.ts'
 import type { TranscriptContainer } from './transcript-container.ts'
+import { padToWidth } from './text.ts'
 
 const DEFAULT_SIDEBAR_WIDTH = 32
 const MIN_SIDEBAR_WIDTH = 24
@@ -77,11 +77,6 @@ function frameLine(width: number, left: string, fill: string, right: string): st
   if (width <= 0) return ''
   if (width === 1) return fill
   return `${left}${fill.repeat(width - 2)}${right}`
-}
-
-function padToWidth(value: string, width: number): string {
-  const clipped = truncateToWidth(value, Math.max(0, width), '')
-  return clipped + ' '.repeat(Math.max(0, width - visibleWidth(clipped)))
 }
 
 /** Owns the full terminal viewport and swaps only the active transcript. */

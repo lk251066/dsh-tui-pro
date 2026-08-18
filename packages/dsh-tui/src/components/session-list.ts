@@ -9,6 +9,7 @@ import {
   visibleWidth,
 } from '@earendil-works/pi-tui'
 import type { Palette } from './theme.ts'
+import { padToWidth } from './text.ts'
 
 /** One rendered active workspace or assistant row. */
 export interface SessionListItem {
@@ -24,11 +25,6 @@ export interface SessionListItem {
 export interface SessionListOptions {
   /** Maximum rows the component may contribute to the terminal frame. */
   maxRows(): number
-}
-
-function padToWidth(value: string, width: number): string {
-  const clipped = truncateToWidth(value, Math.max(0, width), '')
-  return clipped + ' '.repeat(Math.max(0, width - visibleWidth(clipped)))
 }
 
 /** Renders active workspace sessions without owning membership state. */
@@ -110,8 +106,11 @@ export class SessionListComponent extends Container {
       else group.push(item)
     }
     const allRows: { workspace: string; item?: SessionListItem }[] = []
+    // Group headers earn their row only with multiple workspaces; a single
+    // workspace already names itself in the sidebar's Workspace section.
+    const showGroupHeaders = grouped.size >= 2
     for (const [workspace, items] of grouped) {
-      allRows.push({ workspace })
+      if (showGroupHeaders) allRows.push({ workspace })
       for (const item of items) allRows.push({ workspace, item })
     }
     const budget = Math.max(1, this.options.maxRows() - 2)

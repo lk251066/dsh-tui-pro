@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import AgentRegistry, { type Agent } from '@deepseek-ai/dsh-agent'
-import { CallId, type UserMessage } from '@deepseek-ai/dsh-llm'
+import { CallId, createMessage, createUserMessage, type UserMessage } from '@deepseek-ai/dsh-llm'
 import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRegistry from '@deepseek-ai/dsh-tools'
@@ -40,7 +40,51 @@ describe('assistant tools', () => {
     const targetId = SessionId('active-target')
     const target = agent(ctx, targetId, cwd)
     ctx.agents.register(target)
+    target.session.append('user/message', createUserMessage({
+      source: { kind: 'user' },
+      content: [{ type: 'text', text: 'first question' }],
+    }), { surfaceOp: 'append' })
+    target.session.append('assistant/message', {
+      turn: 1,
+      step: 1,
+      message: createMessage({
+        role: 'assistant',
+        source: { kind: 'model', provider: 'test', model: 'test' },
+        content: [
+          { type: 'reasoning', text: 'private reasoning' },
+          { type: 'text', text: 'first answer' },
+          { type: 'tool-call', id: CallId('hidden-call'), name: 'hidden_tool', arguments: '{}' },
+        ],
+      }),
+    }, { surfaceOp: 'append' })
+    target.session.append('user/message', createUserMessage({
+      source: { kind: 'plugin', plugin: 'hidden-context' },
+      content: [{ type: 'text', text: 'hidden context' }],
+    }), { surfaceOp: 'append' })
+    target.session.append('assistant/chunk', {
+      turn: 2,
+      step: 1,
+      chunk: { type: 'text-delta', index: 0, text: 'unfinished output' },
+    })
+    target.session.append('user/message', createUserMessage({
+      source: { kind: 'user' },
+      content: [{ type: 'image', attachment: { attachmentId: 'image-1' as never, mediaType: 'image/png', bytes: 1 } }],
+    }), { surfaceOp: 'append' })
+    target.session.append('assistant/message', {
+      turn: 2,
+      step: 1,
+      message: createMessage({
+        role: 'assistant',
+        source: { kind: 'model', provider: 'test', model: 'test' },
+        content: [{ type: 'text', text: 'second answer' }],
+      }),
+    }, { surfaceOp: 'append' })
     const active = new Set([targetId])
+    const readSession = vi.fn(async (sessionId: ReturnType<typeof SessionId>) => {
+      if (sessionId !== targetId) throw new Error('session not found')
+      return { session: structuredClone(target.session.header), events: structuredClone([...target.session.events]) }
+    })
+    ctx.provide('sessionQuery', { readSession } as never)
     const workspace = {
       id: 'workspace-1', path: cwd, title: 'project',
       createdAt: new Date(0).toISOString(), updatedAt: new Date(0).toISOString(),
@@ -80,6 +124,7 @@ describe('assistant tools', () => {
         'add_session_to_workspace',
         'create_workspace_session',
         'list_sessions',
+        'read_session_conversation',
         'remove_session_from_workspace',
         'send_message_to_session',
         'switch_session',
@@ -97,6 +142,45 @@ describe('assistant tools', () => {
     expect(listed.isError).toBe(false)
     expect(listed.value).toMatchObject({ total: 1, sessions: [expect.objectContaining({ id: targetId })] })
 
+    const newestConversation = await execute('read_session_conversation', { session_id: targetId, limit: 2 })
+    expect(newestConversation.isError).toBe(false)
+    expect(newestConversation.value).toEqual({
+      sessionId: targetId,
+      messages: [
+        { role: 'user', text: '[Image]' },
+        { role: 'assistant', text: 'second answer' },
+      ],
+      total: 4,
+      start: 2,
+      end: 4,
+      hasEarlier: true,
+      nextBefore: 2,
+    })
+    const earlierConversation = await execute('read_session_conversation', {
+      session_id: targetId,
+      before: 2,
+      limit: 2,
+    })
+    expect(earlierConversation.value).toEqual({
+      sessionId: targetId,
+      messages: [
+        { role: 'user', text: 'first question' },
+        { role: 'assistant', text: 'first answer' },
+      ],
+      total: 4,
+      start: 0,
+      end: 2,
+      hasEarlier: false,
+    })
+
+    readSession.mockImplementationOnce(async (sessionId) => {
+      if (sessionId !== targetId) throw new Error('session not found')
+      active.delete(targetId)
+      return { session: structuredClone(target.session.header), events: structuredClone([...target.session.events]) }
+    })
+    expect((await execute('read_session_conversation', { session_id: targetId })).isError).toBe(true)
+    active.add(targetId)
+
     const historicalId = SessionId('historical-session')
     expect((await execute('add_session_to_workspace', { session_id: historicalId })).value)
       .toEqual({ added: true, sessionId: historicalId })
@@ -105,6 +189,7 @@ describe('assistant tools', () => {
     expect((await execute('remove_session_from_workspace', { session_id: historicalId })).value)
       .toEqual({ removed: true, sessionId: historicalId })
     expect(active.has(historicalId)).toBe(false)
+    expect((await execute('read_session_conversation', { session_id: historicalId })).isError).toBe(true)
 
     expect((await execute('switch_session', { session_id: targetId })).isError).toBe(false)
     expect(registry.switchTo).toHaveBeenCalledWith(targetId)

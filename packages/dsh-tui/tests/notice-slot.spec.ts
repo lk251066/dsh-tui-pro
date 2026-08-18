@@ -105,3 +105,50 @@ describe('notice slot', () => {
     expect(requestRender).not.toHaveBeenCalled()
   })
 })
+
+describe('notice slot fade-out', () => {
+  beforeEach(() => { vi.useFakeTimers() })
+  afterEach(() => { vi.useRealTimers() })
+
+  it('fades the row through truecolor grays over the last 800ms', () => {
+    const requestRender = vi.fn()
+    const slot = new NoticeSlotComponent(createPalette(true), requestRender, true)
+    slot.show('Theme switched.', 'info', 5_000)
+    // Full kind tone before the fade window.
+    expect(slot.render(80)[0]).toContain(DIM_SGR)
+    // Inside the window the kind color drops to the gray interpolation.
+    vi.advanceTimersByTime(4_500)
+    const midRow = slot.render(80)[0] ?? ''
+    expect(midRow).toContain('\x1b[38;2;')
+    expect(midRow).not.toContain(DIM_SGR)
+    expect(midRow).toContain('Theme switched.')
+    // The gray dims as the deadline approaches, and the fade ticks repaint.
+    const midGray = Number(/38;2;(\d+);/.exec(midRow)?.[1])
+    vi.advanceTimersByTime(400)
+    const lateRow = slot.render(80)[0] ?? ''
+    const lateGray = Number(/38;2;(\d+);/.exec(lateRow)?.[1])
+    expect(lateGray).toBeLessThan(midGray)
+    expect(requestRender.mock.calls.length).toBeGreaterThan(1)
+    // The deadline still clears the row.
+    vi.advanceTimersByTime(100)
+    expect(slot.render(80)).toEqual([])
+  })
+
+  it('keeps the direct clear without truecolor', () => {
+    const slot = new NoticeSlotComponent(createPalette(true), vi.fn())
+    slot.show('plain', 'info', 5_000)
+    vi.advanceTimersByTime(4_900)
+    expect(slot.render(80)[0]).toContain(DIM_SGR)
+    vi.advanceTimersByTime(100)
+    expect(slot.render(80)).toEqual([])
+  })
+
+  it('clears a notice shorter than the fade window directly', () => {
+    const slot = new NoticeSlotComponent(createPalette(true), vi.fn(), true)
+    slot.show('brief', 'info', 500)
+    vi.advanceTimersByTime(400)
+    expect(slot.render(80)[0]).toContain(DIM_SGR)
+    vi.advanceTimersByTime(100)
+    expect(slot.render(80)).toEqual([])
+  })
+})

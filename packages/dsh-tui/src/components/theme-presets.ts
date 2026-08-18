@@ -4,18 +4,14 @@
  * back to a hand-picked standard-ANSI code otherwise; the `deepseek` default
  * keeps the terminal's own 16-color scheme authoritative for every adaptive
  * role, overriding only the fixed CC-derived semantic colors every preset
- * shares (permission, plan, and the reserved diff word tokens).
+ * shares (permission, plan, and the diff word-level colors).
  * @module @deepseek-ai/dsh-tui/components/theme-presets
  */
 
 import type { ColorRoleName } from './theme.ts'
 
-/**
- * Keys a preset may color: the palette's live roles plus reserved tokens that
- * are defined ahead of their wiring (the diff word-level colors) and stay inert
- * until a palette role exists for them.
- */
-export type PresetColorRole = ColorRoleName | 'diffAddedWord' | 'diffRemovedWord'
+/** Keys a preset may color: the palette's live color roles. */
+export type PresetColorRole = ColorRoleName
 
 /** One role's preset color: exact RGB for truecolor, nearest ANSI code otherwise. */
 export interface PresetColor {
@@ -35,6 +31,12 @@ export interface ThemePreset {
   readonly description: string
   /** Whether the palette assumes a dark terminal background. */
   readonly dark: boolean
+  /**
+   * The terminal background the preset assumes, used as the user-message
+   * bubble's mix base when the terminal's real background is unknown. Absent
+   * (adaptive presets) falls back to the scheme's black/white pole.
+   */
+  readonly background?: readonly [number, number, number]
   /** Per-role overrides; roles absent keep the adaptive 16-color spec. */
   readonly colors: Partial<Record<PresetColorRole, PresetColor>>
 }
@@ -55,11 +57,25 @@ const dimColor = (rgb: readonly [number, number, number]): PresetColor => ({
 const permissionColor: PresetColor = { rgb: [87, 105, 247], ansi16: '94' }
 const planColor: PresetColor = { rgb: [72, 150, 140], ansi16: '37' }
 
-/** Reserved diff word-level tokens (CC's values), defined but not yet wired to the palette. */
-const diffAddedWordColor: PresetColor = { rgb: [56, 166, 96], ansi16: '32' }
-const diffRemovedWordColor: PresetColor = { rgb: [179, 89, 107], ansi16: '31' }
+/**
+ * Diff word-level colors (CC's hues). Bold composes with the foreground so the
+ * changed words stand out inside an already green/red row while the palette
+ * stays foreground-only.
+ */
+const diffAddedWordColor: PresetColor = {
+  rgb: [56, 166, 96],
+  ansi16: '1;32',
+  close: '22;39',
+  truecolorAttribute: { open: '1', close: '22' },
+}
+const diffRemovedWordColor: PresetColor = {
+  rgb: [179, 89, 107],
+  ansi16: '1;31',
+  close: '22;39',
+  truecolorAttribute: { open: '1', close: '22' },
+}
 
-/** The semantic roles and reserved diff tokens every preset carries. */
+/** The semantic roles and diff word-level colors every preset carries. */
 const semanticColors = {
   permission: permissionColor,
   plan: planColor,
@@ -79,6 +95,8 @@ export const THEME_PRESETS: Readonly<Record<string, ThemePreset>> = {
   dracula: {
     description: 'Dracula — purple accent on deep night',
     dark: true,
+    // The Dracula canvas #282a36; the bubble lifts from it.
+    background: [40, 42, 54],
     colors: {
       accent: { rgb: [189, 147, 249], ansi16: '35' },
       brand: { rgb: [189, 147, 249], ansi16: '35' },
@@ -93,6 +111,8 @@ export const THEME_PRESETS: Readonly<Record<string, ThemePreset>> = {
   nord: {
     description: 'Nord — frost-blue accent, polar-night tones',
     dark: true,
+    // The Nord polar-night canvas #2e3440; the bubble lifts from it.
+    background: [46, 52, 64],
     colors: {
       accent: { rgb: [136, 192, 208], ansi16: '36' },
       brand: { rgb: [94, 129, 172], ansi16: '34' },
@@ -107,6 +127,8 @@ export const THEME_PRESETS: Readonly<Record<string, ThemePreset>> = {
   'catppuccin-mocha': {
     description: 'Catppuccin Mocha — pastel lavender accent',
     dark: true,
+    // The Catppuccin Mocha canvas #1e1e2e; the bubble lifts from it.
+    background: [30, 30, 46],
     colors: {
       accent: { rgb: [203, 166, 247], ansi16: '35' },
       brand: { rgb: [137, 180, 250], ansi16: '34' },
@@ -123,11 +145,16 @@ export const THEME_PRESETS: Readonly<Record<string, ThemePreset>> = {
     dark: true,
     colors: {
       // The adaptive scheme with every green role moved to blue: success (and
-      // the diff's added lines through it) plus the reserved added-word token.
+      // the diff's added lines through it) plus the added-word emphasis.
       // Warning and error keep the adaptive hues.
       ...semanticColors,
       success: { rgb: [51, 153, 255], ansi16: '38;5;75' },
-      diffAddedWord: { rgb: [51, 153, 255], ansi16: '38;5;75' },
+      diffAddedWord: {
+        rgb: [51, 153, 255],
+        ansi16: '1;38;5;75',
+        close: '22;39',
+        truecolorAttribute: { open: '1', close: '22' },
+      },
     },
   },
 }

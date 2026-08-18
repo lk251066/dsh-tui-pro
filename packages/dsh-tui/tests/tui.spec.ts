@@ -208,6 +208,7 @@ describe('TUI config', () => {
       sidebarWidth: 32,
       showReasoning: false,
       maxToolOutputLines: 6,
+      maxMessageLines: 30,
       maxDiffEditLength: 1000,
       maxQuestionOptions: 8,
       maxModelOptions: 8,
@@ -226,7 +227,7 @@ describe('TUI config', () => {
         color: true,
         truecolor: false,
         name: 'deepseek',
-        leftPrompt: '${cwd}${git/worktree}${model}${context}',
+        leftPrompt: '${cwd}${git/worktree}${model}${context}${memory}',
         rightPrompt: '',
         inputPrompt: '${symbol} ${indicator}',
         inputPlaceholder: 'Enter steer · Tab queue · Esc cancel',
@@ -237,6 +238,7 @@ describe('TUI config', () => {
       sidebarWidth: 36,
       showReasoning: false,
       maxToolOutputLines: 2,
+      maxMessageLines: 13,
       maxDiffEditLength: 12,
       maxQuestionOptions: 3,
       maxModelOptions: 4,
@@ -257,6 +259,7 @@ describe('TUI config', () => {
       sidebarWidth: 36,
       showReasoning: false,
       maxToolOutputLines: 2,
+      maxMessageLines: 13,
       maxDiffEditLength: 12,
       maxQuestionOptions: 3,
       maxModelOptions: 4,
@@ -275,7 +278,7 @@ describe('TUI config', () => {
         color: false,
         truecolor: true,
         name: 'deepseek',
-        leftPrompt: '${cwd}${git/worktree}${model}${context}',
+        leftPrompt: '${cwd}${git/worktree}${model}${context}${memory}',
         rightPrompt: '',
         inputPrompt: '${symbol} ${indicator}',
         inputPlaceholder: 'Enter steer · Tab queue · Esc cancel',
@@ -2731,7 +2734,13 @@ describe('pi-tui chat lifecycle and transcript', () => {
     let didDispose = false
     let clock = 0
     try {
-      result = await setup({ omitInitialLifecycle: true, now: () => clock })
+      result = await setup({
+        omitInitialLifecycle: true,
+        now: () => clock,
+        // A seeded prompt keeps the session out of the pristine welcome
+        // animation, whose interval would otherwise share the global spy.
+        beforeMount(session) { appendUser(session, 'seed prompt') },
+      })
       intervalSpy.mockClear()
       clearIntervalSpy.mockClear()
       result.session.append('compaction/start', { turn: null })
@@ -2996,9 +3005,10 @@ describe('pi-tui chat lifecycle and transcript', () => {
     expect(result.terminal.output).toContain('nested result')
     expect(result.terminal.output).toContain('[future-block]')
     expect(result.terminal.output).toContain('[content]')
-    // User input uses the turn-level `You` heading and keeps the markdown
-    // source verbatim, fences included.
-    expect(result.terminal.output).toContain('\x1b[4m\x1b[1m\x1b[95mYou')
+    // User input uses the turn-level `You` heading (permission blue, bold) on
+    // the bubble fill, and keeps the markdown source verbatim, fences included.
+    expect(result.terminal.output).toContain('\x1b[1m\x1b[94mYou')
+    expect(result.terminal.output).toContain('\x1b[1m\x1b[2;39m›\x1b[22;39m\x1b[22m # Heading')
     expect(result.terminal.output).toContain('```ts')
     // Assistant fenced code renders through the syntax highlighter: keywords
     // take the accent role and numbers the warning role rather than one flat
@@ -3235,9 +3245,9 @@ describe('pi-tui chat lifecycle and transcript', () => {
     dateNow.mockRestore()
   })
 
-  it('/quit exits while idle', async () => {
+  it('/exit exits while idle', async () => {
     const result = await setup()
-    result.terminal.send('/quit')
+    result.terminal.send('/exit')
     result.terminal.send('\r')
     await tick()
 
@@ -4342,7 +4352,13 @@ describe('pi-tui chat lifecycle and transcript', () => {
   )
 
   it('shows context, agents, jobs, and settings in the main area while preserving the workspace sidebar', async () => {
-    const result = await setup({ terminalRows: 80 })
+    // A seeded prompt keeps the session out of the pristine welcome box, so
+    // the main-area swap deterministically repaints the rows the sidebar
+    // sections share (the assertions read the re-emitted rows).
+    const result = await setup({
+      terminalRows: 80,
+      beforeMount(session) { appendUser(session, 'seed prompt') },
+    })
     for (const [command, title] of [
       ['/context', 'Context'],
       ['/agents', 'Subagents'],
@@ -4800,10 +4816,10 @@ describe('pi-tui chat lifecycle and transcript', () => {
     await result.ctx.fiber.dispose()
   })
 
-  it('cancels and exits from /quit without waiting for the running agent to become idle', async () => {
+  it('cancels and exits from /exit without waiting for the running agent to become idle', async () => {
     const result = await setup({ status: 'running' })
     result.agent.whenIdle = () => new Promise<void>(() => {})
-    result.terminal.send('/quit')
+    result.terminal.send('/exit')
     result.terminal.send('\r')
     await tick()
     expect(result.agent.cancelled).toContainEqual({ kind: 'user' })
@@ -7302,7 +7318,12 @@ describe('terminal mounting', () => {
   })
 
   it('detects a light terminal color scheme without dropping streaming state', async () => {
-    const result = await setup({ config: { theme: { color: true } } })
+    // A seeded prompt keeps the session out of the pristine welcome
+    // animation, whose light render ticks would grow the output on their own.
+    const result = await setup({
+      config: { theme: { color: true } },
+      beforeMount(session) { appendUser(session, 'seed prompt') },
+    })
     expect(result.terminal.output).toContain('deepseek-v4-flash')
 
     // A report matching the current scheme is a no-op: no palette rebuild or

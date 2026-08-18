@@ -41,7 +41,7 @@ buffer
   style 0-62 dim
 19| "/palette — Show every color and attribute role this terminal renders                        "
   style 0-67 dim
-20| "/quit — Cancel the active turn and exit the TUI                                            "
+20| "/quit — Close this project session and return to the assistant                             "
   style 0-46 dim
 21| "/reload — EXPERIMENTAL (dev): re-read loader config files and apply the diff (idle only)    "
   style 0-87 dim

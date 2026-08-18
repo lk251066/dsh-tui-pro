@@ -1,0 +1,252 @@
+import { describe, expect, it } from 'vitest'
+import { Markdown, visibleWidth } from '@earendil-works/pi-tui'
+import { CallId, createToolResultMessage } from '@deepseek-ai/dsh-llm'
+import type { SessionEvent } from '@deepseek-ai/dsh-session'
+import {
+  CollapsedToolGroupComponent,
+  StreamingAssistantComponent,
+  ToolCardComponent,
+  UserMessageComponent,
+} from '../src/components/transcript.ts'
+import { TOOL_SETTLED } from '../src/components/figures.ts'
+import { parseArguments } from '../src/components/content.ts'
+import { createPalette, markdownTheme } from '../src/components/theme.ts'
+import { formatClockTime } from '../src/chat/timing.ts'
+
+const plain = createPalette(false)
+const color = createPalette(true, 'dark')
+const plainMd = markdownTheme(plain)
+const colorMd = markdownTheme(color)
+
+/** The header stamp's fixed wall-clock time: 12:30 local on 2026-07-21. */
+const STAMP = new Date(2026, 6, 21, 12, 30, 0).getTime()
+
+function toolResult(text: string): Extract<SessionEvent, { type: 'tool/result' }>['data'] {
+  const message = createToolResultMessage({
+    callId: CallId('call-1'),
+    content: [{ type: 'text', text }],
+    isError: false,
+  })
+  return { turn: 1, step: 1, message }
+}
+
+function toolCard(palette: typeof plain, mdTheme: typeof plainMd): ToolCardComponent {
+  return new ToolCardComponent('bash', parseArguments('{}'), undefined, 10, 2_000, palette, mdTheme)
+}
+
+describe('UserMessageComponent', () => {
+  it('renders the permission-blue header and the › marker with a hanging indent', () => {
+    const rows = new UserMessageComponent('one\ntwo', plain).render(40).map(row => row.trimEnd())
+    expect(rows).toEqual(['You', '› one', '  two'])
+  })
+
+  it('indents soft-wrapped continuation rows under the marker column', () => {
+    // pi-tui's Text pads the header row to width; the body rows stay unpadded.
+    const rows = new UserMessageComponent('aaaaaaaaaaaaaaaaaaaa', plain).render(12).map(row => row.trimEnd())
+    expect(rows).toEqual(['You', '› aaaaaaaaaa', '  aaaaaaaaaa'])
+  })
+
+  it('stamps the header with the event clock time when given', () => {
+    const rows = new UserMessageComponent('hi', plain, [], undefined, STAMP).render(40)
+    expect(rows[0]?.trimEnd()).toBe(`You ${formatClockTime(STAMP)}`)
+    expect(rows[0]?.trimEnd()).toBe('You 12:30')
+  })
+
+  it('fills every row to the component width with the bubble background', () => {
+    const rows = new UserMessageComponent('hi', color, [], undefined, STAMP).render(24)
+    for (const row of rows) {
+      expect(row.startsWith('\x1b[100m')).toBe(true)
+      expect(row.endsWith('\x1b[49m')).toBe(true)
+      expect(visibleWidth(row)).toBe(24)
+    }
+    // The header keeps the bold permission-blue `You` inside the fill.
+    expect(rows[0]).toContain('\x1b[1m\x1b[94mYou')
+  })
+
+  it('skips the fill and the padding when color is off', () => {
+    const rows = new UserMessageComponent('hi', plain).render(24).map(row => row.trimEnd())
+    expect(rows).toEqual(['You', '› hi'])
+  })
+})
+
+describe('StreamingAssistantComponent', () => {
+  it('opens a two-row gap and a stamped header for the turn’s header-owning step', () => {
+    const step = new StreamingAssistantComponent({ turn: 1, step: 1 }, false, plain, plainMd, 30)
+    step.markStart(STAMP)
+    step.settle([{ type: 'text', text: 'answer' }], STAMP + 2_000)
+    const rows = step.render(40)
+    expect(rows[0]).toBe('')
+    expect(rows[1]).toBe('')
+    expect(rows[2]?.trimEnd()).toBe(`Assistant ${formatClockTime(STAMP)}`)
+    expect(rows[3]?.trimEnd()).toBe('answer')
+  })
+
+  it('keeps a one-row gap and no header for folded continuations', () => {
+    const step = new StreamingAssistantComponent({ turn: 1, step: 2 }, false, plain, plainMd, 30)
+    step.markStart(STAMP)
+    step.setFoldedContinuation(true)
+    step.settle([{ type: 'text', text: 'answer' }], STAMP + 2_000)
+    const rows = step.render(40)
+    expect(rows[0]).toBe('')
+    expect(rows[1]?.trimEnd()).toBe('answer')
+    expect(rows.join('\n')).not.toContain('Assistant')
+  })
+
+  it('renders shown reasoning as a quoted block with the ▎ bar', () => {
+    const step = new StreamingAssistantComponent({ turn: 1, step: 1 }, true, plain, plainMd, 30)
+    step.markStart(STAMP)
+    step.settle([
+      { type: 'reasoning', text: 'let me think\n\nsecond para' },
+      { type: 'text', text: 'answer' },
+    ], STAMP + 2_000)
+    const rows = step.render(40)
+    expect(rows.join('\n')).toContain('▼ ∴ Thinking for 2.0s')
+    const trimmed = rows.map(row => row.trimEnd())
+    const first = trimmed.findIndex(row => row === '▎ let me think')
+    expect(first).toBeGreaterThan(-1)
+    // The bar does not break at the paragraph gap.
+    expect(trimmed[first + 1]).toBe('▎')
+    expect(trimmed[first + 2]).toBe('▎ second para')
+  })
+
+  it('quotes streamed reasoning on the live path too', () => {
+    const step = new StreamingAssistantComponent({ turn: 1, step: 1 }, false, plain, plainMd, 30)
+    step.markStart(STAMP)
+    step.update({ type: 'block-start', index: 0, blockType: 'reasoning' })
+    step.update({ type: 'reasoning-delta', index: 0, text: 'streamed thought' })
+    const rows = step.render(40)
+    expect(rows.join('\n')).toContain('▼ ∴ Thinking…')
+    expect(rows.map(row => row.trimEnd())).toContain('▎ streamed thought')
+  })
+
+  it('keeps the folded reasoning summary bar-free', () => {
+    const step = new StreamingAssistantComponent({ turn: 1, step: 1 }, false, plain, plainMd, 30)
+    step.markStart(STAMP)
+    step.settle([
+      { type: 'reasoning', text: 'hidden thought' },
+      { type: 'text', text: 'answer' },
+    ], STAMP + 2_000)
+    const rows = step.render(40)
+    expect(rows.join('\n')).toContain('▶ Thinking for 2.0s · 1 lines')
+    expect(rows.join('\n')).not.toContain('▎')
+    expect(rows.join('\n')).not.toContain('hidden thought')
+  })
+})
+
+describe('StreamingAssistantComponent long-reply fold', () => {
+  const body = Array.from({ length: 8 }, (_, index) => `line ${index + 1}`).join('\n')
+
+  it('folds a settled reply past maxMessageLines to a head preview and a disclosure row', () => {
+    const step = new StreamingAssistantComponent({ turn: 1, step: 1 }, false, plain, plainMd, 3)
+    step.markStart(STAMP)
+    step.settle([{ type: 'text', text: body }], STAMP + 2_000)
+    const rows = step.render(40).map(row => row.trimEnd())
+    expect(rows).toEqual(['', '', 'Assistant 12:30', 'line 1', 'line 2', 'line 3', '… +5 lines (click to expand)'])
+  })
+
+  it('expands the folded reply when its disclosure row is clicked', () => {
+    const step = new StreamingAssistantComponent({ turn: 1, step: 1 }, false, plain, plainMd, 3)
+    step.markStart(STAMP)
+    step.settle([{ type: 'text', text: body }], STAMP + 2_000)
+    const hintRow = step.render(40).findIndex(row => row.includes('click to expand'))
+    expect(step.clickTranscriptRow(hintRow, 40)).toBe(true)
+    const rows = step.render(40).map(row => row.trimEnd())
+    expect(rows).toContain('line 8')
+    expect(rows.join('\n')).not.toContain('click to expand')
+    // A click anywhere else is not a disclosure.
+    expect(step.clickTranscriptRow(0, 40)).toBe(false)
+  })
+
+  it('never folds a streaming reply', () => {
+    const step = new StreamingAssistantComponent({ turn: 1, step: 1 }, false, plain, plainMd, 3)
+    step.update({ type: 'block-start', index: 0, blockType: 'text' })
+    step.update({ type: 'text-delta', index: 0, text: body })
+    const rows = step.render(40).map(row => row.trimEnd())
+    expect(rows).toContain('line 8')
+    expect(rows.join('\n')).not.toContain('click to expand')
+  })
+
+  it('keeps a reply within the budget unfolded', () => {
+    const step = new StreamingAssistantComponent({ turn: 1, step: 1 }, false, plain, plainMd, 30)
+    step.settle([{ type: 'text', text: 'short answer' }], STAMP + 2_000)
+    expect(step.render(40).join('\n')).not.toContain('click to expand')
+  })
+})
+
+describe('ToolCardComponent header tones', () => {
+  it('keeps the whole pending header in the warning color', () => {
+    const card = toolCard(color, colorMd)
+    expect(card.render(80)[1]).toBe('\x1b[33m▶ ○ bash\x1b[39m')
+  })
+
+  it('settles to a dim header with only the status glyph colored', () => {
+    const card = toolCard(color, colorMd)
+    card.updateResult(toolResult('output line'))
+    expect(card.render(80)[1]).toBe(
+      `\x1b[2;39m▶ \x1b[22;39m\x1b[32m${TOOL_SETTLED()}\x1b[39m\x1b[2;39m bash\x1b[22;39m`,
+    )
+  })
+
+  it('colors a failed settled glyph in the error role', () => {
+    const card = toolCard(color, colorMd)
+    card.updateResult({
+      turn: 1,
+      step: 1,
+      message: createToolResultMessage({
+        callId: CallId('call-1'),
+        content: [{ type: 'text', text: 'boom' }],
+        isError: true,
+      }),
+    })
+    expect(card.render(80)[1]).toContain(`\x1b[31m${TOOL_SETTLED()}\x1b[39m`)
+    expect(card.render(80)[1]).toContain('\x1b[2;39m')
+  })
+})
+
+describe('CollapsedToolGroupComponent summary glyph', () => {
+  function settle(target: ToolCardComponent): void {
+    target.updateResult(toolResult('output line'))
+  }
+
+  it('paints the settled glyph in the success color and keeps the counts bold', () => {
+    const cards = [toolCard(color, colorMd), toolCard(color, colorMd), toolCard(color, colorMd)]
+    for (const card of cards) settle(card)
+    const group = new CollapsedToolGroupComponent(cards, color)
+    const row = group.render(80)[1] ?? ''
+    expect(row).toContain(`\x1b[32m${TOOL_SETTLED()}\x1b[39m`)
+    expect(row).toContain('\x1b[1m3\x1b[22m')
+  })
+
+  it('keeps the pending glyph dim with the prose', () => {
+    const cards = [toolCard(color, colorMd), toolCard(color, colorMd), toolCard(color, colorMd)]
+    const group = new CollapsedToolGroupComponent(cards, color)
+    const row = group.render(80)[1] ?? ''
+    expect(row).toContain('\x1b[2;39m○\x1b[22;39m')
+    expect(row).not.toContain('\x1b[32m')
+  })
+})
+
+describe('markdownTheme code block edge', () => {
+  it('draws the ▎ bar on every code row, the language row, and the close', () => {
+    const rows = new Markdown('before\n```ts\nconst a = 1\n```\nafter', 0, 0, plainMd)
+      .render(80)
+      .map(row => row.trimEnd())
+    expect(rows).toContain('▎ ts')
+    expect(rows).toContain('▎ const a = 1')
+    // The otherwise-empty closing fence draws the bare bar.
+    expect(rows).toContain('▎')
+  })
+
+  it('paints the bar in the dim role when color is on', () => {
+    // pi-tui's Markdown pads rows to the render width; trim for the SGR compare.
+    const rows = new Markdown('```\nx\n```', 0, 0, colorMd).render(80).map(row => row.trimEnd())
+    expect(rows[0]).toBe(color.dim('▎'))
+    expect(rows[1]).toBe(`${color.dim('▎')} ${color.code('x')}`)
+    expect(rows[2]).toBe(color.dim('▎'))
+  })
+
+  it('keeps the language label next to the bar when color is on', () => {
+    const rows = new Markdown('```ts\nx\n```', 0, 0, colorMd).render(80).map(row => row.trimEnd())
+    expect(rows[0]).toBe(color.dim('▎ ts'))
+  })
+})

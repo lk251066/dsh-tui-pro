@@ -5,7 +5,7 @@
  * @module @deepseek-ai/dsh-tui/components/text
  */
 
-import { hyperlink } from '@earendil-works/pi-tui'
+import { hyperlink, truncateToWidth, visibleWidth } from '@earendil-works/pi-tui'
 
 const TERMINAL_CONTROL_PATTERN = /[\u0000-\u0009\u000b-\u001f\u007f-\u009f]/gu
 const TERMINAL_OSC_PATTERN = /(?:\u001B\]|\u009D)(?:(?!\u0007|\u001B\\)[\s\S])*(?:\u0007|\u001B\\|$)/gu
@@ -51,6 +51,19 @@ export function displayText(text: string): string {
  */
 export function displayInlineText(text: string): string {
   return displayText(text).replaceAll('\n', '\\x0a')
+}
+
+/**
+ * Fit one rendered row to exactly `width` columns: clip ANSI-aware when it
+ * overflows, right-pad with spaces when it falls short. Rows already at width
+ * pass through unchanged.
+ * @param value - The row to fit (application ANSI is width-transparent).
+ * @param width - Target width in terminal columns.
+ * @returns The row at exactly `width` visible columns.
+ */
+export function padToWidth(value: string, width: number): string {
+  const clipped = truncateToWidth(value, Math.max(0, width), '')
+  return clipped + ' '.repeat(Math.max(0, width - visibleWidth(clipped)))
 }
 
 /**

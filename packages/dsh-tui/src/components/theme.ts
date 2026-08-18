@@ -7,6 +7,7 @@
 
 import type {
   MarkdownTheme,
+  RgbColor,
   SelectListTheme,
   TerminalColorScheme,
 } from '@earendil-works/pi-tui'
@@ -31,7 +32,13 @@ export type Colorable = string & { readonly __coloredBy?: undefined }
 /** Applies one color role; rejects input that already carries a color. */
 export type ColorRole = (text: Colorable) => Colored
 
-/** Applies one SGR attribute; accepts colored or uncolored text and preserves its color. */
+/**
+ * Applies one SGR attribute or the bubble background fill; accepts colored or
+ * uncolored text and preserves its color. Attributes (bold, italic, underline,
+ * strike, reverse) and the background occupy independent SGR groups from the
+ * foreground color, so they compose in either order without either side
+ * clobbering the other.
+ */
 export type AttributeRole = <T extends string>(text: T) => T
 
 /**
@@ -56,21 +63,34 @@ export interface Palette {
   success: ColorRole
   warning: ColorRole
   error: ColorRole
-  /** Permission prompts and inline code, CC's permission blue (reserved until the permission UI lands). */
+  /** Permission prompts, the `You` role header, and inline code, CC's permission blue. */
   permission: ColorRole
   /** Plan-mode surfaces, CC's plan teal (reserved until the plan chip lands). */
   plan: ColorRole
   code: ColorRole
+  /** Changed words on a diff's added lines: bold over the line color. */
+  diffAddedWord: ColorRole
+  /** Changed words on a diff's removed lines: bold over the line color. */
+  diffRemovedWord: ColorRole
   bold: AttributeRole
   italic: AttributeRole
   underline: AttributeRole
   strike: AttributeRole
   /** Reverse video for the active selection; swaps the theme's own fg/bg so it reads on any scheme. */
   selected: AttributeRole
+  /**
+   * Background fill behind the user-message bubble — the palette's one
+   * background exception. Derived from the terminal background by
+   * {@link createPalette} (slightly lifted on dark schemes, slightly shaded on
+   * light ones), never a fixed spec color, so it reads as a whisper of contrast
+   * on whatever canvas the terminal already has. A background SGR emits no
+   * glyphs, so a transcript drag-select still copies clean text.
+   */
+  bubble: AttributeRole
 }
 
 /** Names of the palette's color roles, in the order `/palette` prints them. */
-export const COLOR_ROLES = ['text', 'dim', 'accent', 'brand', 'code', 'success', 'warning', 'error', 'permission', 'plan'] as const
+export const COLOR_ROLES = ['text', 'dim', 'accent', 'brand', 'code', 'success', 'warning', 'error', 'permission', 'plan', 'diffAddedWord', 'diffRemovedWord'] as const
 
 /** One color role's name. */
 export type ColorRoleName = typeof COLOR_ROLES[number]
@@ -89,10 +109,13 @@ export interface RoleSpec {
 }
 
 /**
- * Every SGR code the TUI is allowed to emit, keyed by role. This table is the
- * single source: {@link createPalette} derives the wrappers from it and
- * `/palette` prints it, so a role cannot exist in one and not the other, and no
- * component hand-writes an escape.
+ * Every foreground and attribute SGR code the TUI is allowed to emit, keyed by
+ * role. This table is the single source for those roles: {@link createPalette}
+ * derives the wrappers from it and `/palette` prints it, so a role cannot exist
+ * in one and not the other, and no component hand-writes an escape. The one
+ * background fill (the user-message `bubble` role) is not here: it is derived
+ * from the probed terminal background by {@link bubbleSpec}, since a fixed spec
+ * color cannot track the terminal's canvas.
  *
  * Only the standard 16-color set and SGR attributes appear here. Terminals remap
  * those to the user's active theme, so the TUI stays legible on any background;
@@ -130,10 +153,15 @@ export function paletteSpec(scheme: TerminalColorScheme): {
       warning: { open: '33', close: '39', purpose: 'Pending calls and warnings' },
       error: { open: '31', close: '39', purpose: 'Failures, signals, and a diff\'s removed lines' },
       // Semantic roles mirroring Claude Code's theme: permission's bright blue
-      // and plan's white-on-dark teal. No consumer yet — defined so presets can
-      // theme them before the surfaces land.
-      permission: { open: '94', close: '39', purpose: 'Permission prompts and inline code' },
+      // (the `You` role header) and plan's white-on-dark teal (reserved until
+      // the plan chip lands, defined so presets can theme it ahead of the surface).
+      permission: { open: '94', close: '39', purpose: 'Permission prompts and the user role header' },
       plan: { open: '37', close: '39', purpose: 'Plan-mode surfaces' },
+      // Word-level diff emphasis: bold over the side's own line color, so the
+      // changed words stand out inside an already green/red row while the
+      // palette stays foreground-only.
+      diffAddedWord: { open: '1;32', close: '22;39', purpose: 'A diff\'s changed words on added lines' },
+      diffRemovedWord: { open: '1;31', close: '22;39', purpose: 'A diff\'s changed words on removed lines' },
     },
     attributes: {
       bold: { open: '1', close: '22', purpose: 'Emphasis; composes with any color' },
@@ -160,18 +188,65 @@ export interface PaletteOptions {
   preset?: ThemePreset
   /** Whether 24-bit SGR may be emitted, painting preset roles as `38;2;r;g;b`. */
   truecolor?: boolean
+  /**
+   * The terminal's probed background (OSC 11), used as the bubble mix base when
+   * known; absent falls back to the preset's assumed canvas, then the scheme.
+   */
+  background?: RgbColor
+}
+
+/** White fraction mixed into a dark terminal background for the bubble fill. */
+const BUBBLE_DARK_LIFT = 0.12
+/** Black fraction mixed into a light terminal background for the bubble fill. */
+const BUBBLE_LIGHT_SHADE = 0.04
+
+/**
+ * The user-message bubble's background spec, derived from the terminal's canvas
+ * rather than a fixed color: a dark background lifted ~12% toward white, a
+ * light one shaded ~4% toward black, so the bubble reads as a whisper of
+ * contrast on any scheme (codex's user-bubble treatment). The mix base is the
+ * probed terminal background when known, else the preset's assumed canvas, else
+ * the scheme's black/white pole; the base's own luma picks the mix direction.
+ * Without truecolor the fill degrades to the nearest ANSI background (bright
+ * black on dark, white on light).
+ *
+ * @param scheme - Active terminal color scheme; selects the fallback base.
+ * @param options - Preset/truecolor/background options shared with the palette.
+ * @returns The SGR spec for the bubble background fill.
+ */
+export function bubbleSpec(scheme: TerminalColorScheme, options: PaletteOptions = {}): RoleSpec {
+  const presetBackground = options.preset?.background
+  const base: RgbColor = options.background
+    ?? (presetBackground === undefined
+      ? undefined
+      : { r: presetBackground[0], g: presetBackground[1], b: presetBackground[2] })
+    ?? (scheme === 'dark' ? { r: 0, g: 0, b: 0 } : { r: 255, g: 255, b: 255 })
+  // Rec. 601 luma against the midpoint between the two ANSI fallback fills.
+  const dark = 0.299 * base.r + 0.587 * base.g + 0.114 * base.b < 128
+  if (options.truecolor !== true) return { open: dark ? '100' : '47', close: '49', purpose: 'User-message bubble fill' }
+  const mix = (channel: number): number => dark
+    ? Math.round(channel + (255 - channel) * BUBBLE_DARK_LIFT)
+    : Math.round(channel * (1 - BUBBLE_LIGHT_SHADE))
+  return {
+    open: `48;2;${mix(base.r)};${mix(base.g)};${mix(base.b)}`,
+    close: '49',
+    purpose: 'User-message bubble fill',
+  }
 }
 
 /**
  * Theme-agnostic palette derived from {@link paletteSpec}. Body `text` stays the
  * terminal's default foreground so it reads on light and dark backgrounds alike;
  * grouping uses foreground-only bold, underlined role headers and reverse video
- * rather than fixed background fills or per-line prefixes, so a transcript
- * drag-select copies message text without stray glyphs.
+ * rather than per-line prefixes, so a transcript drag-select copies message
+ * text without stray glyphs. The one background exception is the user-message
+ * `bubble` fill ({@link bubbleSpec}): a background SGR emits no glyphs either,
+ * so the copied text stays clean while the user's own messages stand apart.
  *
  * @param enabled - Whether ANSI is emitted at all.
  * @param scheme - Active terminal color scheme; adjusts the code role.
- * @param options - Optional named-preset overrides (`/theme`).
+ * @param options - Optional named-preset overrides (`/theme`) and the probed
+ * terminal background the bubble fill derives from.
  * @returns The role palette for the given scheme.
  */
 export function createPalette(
@@ -183,6 +258,7 @@ export function createPalette(
   const roles = {} as Record<string, unknown>
   for (const name of COLOR_ROLES) roles[name] = ansi(spec.colors[name], enabled)
   for (const name of ATTRIBUTE_ROLES) roles[name] = ansi(spec.attributes[name], enabled)
+  roles.bubble = ansi(bubbleSpec(scheme, options), enabled)
   return roles as unknown as Palette
 }
 
@@ -190,20 +266,12 @@ export function createPalette(
  * The role spec for one scheme with optional preset overrides applied — the
  * single resolution path shared by {@link createPalette} and `/palette`.
  */
-/** Whether a preset color key names a live palette role (reserved tokens do not). */
-function isColorRoleName(name: string): name is ColorRoleName {
-  return (COLOR_ROLES as readonly string[]).includes(name)
-}
-
 function resolveSpec(scheme: TerminalColorScheme, options: PaletteOptions): ReturnType<typeof paletteSpec> {
   const base = paletteSpec(scheme)
   const { preset, truecolor } = options
   if (preset === undefined) return base
   const colors = { ...base.colors } as Record<ColorRoleName, RoleSpec>
   for (const [role, color] of Object.entries(preset.colors) as [PresetColorRole, PresetColor][]) {
-    // Reserved keys (the diff word-level colors) are defined ahead of their
-    // palette wiring and stay inert until a palette role exists for them.
-    if (!isColorRoleName(role)) continue
     const attribute = color.truecolorAttribute
     colors[role] = {
       open: truecolor === true
@@ -308,9 +376,17 @@ export function markdownTheme(palette: Palette, highlightCode?: (code: string, l
     code: text => palette.accent(text),
     codeBlock: text => palette.code(text),
     ...(highlightCode !== undefined ? { highlightCode } : {}),
-    // pi-tui presents both fence rows through this callback. Keep the opening
-    // language label, but hide Markdown syntax and the otherwise-empty close.
-    codeBlockBorder: text => palette.dim(text.slice(3)),
+    // Every code-block row carries the thinking bar's dim `▎` left edge, so a
+    // block stays delimited even where the code tone sits close to body text.
+    // pi-tui prepends `codeBlockIndent` to each code line (the SGR pair closes
+    // before the line's own colors, so nothing nests) and presents both fence
+    // rows through `codeBlockBorder`: the opening fence keeps its language
+    // label next to the bar, the otherwise-empty close draws the bar alone.
+    codeBlockIndent: `${palette.dim('▎')} `,
+    codeBlockBorder: (text) => {
+      const language = text.slice(3)
+      return language === '' ? palette.dim('▎') : palette.dim(`▎ ${language}`)
+    },
     // CC quotes: italic body at normal brightness, dim `▎` bar. pi-tui hardcodes
     // the `│ ` border string but routes it through this callback, so the bar
     // glyph is swapped here rather than in the renderer.

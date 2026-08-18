@@ -5,14 +5,13 @@
  */
 
 import {
-  truncateToWidth,
-  visibleWidth,
   type Component,
 } from '@earendil-works/pi-tui'
 import type { AgentStatus } from '@deepseek-ai/dsh-agent'
+import { workspaceLabel } from '../chat/helpers.ts'
 import { formatTokens } from '../chat/tokens.ts'
 import { SessionListComponent } from './session-list.ts'
-import { displayText } from './text.ts'
+import { displayText, padToWidth } from './text.ts'
 import type { Palette } from './theme.ts'
 
 /** Live values rendered below the session navigator. */
@@ -20,12 +19,9 @@ export interface WorkspaceSidebarState {
   readonly cwd: string
   readonly branch: string | undefined
   readonly status: AgentStatus
-  readonly model: string
-  readonly contextPercent: number | undefined
   readonly inputTokens: number
   readonly outputTokens: number
   readonly cacheHitRate: number | undefined
-  readonly queued: number
   readonly permission: string | undefined
   readonly plan: boolean
 }
@@ -34,17 +30,6 @@ export interface WorkspaceSidebarState {
 export interface WorkspaceSidebarOptions {
   /** Current terminal height in rows. */
   readonly terminalRows: () => number
-}
-
-function padToWidth(value: string, width: number): string {
-  const clipped = truncateToWidth(value, Math.max(0, width), '')
-  return clipped + ' '.repeat(Math.max(0, width - visibleWidth(clipped)))
-}
-
-function workspaceLabel(cwd: string): string {
-  const normalized = cwd.replaceAll('\\', '/').replace(/\/$/u, '')
-  const leaf = normalized.slice(normalized.lastIndexOf('/') + 1)
-  return leaf || cwd
 }
 
 function sectionTitle(title: string, width: number, palette: Palette): string[] {
@@ -60,12 +45,9 @@ export class WorkspaceSidebarComponent implements Component {
     cwd: '(unknown)',
     branch: undefined,
     status: 'idle',
-    model: 'model unset',
-    contextPercent: undefined,
     inputTokens: 0,
     outputTokens: 0,
     cacheHitRate: undefined,
-    queued: 0,
     permission: undefined,
     plan: false,
   }

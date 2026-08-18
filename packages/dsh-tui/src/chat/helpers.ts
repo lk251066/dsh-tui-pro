@@ -77,7 +77,7 @@ export function gitBranch(cwd: string): string | undefined {
     }).trim()
     /* v8 ignore next -- detached-HEAD behavior is exercised by the runtime smoke, not the unit checkout. */
     return branch === '' ? undefined : branch
-  } catch (_gitUnavailableOrOutsideWorktree) {
+  } catch {
     return undefined
   }
 }
@@ -138,6 +138,18 @@ export function sessionReferenceCard(source: unknown): string[] | undefined {
     const label = entry['label']
     if (typeof sessionId !== 'string' || typeof label !== 'string') return undefined
     labels.push(label === sessionId ? sessionId : `${label} (${sessionId})`)
+
   }
   return labels
+}
+
+/**
+ * Derive a workspace's display label from its working directory: the last path
+ * segment, or the raw path when no segment survives normalization.
+ * @param cwd - Display-ready working directory.
+ * @returns Workspace leaf name for sidebar and session-list headers.
+ */
+export function workspaceLabel(cwd: string): string {
+  const normalized = cwd.replaceAll('\\', '/').replace(/\/$/u, '')
+  return normalized.slice(normalized.lastIndexOf('/') + 1) || cwd
 }

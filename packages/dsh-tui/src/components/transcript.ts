@@ -12,11 +12,12 @@ import {
   Spacer,
   Text,
   truncateToWidth,
+  visibleWidth,
   wrapTextWithAnsi,
   type Component,
   type MarkdownTheme,
 } from '@earendil-works/pi-tui'
-import { diffLines as compareLines } from 'diff'
+import { diffLines as compareLines, diffWordsWithSpace as compareWords } from 'diff'
 import type { ContentBlock, StreamChunk } from '@deepseek-ai/dsh-llm'
 import type { JsonValue, SessionEvent, TodoItem } from '@deepseek-ai/dsh-session'
 import type {
@@ -27,14 +28,12 @@ import type {
 } from '@deepseek-ai/dsh-tools'
 import type { FileDiff } from '@deepseek-ai/dsh-tools'
 import { preview, renderUnknownXml } from './xml-tool-output.ts'
-import { displayInlineText, displayText } from './text.ts'
+import { displayInlineText, displayText, padToWidth } from './text.ts'
 import { gradientText, type Palette } from './theme.ts'
 import {
   fullLogoRows,
   logoFullWidth,
-  logoSingleWordWidth,
   paintLogoRow,
-  singleWordLogoRows,
 } from './logo.ts'
 import { contentText, type ParsedArguments } from './content.ts'
 import {
@@ -46,6 +45,7 @@ import {
 } from './figures.ts'
 import { progressiveTitle, settledTitle } from '../chat/tool-verbs.ts'
 import {
+  formatClockTime,
   formatStatusDuration,
   type StepPosition,
 } from '../chat/timing.ts'
@@ -100,6 +100,17 @@ interface DiffRow {
   readonly content: string
   /** Whether `content` carries syntax-highlight SGR rather than plain text. */
   readonly highlighted: boolean
+  /**
+   * Word-level fragments from pairing this row against its counterpart on the
+   * other side; set only on unhighlighted added/removed rows with shared words.
+   */
+  readonly segments?: readonly DiffSegment[]
+}
+
+/** One word-level fragment of a paired changed row: its text and whether it changed. */
+interface DiffSegment {
+  readonly text: string
+  readonly changed: boolean
 }
 
 /**
@@ -187,12 +198,62 @@ function foldDiffRows(rows: readonly DiffRow[]): DiffRow[] {
 }
 
 /**
+ * Word-diff the paired rows of an exact line diff: each adjacent removed run
+ * and the added run that follows it pair index-aligned (the classic
+ * pairing), and the words that actually changed become emphasized segments
+ * while shared words keep the line color. Highlighted rows (syntax SGR
+ * already interleaved) and fully replaced pairs (no shared word) keep the
+ * plain single-color rendering; the approximate whole-side fallback never
+ * reaches this pass.
+ */
+function applyWordDiff(rows: readonly DiffRow[]): DiffRow[] {
+  const result = [...rows]
+  let index = 0
+  while (index < result.length) {
+    if (result[index]?.kind !== 'removed') {
+      index += 1
+      continue
+    }
+    const removedStart = index
+    while (result[index + 1]?.kind === 'removed') index += 1
+    const removedRun = result.slice(removedStart, index + 1)
+    const addedStart = index + 1
+    while (result[index + 1]?.kind === 'added') index += 1
+    const addedRun = result.slice(addedStart, index + 1)
+    for (let pair = 0; pair < Math.min(removedRun.length, addedRun.length); pair += 1) {
+      const removed = removedRun[pair] as DiffRow
+      const added = addedRun[pair] as DiffRow
+      if (removed.highlighted || added.highlighted) continue
+      const parts = compareWords(removed.content, added.content)
+      const shared = parts.some(part => part.added !== true && part.removed !== true && part.value.trim() !== '')
+      if (!shared) continue
+      result[removedStart + pair] = {
+        ...removed,
+        segments: parts
+          .filter(part => part.added !== true)
+          .map(part => ({ text: part.value, changed: part.removed === true })),
+      }
+      result[addedStart + pair] = {
+        ...added,
+        segments: parts
+          .filter(part => part.removed !== true)
+          .map(part => ({ text: part.value, changed: part.added === true })),
+      }
+    }
+    index += 1
+  }
+  return result
+}
+
+/**
  * Style folded diff rows for the terminal: a dim, right-aligned line-number
  * gutter sized to the largest rendered line (`max(4, digits + 2)` columns),
  * then the side marker and content. A highlighted row keeps its syntax colors
  * and colors only the marker (SGR has no color stack, so marker and content
- * colors must not nest); a plain row keeps the pre-highlighter look of one
- * color across marker and content.
+ * colors must not nest); a word-paired row keeps the line color on shared
+ * words and emphasizes the changed words through the diff word roles; any
+ * other plain row keeps the pre-highlighter look of one color across marker
+ * and content.
  */
 function renderDiffRows(rows: readonly DiffRow[], palette: Palette): string[] {
   const maxLine = rows.reduce((max, row) => Math.max(max, row.line), 0)
@@ -205,6 +266,18 @@ function renderDiffRows(rows: readonly DiffRow[], palette: Palette): string[] {
     if (row.highlighted) {
       const marker = row.kind === 'added' ? palette.success('+') : row.kind === 'removed' ? palette.error('-') : ' '
       return `${gutter}${marker} ${row.content}`
+    }
+    if (row.segments !== undefined && row.kind !== 'context') {
+      // Colored spans concatenate rather than nest (the single-Colored rule):
+      // the marker and the shared words take the side's line color, the
+      // changed words take its word role.
+      const lineRole = row.kind === 'added' ? palette.success : palette.error
+      const wordRole = row.kind === 'added' ? palette.diffAddedWord : palette.diffRemovedWord
+      const marker = row.kind === 'added' ? '+' : '-'
+      const body = row.segments
+        .map(segment => segment.changed ? wordRole(segment.text) : lineRole(segment.text))
+        .join('')
+      return `${gutter}${lineRole(`${marker} `)}${body}`
     }
     const body = row.kind === 'added'
       ? palette.success(`+ ${row.content}`)
@@ -219,10 +292,12 @@ function renderDiffRows(rows: readonly DiffRow[], palette: Palette): string[] {
  * A file diff rendered as terminal rows in the Claude Code shape: a dim
  * line-number gutter (new-side numbers for added and context rows, old-side
  * for removed), syntax-highlighted row content when a highlighter is
- * available, long unchanged runs and oversized diffs folded to dim `⋯` notes,
- * and unchanged context that stays neutral and does not affect exact change
- * totals. Comparisons beyond the edit-distance budget fall back to whole-side
- * rendering so a model-authored pending edit cannot stall the TUI.
+ * available, paired changed rows word-diffed so the changed words emphasize
+ * over the line color, long unchanged runs and oversized diffs folded to dim
+ * `⋯` notes, and unchanged context that stays neutral and does not affect
+ * exact change totals. Comparisons beyond the edit-distance budget fall back
+ * to whole-side rendering so a model-authored pending edit cannot stall the
+ * TUI.
  */
 export function renderDiff(
   diff: FileDiff,
@@ -287,7 +362,8 @@ export function renderDiff(
       }
     }
   }
-  return { lines: [...lines, ...renderDiffRows(foldDiffRows(rows), palette)], added, removed, approximate }
+  const folded = foldDiffRows(rows)
+  return { lines: [...lines, ...renderDiffRows(approximate ? folded : applyWordDiff(folded), palette)], added, removed, approximate }
 }
 
 /**
@@ -301,37 +377,68 @@ export interface CondensedHeaderInfo {
   readonly title: string | undefined
 }
 
+/** One suggested command row inside the welcome box. */
+export interface WelcomeSuggestion {
+  /** The command as typed, e.g. `/new`. */
+  readonly command: string
+  /** What it does, in a few words. */
+  readonly description: string
+}
+
 /**
- * The startup banner. A fresh (history-less) session gets the full banner:
- * the block-letter DEEPSEEK HARNESS logo painted through the brand gradient
- * (plus a welcome row and a shortcut tips row); mid-width drops to the
- * DEEPSEEK word alone; narrow falls back to one compact text line. The sweep
- * reveal and the shimmer pass clip/overlay whichever shape is on screen.
+ * Contents of the welcome box shown before the first user message: the
+ * configured welcome line (or the default), the live model and working
+ * directory, and a few suggested commands.
+ */
+export interface WelcomeBoxInfo {
+  /** Configured welcome line; `undefined` renders the default. */
+  readonly welcome: string | undefined
+  /** Current model label. */
+  readonly model: string
+  /** Formatted working directory. */
+  readonly directory: string
+  /** Suggested commands, one `command description` row each. */
+  readonly suggestions: readonly WelcomeSuggestion[]
+}
+
+/** Left (`│ `) plus right (` │`) frame columns of the welcome box. */
+const WELCOME_FRAME_COLUMNS = 4
+
+/**
+ * The startup header. While the session log is pristine (nothing beyond the
+ * opening lifecycle prelude, no title) it renders a codex-style welcome box:
+ * a dim rounded frame (the framed editor's `╭─╮│╰─╯`) sized to its content,
+ * holding the block-letter logo painted through the brand gradient (or,
+ * below logo width, one compact brand line), the welcome line, the live
+ * model and directory, suggested commands, and the shortcut tips row. The
+ * sweep reveal clips the box left-to-right on startup; the shimmer pass then
+ * sweeps the logo inside it.
  *
  * When condensed identity data is supplied, the component renders the compact
- * workbench identity at every terminal width. The block logo remains available
- * to direct consumers that omit condensed identity data.
+ * workbench identity at every terminal width instead.
  */
 export class HeaderComponent implements Component {
-  /** Columns of the banner currently revealed; `undefined` renders it whole. */
+  /** Columns of the box currently revealed; `undefined` renders it whole. */
   private revealWidth: number | undefined
   /** Left edge of the shimmer window over the logo; `undefined` = off. */
   private shimmerOffset: number | undefined
+  /** Full width of the last rendered welcome box (the reveal sweep's target). */
+  private boxWidth = 0
 
   constructor(
-    private readonly subtitle: () => string | undefined,
+    private readonly welcome: () => WelcomeBoxInfo,
     private readonly palette: Palette,
     private readonly gradient: boolean,
     /**
      * Condensed identity segments, read per render; `undefined` renders the
-     * full startup banner instead.
+     * welcome box instead.
      */
     private readonly condensedInfo: () => CondensedHeaderInfo | undefined = () => undefined,
   ) {}
 
   /**
-   * Clip the banner to `width` columns (the sweep reveal); `undefined` restores it.
-   * @param width - Revealed banner width in columns, or `undefined` for the whole banner.
+   * Clip the box to `width` columns (the sweep reveal); `undefined` restores it.
+   * @param width - Revealed box width in columns, or `undefined` for the whole box.
    */
   setRevealWidth(width: number | undefined): void {
     this.revealWidth = width
@@ -345,15 +452,22 @@ export class HeaderComponent implements Component {
     this.shimmerOffset = offset
   }
 
+  /**
+   * The welcome box's full width in columns as last rendered (`0` before the
+   * first render); the reveal sweep drives its clip to this target.
+   * @returns The box width in columns.
+   */
+  welcomeBoxWidth(): number {
+    return this.boxWidth
+  }
+
   invalidate(): void {}
 
   render(width: number): string[] {
     const usable = Math.max(1, width - 2)
     const condensed = this.condensedInfo()
     if (condensed !== undefined) return this.renderCondensed(usable, condensed)
-    if (usable >= logoFullWidth()) return this.renderLogo(usable, fullLogoRows())
-    if (usable >= logoSingleWordWidth()) return this.renderLogo(usable, singleWordLogoRows())
-    return this.renderText(usable)
+    return this.renderWelcome(usable, this.welcome())
   }
 
   /**
@@ -373,33 +487,52 @@ export class HeaderComponent implements Component {
     return wrapTextWithAnsi(line, usable).map(wrapped => ` ${truncateToWidth(wrapped, usable, '')}`)
   }
 
-  /** Block-letter logo rows plus the welcome and tips rows, reveal-clipped. */
-  private renderLogo(usable: number, rows: readonly string[]): string[] {
-    const lines = rows.map(row => ` ${paintLogoRow(row, this.palette, this.gradient, this.shimmerOffset)}`)
-    const subtitle = this.subtitle()
-    lines.push('', ` ${this.palette.dim(displayText(subtitle ?? DEFAULT_WELCOME))}`)
-    lines.push(` ${this.palette.dim(LOGO_TIPS)}`)
+  /**
+   * The welcome box: content rows padded to the widest row inside a dim
+   * rounded frame, reveal-clipped while the sweep runs. The block logo fits
+   * from `logoFullWidth + frame` columns up; below it the box holds the
+   * one-line text brand instead.
+   */
+  private renderWelcome(usable: number, info: WelcomeBoxInfo): string[] {
+    const content: string[] = []
+    if (usable >= logoFullWidth() + WELCOME_FRAME_COLUMNS) {
+      content.push(...fullLogoRows().map(row =>
+        paintLogoRow(row, this.palette, this.gradient, this.shimmerOffset),
+      ))
+    } else {
+      const name = this.gradient
+        ? this.palette.bold(gradientText('DEEPSEEK'))
+        : this.palette.bold(this.palette.accent('DEEPSEEK'))
+      content.push(`${name} ${this.palette.bold('HARNESS')}`)
+    }
+    content.push('')
+    content.push(this.palette.dim(displayText(info.welcome ?? DEFAULT_WELCOME)))
+    content.push('')
+    content.push(`${this.palette.dim('model:')} ${displayText(info.model)}`)
+    content.push(`${this.palette.dim('directory:')} ${displayText(info.directory)}`)
+    content.push('')
+    for (const suggestion of info.suggestions) {
+      content.push(`${displayText(suggestion.command)} ${this.palette.dim(suggestion.description)}`)
+    }
+    content.push('')
+    content.push(this.palette.dim(LOGO_TIPS))
+    const innerWidth = Math.min(
+      Math.max(1, usable - WELCOME_FRAME_COLUMNS),
+      Math.max(...content.map(line => visibleWidth(line))),
+    )
+    this.boxWidth = innerWidth + WELCOME_FRAME_COLUMNS
+    const border = (glyph: string): string => this.palette.dim(glyph)
+    const horizontal = '─'.repeat(innerWidth + 2)
+    const lines = [
+      border(`╭${horizontal}╮`),
+      ...content.map(line => `${border('│')} ${padToWidth(line, innerWidth)} ${border('│')}`),
+      border(`╰${horizontal}╯`),
+    ]
     if (this.revealWidth === undefined) {
       return lines.map(line => truncateToWidth(line, usable, ''))
     }
     const revealed = this.revealWidth
     return lines.map(line => truncateToWidth(line, revealed, ''))
-  }
-
-  /** Narrow fallback: the one-line text banner. */
-  private renderText(usable: number): string[] {
-    const name = this.gradient
-      ? this.palette.bold(gradientText('DEEPSEEK'))
-      : this.palette.bold(this.palette.accent('DEEPSEEK'))
-    const title = `${name} ${this.palette.bold('HARNESS')}`
-    const subtitle = this.subtitle()
-    const line = subtitle === undefined
-      ? title
-      : `${title} ${this.palette.dim(displayText(subtitle))}`
-    const lines = wrapTextWithAnsi(line, usable).map(wrapped => ` ${truncateToWidth(wrapped, usable, '')}`)
-    if (this.revealWidth === undefined) return lines
-    const revealed = this.revealWidth
-    return lines.map(wrapped => truncateToWidth(wrapped, revealed, ''))
   }
 }
 
@@ -444,19 +577,47 @@ export class ImageBlockComponent extends Container {
 }
 
 /**
- * A user or steering prompt with one stable role header and plain echoed text.
- * Image blocks render inline beneath the text through {@link ImageBlockComponent}.
+ * User message body rows: the first visual row carries codex's `› ` prompt
+ * marker (bold over dim), continuation rows align under its text column.
+ * Wrapping happens here rather than in pi-tui's `Text` so the hanging indent
+ * survives soft wraps.
+ */
+class UserBodyComponent implements Component {
+  constructor(private readonly text: string, private readonly palette: Palette) {}
+
+  invalidate(): void {}
+
+  render(width: number): string[] {
+    const rows = wrapTextWithAnsi(this.text, Math.max(1, width - 2))
+    return rows.map((row, index) => index === 0
+      ? `${this.palette.bold(this.palette.dim('›'))} ${row}`
+      : `  ${row}`)
+  }
+}
+
+/**
+ * A user or steering prompt rendered as a codex-style bubble: every row (the
+ * role header, the body, image blocks) is padded to the component width and
+ * filled with the palette's derived `bubble` background, so the user's own
+ * messages read as one band apart from the assistant's bare text. The `You`
+ * header takes the permission blue (bold, no underline — the underline stays
+ * the Assistant header's banding), and a dim `HH:MM` stamp rides the header
+ * when the event time is known. Image blocks render inline beneath the text
+ * through {@link ImageBlockComponent}.
  */
 export class UserMessageComponent extends Container {
   constructor(
     text: string,
-    palette: Palette,
+    private readonly palette: Palette,
     images: readonly ImageAttachmentRef[] = [],
     loadImage?: (ref: ImageAttachmentRef) => Promise<Uint8Array | undefined>,
+    /** Wall-clock time of the `user/message` event, for the header stamp. */
+    at?: number,
   ) {
     super()
-    this.addChild(new Text(palette.underline(palette.bold(palette.accent('You'))), 0, 0))
-    if (text !== '') this.addChild(new Text(displayText(text), 0, 0))
+    const stamp = at === undefined ? '' : ` ${palette.dim(formatClockTime(at))}`
+    this.addChild(new Text(palette.bold(palette.permission('You')) + stamp, 0, 0))
+    if (text !== '') this.addChild(new UserBodyComponent(displayText(text), palette))
     const loader: (ref: ImageAttachmentRef) => Promise<Uint8Array | undefined>
       = loadImage === undefined ? () => Promise.resolve(undefined) : loadImage
     for (const image of images) {
@@ -467,16 +628,76 @@ export class UserMessageComponent extends Container {
       ))
     }
   }
+
+  /**
+   * Render the children, then pad each row to the full width and fill it with
+   * the bubble background. The pad rides along only when the fill actually
+   * paints (color on) — trailing pad spaces without a background would be
+   * invisible on screen yet noise in a monochrome drag-copy.
+   */
+  override render(width: number): string[] {
+    const fill = this.palette.bubble('') !== ''
+    return super.render(width).map((row) => {
+      if (!fill) return row
+      const padded = row + ' '.repeat(Math.max(0, width - visibleWidth(row)))
+      return this.palette.bubble(padded)
+    })
+  }
 }
+
+/**
+ * A settled assistant reply body rendered through Markdown. Past `maxLines`
+ * rendered rows the body folds to a head preview plus one dim disclosure row
+ * (`… +M lines (click to expand)`); the owning StreamingAssistantComponent
+ * holds the expanded state and rebuilds this component when it flips, the
+ * same disclosure pattern the folded Thinking line uses. Streaming replies
+ * never reach this component — they render in full so the live tail stays
+ * visible.
+ */
+class FoldableBodyComponent implements Component {
+  private readonly markdown: Markdown
+
+  constructor(
+    text: string,
+    private readonly maxLines: number,
+    private readonly expanded: boolean,
+    private readonly palette: Palette,
+    mdTheme: MarkdownTheme,
+  ) {
+    this.markdown = new Markdown(text, 0, 0, mdTheme, { color: value => palette.text(value) })
+  }
+
+  invalidate(): void {
+    this.markdown.invalidate()
+  }
+
+  render(width: number): string[] {
+    const rows = this.markdown.render(width)
+    if (this.expanded || rows.length <= this.maxLines) return rows
+    return [
+      ...rows.slice(0, this.maxLines),
+      this.palette.dim(`… +${rows.length - this.maxLines} lines ${shortcutHint('click', 'expand')}`),
+    ]
+  }
+}
+
+/** The disclosure row a folded assistant body ends with (click target). */
+const FOLDED_BODY_HINT = /^… \+\d+ lines \(click to expand\)$/u
 
 /**
  * Children of a settled assistant message: optional reasoning block then the
  * response text. The first visible step in a turn carries the Assistant role
- * header; later steps are continuations. A settled
+ * header (with a dim `HH:MM` stamp when the step's start time is known) and
+ * opens the message-level two-row gap; later steps are one-row-gap
+ * continuations. A settled
  * step folds its reasoning to one dim `∴ Thinking` line unless expanded
  * (Claude Code's default), while a streaming step keeps the reasoning live;
  * a folded continuation with no visible body renders nothing at all, so
- * tool-only steps leave no blank segment behind.
+ * tool-only steps leave no blank segment behind. Shown reasoning renders as a
+ * Markdown blockquote, so the quote style's dim `▎` bar gives the thinking
+ * block a left edge apart from tool output and the reply. A settled reply
+ * body longer than `maxMessageLines` rendered rows folds behind a
+ * click-to-expand disclosure row; a streaming reply always renders in full.
  */
 function assistantMessageChildren(
   content: readonly ContentBlock[],
@@ -486,15 +707,19 @@ function assistantMessageChildren(
   mdTheme: MarkdownTheme,
   settled: boolean,
   thinkingMs: number | undefined,
+  headerAt: number | undefined,
+  maxMessageLines: number,
+  textExpanded: boolean,
 ): Component[] {
   const reasoning = displayText(textBlocks(content, 'reasoning').trim())
   const text = displayText(textBlocks(content, 'text').trim())
   const showsReasoning = reasoning !== '' && (!settled || showReasoning)
   const foldsReasoning = settled && reasoning !== '' && !showReasoning
   if (foldedContinuation && !showsReasoning && !foldsReasoning && text === '') return []
-  const children: Component[] = [new Spacer(1)]
+  const children: Component[] = [new Spacer(foldedContinuation ? 1 : 2)]
   if (!foldedContinuation) {
-    children.push(new Text(palette.underline(palette.bold(palette.accent('Assistant'))), 0, 0))
+    const stamp = headerAt === undefined ? '' : ` ${palette.dim(formatClockTime(headerAt))}`
+    children.push(new Text(palette.underline(palette.bold(palette.accent('Assistant'))) + stamp, 0, 0))
   }
   const duration = thinkingMs === undefined ? '' : ` for ${formatStatusDuration(thinkingMs)}`
   const reasoningLines = reasoning === '' ? 0 : reasoning.split('\n').length
@@ -503,14 +728,21 @@ function assistantMessageChildren(
       `▶ Thinking${duration} · ${String(reasoningLines)} lines ${shortcutHint('ctrl+r', 'expand')}`,
     )), 0, 0))
   } else if (showsReasoning) {
+    // Quote-prefix every line (blank lines keep a bare `>` so the bar does not
+    // break at paragraph gaps) and let the Markdown quote style draw the bar.
+    const quoted = reasoning.split('\n').map(line => line === '' ? '>' : `> ${line}`).join('\n')
     children.push(
       new Text(palette.italic(palette.dim(
         `▼ ${THINKING_GLYPH} Thinking${settled ? duration : '…'}${settled ? ` ${shortcutHint('ctrl+r', 'collapse')}` : ''}`,
       )), 0, 0),
-      new Markdown(reasoning, 0, 0, mdTheme, { color: value => palette.dim(value), italic: true }),
+      new Markdown(quoted, 0, 0, mdTheme, { color: value => palette.dim(value), italic: true }),
     )
   }
-  if (text) children.push(new Markdown(text, 0, 0, mdTheme, { color: value => palette.text(value) }))
+  if (text) {
+    children.push(settled
+      ? new FoldableBodyComponent(text, maxMessageLines, textExpanded, palette, mdTheme)
+      : new Markdown(text, 0, 0, mdTheme, { color: value => palette.text(value) }))
+  }
   return children
 }
 
@@ -527,12 +759,16 @@ export class StreamingAssistantComponent extends Container {
   private foldedContinuation = false
   private startedAt: number | undefined
   private thinkingMs: number | undefined
+  /** Whether a settled over-long reply body is expanded past its fold. */
+  private textExpanded = false
   constructor(
     /** The step's turn/step coordinates, used to group steps into its turn. */
     readonly position: StepPosition,
     private showReasoning: boolean,
     private readonly palette: Palette,
     private readonly mdTheme: MarkdownTheme,
+    /** Rendered-line budget for a settled reply body before it folds. */
+    private readonly maxMessageLines: number,
   ) {
     super()
     this.rebuild()
@@ -540,9 +776,9 @@ export class StreamingAssistantComponent extends Container {
 
   /**
    * Record the step's start time (its `step/start` event time) for the
-   * collapsed thinking line's duration.
+   * collapsed thinking line's duration and the role header's clock stamp.
    * @param time - Step start in epoch milliseconds, or `undefined` when the
-   * opening event is unavailable (the duration is simply omitted).
+   * opening event is unavailable (the duration and stamp are simply omitted).
    */
   markStart(time: number | undefined): void {
     this.startedAt = time
@@ -600,12 +836,23 @@ export class StreamingAssistantComponent extends Container {
     this.rebuild()
   }
 
-  /** Toggle this step's settled reasoning when its disclosure row is clicked. */
+  /**
+   * Toggle this step's disclosure rows: the folded Thinking line switches the
+   * reasoning block, and a folded reply body's `… +M lines (click to expand)`
+   * row expands the body in place (one-way, like the tool-card preview).
+   */
   clickTranscriptRow(row: number, width: number): boolean {
     const line = stripTerminalControls(this.render(width)[row] ?? '')
-    if (!line.includes('Thinking')) return false
-    this.setShowReasoning(!this.showReasoning)
-    return true
+    if (line.includes('Thinking')) {
+      this.setShowReasoning(!this.showReasoning)
+      return true
+    }
+    if (!this.textExpanded && FOLDED_BODY_HINT.test(line.trimEnd())) {
+      this.textExpanded = true
+      this.rebuild()
+      return true
+    }
+    return false
   }
 
   /**
@@ -651,6 +898,9 @@ export class StreamingAssistantComponent extends Container {
       this.mdTheme,
       this.settledContent !== undefined,
       this.thinkingMs,
+      this.startedAt,
+      this.maxMessageLines,
+      this.textExpanded,
     )
     for (const child of children) this.addChild(child)
   }
@@ -888,11 +1138,14 @@ export class ToolCardComponent extends CachedCardComponent {
     const visibleBody = unknownXml !== undefined || this.visibility === 'expanded'
       ? body
       : preview(body, this.maxOutputLines, count => this.palette.dim(`… +${count} lines ${shortcutHint('ctrl+o', 'expand')}`))
-    // The header is one card row in the status color (warning pending /
-    // success ok / error): the marker glyph, a verb title naming what THIS call
-    // does (progressive while pending, the presenter's settled label once
-    // resolved), and the wall-clock duration once settled. Body rows sit under
-    // a `⎿` continuation marker so the output reads as the call's result.
+    // The header is one card row: the marker glyph, a verb title naming what
+    // THIS call does (progressive while pending, the presenter's settled label
+    // once resolved), and the wall-clock duration once settled. While pending
+    // the whole row carries the warning color; once settled only the status
+    // glyph keeps the success/error color and the prose drops to dim, so a
+    // screen of finished cards does not shout over the conversation. Body rows
+    // sit under a `⎿` continuation marker so the output reads as the call's
+    // result.
     const statusColor = pending
       ? this.palette.warning
       : isError ? this.palette.error : this.palette.success
@@ -907,10 +1160,17 @@ export class ToolCardComponent extends CachedCardComponent {
     // rows and collide with the body lines that follow.
     const disclosure = this.visibility === 'expanded' ? '▼' : '▶'
     const headerText = `${disclosure} ${glyph} ${displayInlineText(label)}${duration}`
-    const header = truncateToWidth(headerText, Math.max(1, width - 2), '')
+    const maxWidth = Math.max(1, width - 2)
+    const header = pending
+      ? this.palette.warning(truncateToWidth(headerText, maxWidth, ''))
+      : truncateToWidth(
+        this.palette.dim(`${disclosure} `) + statusColor(glyph) + this.palette.dim(` ${displayInlineText(label)}${duration}`),
+        maxWidth,
+        '',
+      )
     // The blank first row is the card's own paragraph gap (no external Spacer),
     // so the hidden state removes the gap together with the card.
-    const lines: string[] = ['', statusColor(header)]
+    const lines: string[] = ['', header]
     if (visibleBody.length > 0) {
       lines.push(...new Text(prefixResultLines(visibleBody).join('\n'), 0, 0).render(width))
     }
@@ -1198,14 +1458,17 @@ export class CollapsedToolGroupComponent extends CachedCardComponent {
   }
 
   /**
-   * The summary row through the palette: dim prose and glyph, bold counts, the
-   * pieces concatenated (SGR has no color stack, so spans never nest).
+   * The summary row through the palette: dim prose, a state glyph that keeps
+   * the success color once the run settles (pending stays dim with the prose),
+   * bold counts, the pieces concatenated (SGR has no color stack, so spans
+   * never nest).
    * @param glyph - The state glyph (pending spinner frame or settled dot).
+   * @param settled - Whether every member has settled.
    */
-  private summaryRow(glyph: string): string {
+  private summaryRow(glyph: string, settled: boolean): string {
     const dim = this.palette.dim
     const bold = this.palette.bold
-    const pieces: string[] = [dim(glyph), dim(' ')]
+    const pieces: string[] = [settled ? this.palette.success(glyph) : dim(glyph), dim(' ')]
     for (const [index, segment] of this.segments().entries()) {
       if (index > 0) pieces.push(dim(' · '))
       if (segment.before !== '') pieces.push(dim(segment.before))
@@ -1225,12 +1488,12 @@ export class CollapsedToolGroupComponent extends CachedCardComponent {
       // Verbose mode lists every member under the summary header; the members
       // render through their own cached-card contract, so this stays a plain
       // concatenation of their rows.
-      return ['', `▼ ${this.summaryRow(glyph)}`, ...this.members.flatMap(card => card.render(width))]
+      return ['', `▼ ${this.summaryRow(glyph, pending === undefined)}`, ...this.members.flatMap(card => card.render(width))]
     }
     // One card row: the summary, the newest pending call's label as the
     // activity hint, and the expand shortcut — a single terminal row.
     const row = [
-      `▶ ${this.summaryRow(glyph)}`,
+      `▶ ${this.summaryRow(glyph, pending === undefined)}`,
       ...(pending === undefined ? [] : [this.palette.dim(` · ${displayInlineText(pending.label())}`)]),
       this.palette.dim(` ${shortcutHint('ctrl+o', 'expand')}`),
     ].join('')

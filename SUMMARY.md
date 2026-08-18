@@ -1,7 +1,7 @@
 # Project Status
 
-[`@lk251066/dsh-tui@1.7.1`](https://www.npmjs.com/package/@lk251066/dsh-tui/v/1.7.1) is the current release. Its source, artifact, public-host, and real PTY checks are recorded in [TESTING.md](TESTING.md).
+[`@lk251066/dsh-tui@1.7.1`](https://www.npmjs.com/package/@lk251066/dsh-tui/v/1.7.1) is the current release. The current source targets `1.8.0`; its verification status is recorded in [TESTING.md](TESTING.md).
 
-Version `1.7.1` makes `/exit` and `/quit` cancel a running turn and immediately start bounded shutdown. It retains the fixed framed workbench, durable active workspace sessions, workspace-grouped sidebar, welcome view, compact header, clipboard image drafts, per-session memory enablement, queue interaction, and rewind replacement from `1.7.0`.
+The `1.8.0` source reserves `/exit` for whole-TUI shutdown. `/quit` and empty-input `Delete` cancel and close the current project session, preserve its history, and return to the assistant. The assistant can read paged user/assistant dialogue from another Active project session without receiving reasoning, tool traffic, diffs, injected context, or unfinished output.
 
 [CHANGES.md](CHANGES.md) owns current behavior. [REPAIR_PLAN.md](REPAIR_PLAN.md) records release readiness, and [TESTING.md](TESTING.md) defines the required evidence.

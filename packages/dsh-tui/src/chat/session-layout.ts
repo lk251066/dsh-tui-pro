@@ -14,6 +14,7 @@ import {
 import type { ChannelRegistry } from './channel-registry.ts'
 import type { TuiSessionSlot } from '../index.ts'
 import { ASSISTANT_SESSION_ID } from './assistant.ts'
+import { workspaceLabel } from './helpers.ts'
 import type { WorkspaceSessions } from './workspace-sessions.ts'
 
 /** Controls the persistent live-session sidebar. */
@@ -55,9 +56,7 @@ function titleOf(slot: TuiSessionSlot): string | undefined {
 }
 
 function workspaceOf(slot: TuiSessionSlot): string {
-  const cwd = displayText(slot.agent.session.header.cwd ?? '(unknown)')
-  const normalized = cwd.replaceAll('\\', '/').replace(/\/$/u, '')
-  return normalized.slice(normalized.lastIndexOf('/') + 1) || cwd
+  return workspaceLabel(displayText(slot.agent.session.header.cwd ?? '(unknown)'))
 }
 
 function itemOf(

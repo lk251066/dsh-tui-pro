@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 The `v1.0.0` tag is not an installable public release: no npm package was published, and the repository-root tarball does not contain the required dsh bundle metadata. See [REPAIR_PLAN.md](REPAIR_PLAN.md) for the first verified release criteria.
 
+## [Unreleased]
+
+### Added
+
+- Let the fixed assistant read paged user/assistant dialogue from another Active project session without exposing reasoning, tool traffic, diffs, injected context, or unfinished output.
+
+### Changed
+
+- Reserve `/exit` for closing the whole TUI. `/quit` and empty-input `Delete` now cancel and close the current project session, preserve its history, and return to the assistant.
+
 ## [1.7.1] - 2026-08-18
 
 ### Fixed

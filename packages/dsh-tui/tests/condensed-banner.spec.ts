@@ -16,6 +16,9 @@ const { version: TUI_VERSION } = JSON.parse(
 
 const CONDENSED_NAME = 'dsh v'
 
+/** Wall-clock wait for the welcome box's reveal sweep to finish (~720 ms at 6 columns per 45 ms tick). */
+const revealSettled = (): Promise<void> => new Promise(resolve => setTimeout(resolve, 900))
+
 async function setup(
   options: TuiHarnessOptions = {},
   size: { columns?: number; rows?: number } = {},
@@ -32,11 +35,20 @@ async function rows(terminal: HeadlessTerminal): Promise<string[]> {
 }
 
 describe('workbench identity header', () => {
-  it('renders the welcome screen for a fresh session', async () => {
+  it('renders the welcome box for a fresh session', async () => {
     const result = await setup()
+    await revealSettled()
     const frame = await result.terminal.snapshot({ includeScrollback: true })
+    // The codex-style box: rounded frame around the block logo, the welcome
+    // line, the live model and directory, suggested commands, and the tips row.
+    expect(frame).toContain('╭')
+    expect(frame).toContain('╯')
     expect(frame).toContain('█')
     expect(frame).toContain('Coding agent ready.')
+    expect(frame).toContain('model: deepseek-v4-flash')
+    expect(frame).toContain('directory: /workspace')
+    expect(frame).toContain('/new')
+    expect(frame).toContain('/help')
     expect(frame).toContain('/ commands · @ files · /sessions history')
     expect(frame).not.toContain(CONDENSED_NAME)
     await disposeTuiTestHarness(result)
@@ -63,6 +75,7 @@ describe('workbench identity header', () => {
 
   it('keeps the compact identity when the first user message lands', async () => {
     const result = await setup({ omitWelcome: true })
+    await revealSettled()
     const before = await result.terminal.snapshot({ includeScrollback: true })
     expect(before).toContain('█')
     const frame = result.terminal.frames
@@ -109,10 +122,12 @@ describe('workbench identity header', () => {
 
   it('keeps compact identity data on narrow terminals', async () => {
     const fresh = await setup({}, { columns: 40, rows: 24 })
+    await revealSettled()
     const freshFrame = await fresh.terminal.snapshot({ includeScrollback: true })
+    // Below logo width the box holds the one-line text brand instead.
     expect(freshFrame).toContain('DEEPSEEK')
-    expect(freshFrame).toContain('Coding')
-    expect(freshFrame).toContain('agent ready.')
+    expect(freshFrame).toContain('Coding agent ready.')
+    expect(freshFrame).toContain('╭')
     expect(freshFrame).not.toContain('█')
     await disposeTuiTestHarness(fresh)
     await fresh.terminal.dispose()

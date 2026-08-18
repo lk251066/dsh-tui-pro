@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { Terminal } from '@earendil-works/pi-tui'
-import { createTuiTestHarness, disposeTuiTestHarness } from './harness.ts'
+import { agentEvents } from '@deepseek-ai/dsh-agent'
+import { appendUser, createTuiTestHarness, disposeTuiTestHarness } from './harness.ts'
 
 class FakeTerminal implements Terminal {
   columns = 88
@@ -99,6 +100,43 @@ describe('Shift+Tab permission ring', () => {
     await disposeTuiTestHarness(result)
   })
 
+  it('paints the editor frame in warning on the danger preset', async () => {
+    let current = 'workspace-write'
+    const terminal = new FakeTerminal()
+    const result = await createTuiTestHarness(terminal, vi.fn(), {
+      config: { theme: { color: true } },
+      beforeMount(session) { appendUser(session, 'seed prompt') },
+      configureContext: async (ctx) => {
+        ctx.provide('permissionPresets', {
+          names: ['workspace-write', 'danger-full-access'],
+          current: () => current,
+          resolve: (name: string) => ({ sandbox: name }),
+          set: (_session: unknown, name: string) => {
+            current = name
+          },
+          optionOf: (name: string) => ({ value: name, name }),
+        } as never)
+      },
+    })
+    await new Promise(resolve => setTimeout(resolve, 25))
+    // A safe preset keeps the border dim.
+    expect(terminal.output).toContain('\x1b[2;39m╭')
+    expect(terminal.output).not.toContain('\x1b[33m╭')
+    current = 'danger-full-access'
+    // A status edge re-derives the border from the live preset.
+    agentEvents(result.ctx, result.agent).emit('agent/status', { status: 'idle' })
+    await new Promise(resolve => setTimeout(resolve, 25))
+    expect(terminal.output).toContain('\x1b[33m╭')
+    current = 'workspace-write'
+    agentEvents(result.ctx, result.agent).emit('agent/status', { status: 'idle' })
+    await new Promise(resolve => setTimeout(resolve, 25))
+    terminal.output = ''
+    agentEvents(result.ctx, result.agent).emit('agent/status', { status: 'idle' })
+    await new Promise(resolve => setTimeout(resolve, 25))
+    expect(terminal.output).not.toContain('\x1b[33m╭')
+    await disposeTuiTestHarness(result)
+  })
+
   it.each(['current', 'resolve'] as const)('reports a %s failure without changing the preset', async (failure) => {
     const set = vi.fn()
     const terminal = new FakeTerminal()
@@ -127,6 +165,34 @@ describe('Shift+Tab permission ring', () => {
     expect(terminal.output).toContain(failure)
     expect(terminal.output).toContain('failed')
     expect(terminal.output).not.toContain('Full access')
+    await disposeTuiTestHarness(result)
+  })
+})
+
+describe('editor frame border modes', () => {
+  it('flags plan mode in accent and never tracks the running status', async () => {
+    const terminal = new FakeTerminal()
+    const result = await createTuiTestHarness(terminal, vi.fn(), {
+      status: 'running',
+      config: { theme: { color: true } },
+      beforeMount(session) { appendUser(session, 'seed prompt') },
+    })
+    await new Promise(resolve => setTimeout(resolve, 25))
+    // Running keeps the border dim (the working line and prompt glyph own that state).
+    expect(terminal.output).toContain('\x1b[2;39m╭')
+    expect(terminal.output).not.toContain('\x1b[95m╭')
+    // Plan mode flags the border in accent.
+    result.session.append('plan/mode', { active: true })
+    await new Promise(resolve => setTimeout(resolve, 25))
+    expect(terminal.output).toContain('\x1b[95m╭')
+    // Leaving plan mode restores the dim border.
+    result.session.append('plan/mode', { active: false })
+    await new Promise(resolve => setTimeout(resolve, 25))
+    terminal.output = ''
+    agentEvents(result.ctx, result.agent).emit('agent/status', { status: 'idle' })
+    await new Promise(resolve => setTimeout(resolve, 25))
+    expect(terminal.output).toContain('\x1b[2;39m╭')
+    expect(terminal.output).not.toContain('\x1b[95m╭')
     await disposeTuiTestHarness(result)
   })
 })

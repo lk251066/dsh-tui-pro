@@ -2,8 +2,8 @@
  * The startup logo: "DEEPSEEK HARNESS" as five-row block letters (the
  * dsh-cc-tui convention), painted column-by-column through the brand
  * indigo→ice-blue gradient with an optional shimmer highlight that sweeps
- * across after the banner settles. Narrow terminals drop to the DEEPSEEK word
- * alone, then to plain text (handled by the header, not here).
+ * across after the banner settles. Narrow terminals drop to a compact text
+ * brand line (handled by the header, not here).
  * @module @deepseek-ai/dsh-tui/components/logo
  */
 
@@ -49,11 +49,6 @@ export function logoFullWidth(): number {
   return LOGO_WORDS.reduce((total, word) => total + logoWordWidth(word), 0) + WORD_GAP
 }
 
-/** Columns the DEEPSEEK word alone occupies. */
-export function logoSingleWordWidth(): number {
-  return logoWordWidth(LOGO_WORDS[0] ?? 'D')
-}
-
 /** The unpainted block-letter rows for `words` (no leading pad, no colors). */
 function logoRows(words: readonly string[]): string[] {
   const rows: string[] = Array.from({ length: GLYPH_ROWS }, () => '')
@@ -75,11 +70,6 @@ function logoRows(words: readonly string[]): string[] {
 /** The unpainted full-logo rows (both words). */
 export function fullLogoRows(): string[] {
   return logoRows(LOGO_WORDS)
-}
-
-/** The unpainted DEEPSEEK-word rows. */
-export function singleWordLogoRows(): string[] {
-  return logoRows([LOGO_WORDS[0]])
 }
 
 /** Columns the shimmer highlight spans. */

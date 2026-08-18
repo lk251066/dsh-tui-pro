@@ -17,8 +17,9 @@
  * @module @deepseek-ai/dsh-tui/components/framed-editor
  */
 
-import { visibleWidth, CURSOR_MARKER, type Component } from '@earendil-works/pi-tui'
+import { CURSOR_MARKER, type Component } from '@earendil-works/pi-tui'
 import type { Editor } from '@earendil-works/pi-tui'
+import { padToWidth } from './text.ts'
 
 /** Below this width the frame's borders crowd out the text: render unframed. */
 const MIN_FRAMED_WIDTH = 12
@@ -46,12 +47,6 @@ interface EditorAutocompleteInternals {
   readonly promptWidth?: number
 }
 
-/** Right-pad one rendered row to `width` columns, ANSI-aware. */
-function padToWidth(line: string, width: number): string {
-  const shortfall = width - visibleWidth(line)
-  return shortfall > 0 ? `${line}${' '.repeat(shortfall)}` : line
-}
-
 /** Drop ANSI escape sequences so leading-space structure can be measured. */
 function stripAnsi(line: string): string {
   return line.replace(ANSI_SEQUENCE, '')
@@ -59,9 +54,10 @@ function stripAnsi(line: string): string {
 
 /**
  * A rounded-corner frame around the input editor, drawn in the editor's own
- * border tone (dim while idle, accent while the agent runs — the editor
- * already switches `borderColor` on status). Pure delegation: focus, input
- * handling, and the hardware cursor all keep belonging to the wrapped editor.
+ * border tone (dim by default; the host's border policy flags only plan mode
+ * in accent and the danger permission preset in warning). Pure delegation:
+ * focus, input handling, and the hardware cursor all keep belonging to the
+ * wrapped editor.
  */
 export class FramedEditorComponent implements Component {
   constructor(private readonly editor: Editor) {}

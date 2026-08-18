@@ -82,7 +82,6 @@ const COMPACTION_BOUNDARY = '… earlier context was compacted …'
 
 interface RunningStatus {
   turn: number | undefined
-  timer: ReturnType<typeof setInterval>
   /** Render clock when the turn began; origin of the glyph fade-in. */
   startedAt: number
   /** The most recently rendered phase glyph, handed to the fade-out. */
@@ -94,7 +93,6 @@ interface FadingStatus {
   glyph: string
   /** Render clock when the turn ended; origin of the glyph fade-out. */
   endedAt: number
-  timer: ReturnType<typeof setInterval>
 }
 
 /**
@@ -254,7 +252,12 @@ export function createSessionChannel(deps: SessionChannelDeps): SessionChannel {
   let compacting: {
     turn: number | null
     startedAt: number
-    timer: ReturnType<typeof setInterval> | undefined
+    /**
+     * Whether the compaction needs the shared status tick: standalone work
+     * animates on its own, while a turn-owned compaction rides the turn's
+     * running status.
+     */
+    ownsTimer: boolean
   } | undefined
   // TUI steering submissions that the inbox has not yet claimed or discarded.
   // Correlation ids avoid guessing whether a running-state submission actually
@@ -282,35 +285,49 @@ export function createSessionChannel(deps: SessionChannelDeps): SessionChannel {
     deps.requestRender()
   }
 
-  /** Stop the turn-phase running and fade-out timers and drop both states. */
+  /**
+   * The channel's one status-animation timer. The running turn, the fade-out,
+   * and a standalone compaction each need the same 50 ms re-render tick, so
+   * one interval dispatches to whichever state is live instead of each owning
+   * a timer (previously three `setInterval` sites with entangled lifecycles).
+   */
+  let statusTimer: ReturnType<typeof setInterval> | undefined
+
+  /** One shared-tick frame: retire an expired fade-out, then re-render. */
+  const statusTick = (): void => {
+    if (fadingStatus !== undefined && deps.now() - fadingStatus.endedAt >= STATUS_FADE_MS) clearTurnStatus()
+    renderStatus()
+  }
+
+  /** Start the shared tick while any status state needs it; stop it when none does. */
+  const syncStatusTimer = (): void => {
+    const needed = runningStatus !== undefined || fadingStatus !== undefined
+      || (compacting !== undefined && compacting.ownsTimer)
+    if (needed && statusTimer === undefined) {
+      statusTimer = setInterval(statusTick, STATUS_ANIMATION_INTERVAL_MS)
+    } else if (!needed && statusTimer !== undefined) {
+      clearInterval(statusTimer)
+      statusTimer = undefined
+    }
+  }
+
+  /** Drop the turn-phase running and fade-out states and re-sync the shared tick. */
   const clearTurnStatus = (): void => {
-    if (runningStatus !== undefined) {
-      clearInterval(runningStatus.timer)
-      runningStatus = undefined
-    }
-    if (fadingStatus !== undefined) {
-      clearInterval(fadingStatus.timer)
-      fadingStatus = undefined
-    }
+    runningStatus = undefined
+    fadingStatus = undefined
     deps.terminal.setProgress(compacting !== undefined)
+    syncStatusTimer()
   }
 
   /**
    * Hand the last active glyph to a fade-out that re-renders until it settles
-   * on the `>` caret, then stops its own timer. A hard clear (teardown) skips
-   * this via {@link SessionChannel.clearStatus}.
+   * on the `>` caret, then retires itself at the envelope's end. A hard clear
+   * (teardown) skips this via {@link SessionChannel.clearStatus}.
    */
   const beginFadeOut = (glyph: string): void => {
     clearTurnStatus()
-    const fading: FadingStatus = {
-      glyph,
-      endedAt: deps.now(),
-      timer: setInterval(() => {
-        if (deps.now() - fading.endedAt >= STATUS_FADE_MS) clearTurnStatus()
-        renderStatus()
-      }, STATUS_ANIMATION_INTERVAL_MS),
-    }
-    fadingStatus = fading
+    fadingStatus = { glyph, endedAt: deps.now() }
+    syncStatusTimer()
   }
 
   const parsedTool = (event: Extract<SessionEvent, { type: 'tool/call' }>): ToolCardComponent => {
@@ -406,6 +423,7 @@ export function createSessionChannel(deps: SessionChannelDeps): SessionChannel {
       deps.showReasoning(),
       palette,
       mdTheme,
+      resolved.maxMessageLines,
     )
     streaming.markStart(startedAt)
   }
@@ -472,8 +490,10 @@ export function createSessionChannel(deps: SessionChannelDeps): SessionChannel {
           .filter((block): block is Extract<ContentBlock, { type: 'image' }> => block.type === 'image')
           .map(block => block.attachment)
         if (text || images.length > 0) {
-          chat.addChild(new Spacer(1))
-          chat.addChild(new UserMessageComponent(text, palette, images, ref => deps.loadAttachmentImage(ref)))
+          // Message-level spacing: two blank rows set a user bubble apart from
+          // the previous block; turn-internal gaps stay at one row.
+          chat.addChild(new Spacer(2))
+          chat.addChild(new UserMessageComponent(text, palette, images, ref => deps.loadAttachmentImage(ref), event.time))
           if (options.addHistory && text) deps.addToEditorHistory(text)
         }
         break
@@ -746,27 +766,24 @@ export function createSessionChannel(deps: SessionChannelDeps): SessionChannel {
     // plain idle carries the queue hint or the example-commands hint.
     if (status === 'running') {
       const turn = priorTurn ?? openTurn(agent.session.events)
-      const running: RunningStatus = {
+      runningStatus = {
         turn,
         startedAt: deps.now(),
         // Seed with the current phase (ttft before the first step opens) so the
         // fade-out always has a glyph, even for a turn that ends before a render.
         lastGlyph: TIMING_BUCKET_GLYPHS[openStepPhase(agent.session.events) ?? 'ttft'],
-        // Refresh every tick so the fading prompt phase glyph animates even
-        // before the first token, when no streaming component exists yet.
-        timer: setInterval(renderStatus, STATUS_ANIMATION_INTERVAL_MS),
       }
-      runningStatus = running
+      // The shared tick re-renders each frame so the fading prompt phase glyph
+      // animates even before the first token, when no streaming component
+      // exists yet.
+      syncStatusTimer()
       deps.terminal.setProgress(true)
     }
   }
 
   /** Hard clear: drop every indicator, including a live compaction bracket. */
   const clearStatus = (): void => {
-    if (compacting !== undefined) {
-      if (compacting.timer !== undefined) clearInterval(compacting.timer)
-      compacting = undefined
-    }
+    compacting = undefined
     clearTurnStatus()
   }
 
@@ -812,18 +829,18 @@ export function createSessionChannel(deps: SessionChannelDeps): SessionChannel {
     if (event.type === 'goal/change' || event.type === 'turn/start') deps.refreshGoalBar()
     if (event.type === 'agent/inbox/spliced' || event.type === 'user/message') deps.refreshQueueDock()
     if (event.type === 'plan/mode' || event.type === 'permission/preset') deps.applyStatus(agent.status)
-    // Track live compaction state. A turn-owned compaction reuses the turn's
-    // status timer; standalone work (or a malformed idle turn bracket) owns one.
+    // Track live compaction state. A turn-owned compaction rides the turn's
+    // status tick; standalone work (or a malformed idle turn bracket) needs
+    // the shared tick for itself.
     if (event.type === 'compaction/start') {
       if (compacting === undefined) {
         const startedAt = deps.now()
         compacting = {
           turn: event.data.turn,
           startedAt,
-          timer: event.data.turn === null || runningStatus === undefined
-            ? setInterval(renderStatus, STATUS_ANIMATION_INTERVAL_MS)
-            : undefined,
+          ownsTimer: event.data.turn === null || runningStatus === undefined,
         }
+        syncStatusTimer()
         deps.terminal.setProgress(true)
       }
       deps.requestRender()
@@ -831,14 +848,14 @@ export function createSessionChannel(deps: SessionChannelDeps): SessionChannel {
     }
     if (event.type === 'compaction/end' && compacting?.turn === event.data.turn) {
       const fadeOutGlyph = runningPhaseGlyph(agent.session.events, false, true)
-      if (compacting.timer !== undefined) clearInterval(compacting.timer)
       compacting = undefined
       if (event.data.error !== undefined) {
         deps.appendNotice(`Compaction failed: ${event.data.error}`, 'warning')
       }
-      // A concurrently running turn owns the indicator. Keep its timer and
+      // A concurrently running turn owns the indicator. Keep its tick and
       // progress bit instead of letting the compaction fade clear that state.
       if (runningStatus === undefined && fadeOutGlyph !== undefined) beginFadeOut(fadeOutGlyph)
+      syncStatusTimer()
       deps.requestRender()
       return
     }

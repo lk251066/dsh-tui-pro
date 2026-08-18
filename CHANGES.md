@@ -1,5 +1,11 @@
 # Terminal Workbench
 
+## 1.8.0 source changes
+
+`/exit` closes the whole TUI. `/quit` and empty-input `Delete` close the current project session: a running turn is cancelled, Active membership and the mounted session slot are removed, owned agent resources are released, history remains available through `/sessions`, and the fixed assistant becomes current. The assistant itself cannot be closed.
+
+The fixed assistant can read another Active project session through its scoped `read_session_conversation` tool. The result contains only direct user text, image placeholders, and completed assistant text. It excludes reasoning, tool calls and results, diffs, injected context, and unfinished streaming output. Long conversations are read newest-page first and support earlier-page continuation.
+
 ## 1.7.0 changes
 
 The fixed workbench keeps one compact header, a workspace-grouped Active-session list, and a compact Status section. The bottom line is the single home for cwd, branch, model, and context. New untitled sessions show the welcome view until their first user message. The outer frame remains fixed while only the transcript scrolls.
@@ -68,7 +74,7 @@ The sidebar contains Workspace, Active, Current, and Status. Active is a user-ma
 
 Starting dsh in a directory resumes the first manually ordered active session for that directory. When the directory has none, startup creates a session and attaches it. A session removed from the workspace is not selected again merely because dsh later starts in the same directory.
 
-The assistant can list, create, activate, remove, switch, and message workspace sessions through scoped tools. These capabilities do not add session-management rules to its prompt.
+The assistant can list, create, activate, remove, switch, message, and read the visible dialogue of workspace sessions through scoped tools. These capabilities do not add session-management rules to its prompt.
 
 An active inline dialog replaces the editor area and restores the draft when it closes. Stopping the workbench exits the alternate screen and restores the invoking terminal.
 

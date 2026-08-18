@@ -143,4 +143,116 @@ describe('TUI media and memory integration', () => {
       await terminal.dispose()
     }
   })
+
+  it('keeps the memory switch visible in the status row', async () => {
+    let enabled = false
+    const terminal = new HeadlessTerminal(140, 32)
+    const harness = await createTuiTestHarness(terminal, vi.fn(), {
+      configureContext: async (ctx) => {
+        await configureBase(ctx)
+        ctx.provide('memory', {
+          isEnabled: () => enabled,
+          setEnabled: async (_sessionId: SessionId, value: boolean) => {
+            enabled = value
+          },
+          installTools: () => () => {},
+        } as never)
+      },
+    })
+    try {
+      await terminal.waitForFrame(0)
+      expect(await terminal.snapshot()).not.toContain('mem on')
+
+      terminal.send('/memory on')
+      terminal.send('\r')
+      await vi.waitFor(async () => {
+        expect(await terminal.snapshot()).toContain('mem on')
+      })
+
+      terminal.send('/memory off')
+      terminal.send('\r')
+      await vi.waitFor(async () => {
+        expect(await terminal.snapshot()).not.toContain('mem on')
+      })
+    } finally {
+      await disposeTuiTestHarness(harness)
+      await terminal.dispose()
+    }
+  })
+
+  it('deletes a whole image placeholder with one Backspace and submits without the image', async () => {
+    vi.mocked(pasteClipboardImage).mockImplementationOnce(async (draft) =>
+      draft.addStored(IMAGE_REF as never))
+    const terminal = new HeadlessTerminal(140, 32)
+    const harness = await createTuiTestHarness(terminal, vi.fn(), {
+      agentOptions: { provider: 'vision', model: 'seeing' },
+      catalog: {
+        providers: [{ id: 'vision', name: 'Vision' }],
+        models: [{ provider: 'vision', id: 'seeing', name: 'Seeing', inputModalities: ['text', 'image'] }],
+        resolveModelInfo: () => Promise.resolve({ inputModalities: ['text', 'image'] }),
+      },
+      configureContext: async (ctx) => {
+        await configureBase(ctx)
+        ctx.provide('attachments', {} as never)
+      },
+    })
+    try {
+      await terminal.waitForFrame(0)
+      terminal.send('\x1bv')
+      await vi.waitFor(async () => {
+        expect(await terminal.snapshot()).toContain('[Image #1]')
+      })
+      terminal.send('\x7f')
+      terminal.send('hi')
+      terminal.send('\r')
+      await vi.waitFor(() => {
+        expect(harness.agent.sentMessages).toHaveLength(1)
+      })
+      expect(harness.agent.sentMessages[0]?.content).toEqual([
+        { type: 'text', text: 'hi' },
+      ])
+    } finally {
+      await disposeTuiTestHarness(harness)
+      await terminal.dispose()
+    }
+  })
+
+  it('omits draft images whose placeholder was edited out of the text', async () => {
+    vi.mocked(pasteClipboardImage).mockImplementationOnce(async (draft) =>
+      draft.addStored(IMAGE_REF as never))
+    const terminal = new HeadlessTerminal(140, 32)
+    const harness = await createTuiTestHarness(terminal, vi.fn(), {
+      agentOptions: { provider: 'vision', model: 'seeing' },
+      catalog: {
+        providers: [{ id: 'vision', name: 'Vision' }],
+        models: [{ provider: 'vision', id: 'seeing', name: 'Seeing', inputModalities: ['text', 'image'] }],
+        resolveModelInfo: () => Promise.resolve({ inputModalities: ['text', 'image'] }),
+      },
+      configureContext: async (ctx) => {
+        await configureBase(ctx)
+        ctx.provide('attachments', {} as never)
+      },
+    })
+    try {
+      await terminal.waitForFrame(0)
+      terminal.send('\x1bv')
+      await vi.waitFor(async () => {
+        expect(await terminal.snapshot()).toContain('[Image #1]')
+      })
+      // Break the placeholder one character at a time: left of the trailing
+      // ']', Backspace deletes '1', leaving '[Image #]'.
+      terminal.send('\x1b[D')
+      terminal.send('\x7f')
+      terminal.send('\r')
+      await vi.waitFor(() => {
+        expect(harness.agent.sentMessages).toHaveLength(1)
+      })
+      expect(harness.agent.sentMessages[0]?.content).toEqual([
+        { type: 'text', text: '[Image #]' },
+      ])
+    } finally {
+      await disposeTuiTestHarness(harness)
+      await terminal.dispose()
+    }
+  })
 })

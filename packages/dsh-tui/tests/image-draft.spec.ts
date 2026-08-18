@@ -1,12 +1,47 @@
 import { describe, expect, it, vi } from 'vitest'
+import { Editor, TUI, type Terminal } from '@earendil-works/pi-tui'
 import type { ClipboardCommandRunner } from '../src/clipboard-image.ts'
 import {
+  deleteImagePlaceholderAtCursor,
   ImageDraft,
   pasteClipboardImage,
   type ImageAttachmentRef,
   type ImageAttachmentWriter,
   type SaveImageInput,
 } from '../src/chat/image-draft.ts'
+
+class NullTerminal implements Terminal {
+  columns = 88
+  rows = 32
+  kittyProtocolActive = false
+  start(): void {}
+  stop(): void {}
+  write(): void {}
+  moveBy(): void {}
+  hideCursor(): void {}
+  showCursor(): void {}
+  clearLine(): void {}
+  clearFromCursor(): void {}
+  clearScreen(): void {}
+  setTitle(): void {}
+  setProgress(): void {}
+}
+
+const identity = (text: string): string => text
+
+/** Real pi-tui editor over a null terminal, mirroring framed-autocomplete.spec. */
+function createEditor(): Editor {
+  return new Editor(new TUI(new NullTerminal()), {
+    borderColor: identity,
+    selectList: {
+      selectedPrefix: identity,
+      selectedText: identity,
+      description: identity,
+      scrollInfo: identity,
+      noMatch: identity,
+    },
+  })
+}
 
 const PNG = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
 
@@ -192,5 +227,68 @@ describe('pasteClipboardImage', () => {
     draft.remove(1)
     draft.clear()
     expect(deleteImage).not.toHaveBeenCalled()
+  })
+})
+
+describe('ImageDraft.pruneToText', () => {
+  it('drops images whose placeholder no longer appears in the text', () => {
+    const draft = new ImageDraft()
+    draft.addStored(attachment('one'))
+    const second = draft.addStored(attachment('two'))
+
+    expect(draft.pruneToText(`compare ${second.placeholder}`)).toEqual([
+      { type: 'image', attachment: second.attachment },
+    ])
+    expect(draft.list().map(image => image.number)).toEqual([2])
+  })
+
+  it('keeps every image whose placeholder survives and prunes again later', () => {
+    const draft = new ImageDraft()
+    const image = draft.addStored(attachment('one'))
+
+    expect(draft.pruneToText('see [Image #1] now')).toEqual([
+      { type: 'image', attachment: image.attachment },
+    ])
+    expect(draft.list()).toHaveLength(1)
+    expect(draft.pruneToText('no placeholder left')).toEqual([])
+    expect(draft.list()).toEqual([])
+  })
+})
+
+describe('deleteImagePlaceholderAtCursor', () => {
+  it('removes the whole token before the cursor and its draft image', () => {
+    const draft = new ImageDraft()
+    const image = draft.addStored(attachment('one'))
+    const editor = createEditor()
+    editor.setText(`see ${image.placeholder}`)
+
+    expect(deleteImagePlaceholderAtCursor(editor, draft)).toBe(true)
+    expect(editor.getText()).toBe('see ')
+    expect(editor.getCursor()).toEqual({ line: 0, col: 4 })
+    expect(draft.list()).toEqual([])
+  })
+
+  it('restores the cursor when the placeholder sits mid-text', () => {
+    const draft = new ImageDraft()
+    const image = draft.addStored(attachment('one'))
+    const editor = createEditor()
+    editor.setText(`see ${image.placeholder} now`)
+    for (let step = 0; step < 4; step += 1) editor.handleInput('\x1b[D')
+
+    expect(deleteImagePlaceholderAtCursor(editor, draft)).toBe(true)
+    expect(editor.getText()).toBe('see  now')
+    expect(editor.getCursor()).toEqual({ line: 0, col: 4 })
+    expect(draft.list()).toEqual([])
+  })
+
+  it('leaves ordinary backspace alone away from a placeholder', () => {
+    const draft = new ImageDraft()
+    draft.addStored(attachment('one'))
+    const editor = createEditor()
+    editor.setText('plain text')
+
+    expect(deleteImagePlaceholderAtCursor(editor, draft)).toBe(false)
+    expect(editor.getText()).toBe('plain text')
+    expect(draft.list()).toHaveLength(1)
   })
 })

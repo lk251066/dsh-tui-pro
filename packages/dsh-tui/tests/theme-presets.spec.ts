@@ -10,8 +10,18 @@ describe('theme presets', () => {
     expect(THEME_PRESETS.deepseek?.colors).toEqual({
       permission: { rgb: [87, 105, 247], ansi16: '94' },
       plan: { rgb: [72, 150, 140], ansi16: '37' },
-      diffAddedWord: { rgb: [56, 166, 96], ansi16: '32' },
-      diffRemovedWord: { rgb: [179, 89, 107], ansi16: '31' },
+      diffAddedWord: {
+        rgb: [56, 166, 96],
+        ansi16: '1;32',
+        close: '22;39',
+        truecolorAttribute: { open: '1', close: '22' },
+      },
+      diffRemovedWord: {
+        rgb: [179, 89, 107],
+        ansi16: '1;31',
+        close: '22;39',
+        truecolorAttribute: { open: '1', close: '22' },
+      },
     })
     for (const name of ['dracula', 'nord', 'catppuccin-mocha', 'daltonism']) {
       const preset = THEME_PRESETS[name]
@@ -26,9 +36,30 @@ describe('theme presets', () => {
       expect(colors.permission, name).toEqual({ rgb: [87, 105, 247], ansi16: '94' })
       expect(colors.plan, name).toEqual({ rgb: [72, 150, 140], ansi16: '37' })
     }
-    // The reserved diff word-level tokens are defined but not yet palette roles.
-    expect(THEME_PRESETS.dracula?.colors.diffAddedWord).toEqual({ rgb: [56, 166, 96], ansi16: '32' })
-    expect(THEME_PRESETS.dracula?.colors.diffRemovedWord).toEqual({ rgb: [179, 89, 107], ansi16: '31' })
+    // The diff word-level colors are live palette roles: CC's hues with bold
+    // composed on both color paths, so changed words stand out inside an
+    // already green/red row.
+    const word = (rgb: readonly [number, number, number], ansi16: string): unknown => ({
+      rgb,
+      ansi16,
+      close: '22;39',
+      truecolorAttribute: { open: '1', close: '22' },
+    })
+    expect(THEME_PRESETS.dracula?.colors.diffAddedWord).toEqual(word([56, 166, 96], '1;32'))
+    expect(THEME_PRESETS.dracula?.colors.diffRemovedWord).toEqual(word([179, 89, 107], '1;31'))
+  })
+
+  it('wires the diff word roles through the palette', () => {
+    const themed = createPalette(true, 'dark', { preset: THEME_PRESETS.dracula, truecolor: true })
+    expect(themed.diffAddedWord('x')).toBe('\x1b[1;38;2;56;166;96mx\x1b[22;39m')
+    expect(themed.diffRemovedWord('x')).toBe('\x1b[1;38;2;179;89;107mx\x1b[22;39m')
+    const fallback = createPalette(true, 'dark', { preset: THEME_PRESETS.dracula, truecolor: false })
+    expect(fallback.diffAddedWord('x')).toBe('\x1b[1;32mx\x1b[22;39m')
+    expect(fallback.diffRemovedWord('x')).toBe('\x1b[1;31mx\x1b[22;39m')
+    // The adaptive default paints the same bold-over-side-color emphasis.
+    const adaptive = createPalette(true, 'dark')
+    expect(adaptive.diffAddedWord('x')).toBe('\x1b[1;32mx\x1b[22;39m')
+    expect(adaptive.diffRemovedWord('x')).toBe('\x1b[1;31mx\x1b[22;39m')
   })
 
   it('wires permission and plan through the palette', () => {
@@ -68,17 +99,30 @@ describe('theme presets', () => {
   it('daltonism shifts the green roles to blue and leaves the rest adaptive', () => {
     const daltonism = THEME_PRESETS.daltonism
     expect(daltonism?.colors.success).toEqual({ rgb: [51, 153, 255], ansi16: '38;5;75' })
-    expect(daltonism?.colors.diffAddedWord).toEqual({ rgb: [51, 153, 255], ansi16: '38;5;75' })
-    expect(daltonism?.colors.diffRemovedWord).toEqual({ rgb: [179, 89, 107], ansi16: '31' })
+    expect(daltonism?.colors.diffAddedWord).toEqual({
+      rgb: [51, 153, 255],
+      ansi16: '1;38;5;75',
+      close: '22;39',
+      truecolorAttribute: { open: '1', close: '22' },
+    })
+    expect(daltonism?.colors.diffRemovedWord).toEqual({
+      rgb: [179, 89, 107],
+      ansi16: '1;31',
+      close: '22;39',
+      truecolorAttribute: { open: '1', close: '22' },
+    })
     // Warning stays adaptive; success paints blue in both color modes.
     expect(daltonism?.colors.warning).toBeUndefined()
     expect(daltonism?.colors.error).toBeUndefined()
     const truecolor = createPalette(true, 'dark', { preset: daltonism, truecolor: true })
     expect(truecolor.success('x')).toBe('\x1b[38;2;51;153;255mx\x1b[39m')
     expect(truecolor.warning('x')).toBe('\x1b[33mx\x1b[39m')
+    // The added-word emphasis follows success to blue, bold composed.
+    expect(truecolor.diffAddedWord('x')).toBe('\x1b[1;38;2;51;153;255mx\x1b[22;39m')
     const fallback = createPalette(true, 'dark', { preset: daltonism, truecolor: false })
     expect(fallback.success('x')).toBe('\x1b[38;5;75mx\x1b[39m')
     expect(fallback.warning('x')).toBe('\x1b[33mx\x1b[39m')
+    expect(fallback.diffAddedWord('x')).toBe('\x1b[1;38;5;75mx\x1b[22;39m')
   })
 
   it('colors with a preset disabled emits no escapes', () => {
@@ -90,5 +134,31 @@ describe('theme presets', () => {
     const palette = createPalette(true, 'dark', { preset: THEME_PRESETS.dracula, truecolor: true })
     const rows = renderPalette(palette, 'dark', true, { preset: THEME_PRESETS.dracula, truecolor: true }).join('\n')
     expect(rows).toContain('38;2;189;147;249')
+  })
+})
+
+describe('user bubble fill', () => {
+  it('degrades to the nearest ANSI background without truecolor', () => {
+    expect(createPalette(true, 'dark').bubble('x')).toBe('\x1b[100mx\x1b[49m')
+    expect(createPalette(true, 'light').bubble('x')).toBe('\x1b[47mx\x1b[49m')
+  })
+
+  it('lifts a dark canvas ~12% and shades a light one ~4% on truecolor', () => {
+    expect(createPalette(true, 'dark', { truecolor: true }).bubble('x')).toBe('\x1b[48;2;31;31;31mx\x1b[49m')
+    expect(createPalette(true, 'light', { truecolor: true }).bubble('x')).toBe('\x1b[48;2;245;245;245mx\x1b[49m')
+  })
+
+  it('mixes from the probed terminal background when known', () => {
+    const palette = createPalette(true, 'dark', { truecolor: true, background: { r: 40, g: 42, b: 54 } })
+    expect(palette.bubble('x')).toBe('\x1b[48;2;66;68;78mx\x1b[49m')
+  })
+
+  it('mixes from the preset canvas when no probe is available', () => {
+    const palette = createPalette(true, 'dark', { preset: THEME_PRESETS.dracula, truecolor: true })
+    expect(palette.bubble('x')).toBe('\x1b[48;2;66;68;78mx\x1b[49m')
+  })
+
+  it('emits no escape when color is off', () => {
+    expect(createPalette(false, 'dark').bubble('x')).toBe('x')
   })
 })

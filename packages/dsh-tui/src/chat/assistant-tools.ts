@@ -7,10 +7,16 @@ import { randomUUID } from 'node:crypto'
 import { resolve } from 'node:path'
 import { stat } from 'node:fs/promises'
 import type { Context } from '@deepseek-ai/cordis'
-import { SessionId, type SessionId as SessionIdType } from '@deepseek-ai/dsh-session'
-import { createUserMessage } from '@deepseek-ai/dsh-llm'
+import {
+  isAppendSurfaceEvent,
+  SessionId,
+  type SessionEvent,
+  type SessionId as SessionIdType,
+} from '@deepseek-ai/dsh-session'
+import { createUserMessage, type ContentBlock } from '@deepseek-ai/dsh-llm'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { Agent, AgentHandle } from '@deepseek-ai/dsh-agent'
+import type { SessionLogSnapshot } from '@deepseek-ai/dsh-session-query'
 import type { ChannelRegistry } from './channel-registry.ts'
 import type { TuiSessionSlot } from '../index.ts'
 import { ASSISTANT_SESSION_ID } from './assistant.ts'
@@ -34,6 +40,54 @@ function formatAge(ageMs: number): string {
 function titleOf(agent: Agent, fallback: string): string {
   const title = [...agent.session.events].reverse().find(event => event.type === 'session/title')
   return title?.type === 'session/title' ? title.data.title : fallback
+}
+
+const DEFAULT_CONVERSATION_PAGE_SIZE = 20
+const MAX_CONVERSATION_PAGE_SIZE = 100
+
+interface ConversationMessage {
+  readonly role: 'user' | 'assistant'
+  readonly text: string
+}
+
+function conversationText(content: readonly ContentBlock[]): string {
+  return content.flatMap((block) => {
+    if (block.type === 'text') return [block.text]
+    if (block.type === 'image') return ['[Image]']
+    return []
+  }).join('\n').trim()
+}
+
+/** Project the durable visible dialogue without model reasoning or tool traffic. */
+function projectConversation(events: readonly SessionEvent[]): ConversationMessage[] {
+  const messages: ConversationMessage[] = []
+  for (const event of events) {
+    if (!isAppendSurfaceEvent(event)) continue
+    if (event.type === 'user/message' && event.data.source.kind === 'user') {
+      const text = conversationText(event.data.content)
+      if (text !== '') messages.push({ role: 'user', text })
+    } else if (event.type === 'assistant/message') {
+      const text = conversationText(event.data.message.content)
+      if (text !== '') messages.push({ role: 'assistant', text })
+    }
+  }
+  return messages
+}
+
+function positivePageValue(value: number | undefined, fallback: number, name: string): number {
+  const resolved = value ?? fallback
+  if (!Number.isSafeInteger(resolved) || resolved <= 0) {
+    throw new Error(`${name} must be a positive integer.`)
+  }
+  return resolved
+}
+
+function pageEnd(value: number | undefined, fallback: number): number {
+  const resolved = value ?? fallback
+  if (!Number.isSafeInteger(resolved) || resolved < 0) {
+    throw new Error('before must be a non-negative integer.')
+  }
+  return resolved
 }
 
 /** Install the assistant's direct workspace-session operations. */
@@ -228,6 +282,79 @@ export function installAssistantTools(
         })
         target.followup(message)
         return { delivered: true, messageId: message.id, targetSession: args.session_id }
+      },
+    }))
+
+    toolCtx.tools.register(defineTool({
+      name: 'read_session_conversation',
+      description: 'Read user messages and completed assistant replies from an active project session. Reasoning, tools, diffs, system context, and unfinished streaming output are excluded. The newest page is returned by default; pass nextBefore from one result as before to read the preceding page.',
+      parameters: {
+        session_id: { type: 'string', required: true, description: 'Active project session id.' },
+        before: { type: 'integer', description: 'Exclusive message index ending this page; omit for the newest page.' },
+        limit: { type: 'integer', description: `Messages per page; defaults to ${DEFAULT_CONVERSATION_PAGE_SIZE} and cannot exceed ${MAX_CONVERSATION_PAGE_SIZE}.` },
+      },
+      output: {
+        schema: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            sessionId: { type: 'string', required: true },
+            messages: {
+              type: 'array',
+              required: true,
+              items: {
+                type: 'object',
+                additionalProperties: false,
+                properties: {
+                  role: { type: 'string', enum: ['user', 'assistant'], required: true },
+                  text: { type: 'string', required: true },
+                },
+              },
+            },
+            total: { type: 'integer', required: true },
+            start: { type: 'integer', required: true },
+            end: { type: 'integer', required: true },
+            hasEarlier: { type: 'boolean', required: true },
+            nextBefore: { type: 'integer' },
+          },
+        },
+        render: (_args, value) => [{
+          type: 'text',
+          text: `Read ${value.messages.length} of ${value.total} visible messages from session ${value.sessionId}.`,
+        }],
+      },
+      async execute(args) {
+        const sessionId = SessionId(args.session_id)
+        if (!workspaceSessions.has(sessionId)) {
+          throw new Error(`Session "${sessionId}" is not in the active workspace list.`)
+        }
+        const limit = positivePageValue(args.limit, DEFAULT_CONVERSATION_PAGE_SIZE, 'limit')
+        if (limit > MAX_CONVERSATION_PAGE_SIZE) {
+          throw new Error(`limit cannot exceed ${MAX_CONVERSATION_PAGE_SIZE}.`)
+        }
+        const query = toolCtx.get('sessionQuery', false) as {
+          readSession(id: SessionIdType): Promise<SessionLogSnapshot>
+        } | undefined
+        if (query === undefined) throw new Error('Session history is not available.')
+        const snapshot = await query.readSession(sessionId)
+        if (!workspaceSessions.has(sessionId)) {
+          throw new Error(`Session "${sessionId}" is no longer in the active workspace list.`)
+        }
+        const conversation = projectConversation(snapshot.events)
+        const end = Math.min(
+          pageEnd(args.before, conversation.length),
+          conversation.length,
+        )
+        const start = Math.max(0, end - limit)
+        return {
+          sessionId: String(sessionId),
+          messages: conversation.slice(start, end),
+          total: conversation.length,
+          start,
+          end,
+          hasEarlier: start > 0,
+          ...start > 0 ? { nextBefore: start } : {},
+        }
       },
     }))
   })

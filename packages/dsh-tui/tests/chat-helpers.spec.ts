@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { gitBranch } from '../src/chat/helpers.ts'
+import { gitBranch, workspaceLabel } from '../src/chat/helpers.ts'
 
 vi.mock('node:child_process', () => ({
   execFileSync: vi.fn(() => 'main\n'),
@@ -25,5 +25,12 @@ describe('chat helpers', () => {
     expect(call[1]).toEqual(['branch', '--show-current'])
     expect(call[2].env).not.toHaveProperty('TUI_TEST_PASSWORD')
     expect(call[2].env).not.toHaveProperty('DSH_TUI_TEST_FLAG')
+  })
+
+  it('derives the workspace leaf name from a working directory', () => {
+    expect(workspaceLabel('/workspace/project')).toBe('project')
+    expect(workspaceLabel('D:\\work\\deepseekharness')).toBe('deepseekharness')
+    expect(workspaceLabel('/workspace/project/')).toBe('project')
+    expect(workspaceLabel('/')).toBe('/')
   })
 })

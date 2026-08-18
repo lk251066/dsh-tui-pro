@@ -6,9 +6,15 @@ This document is the source of truth for making `@lk251066/dsh-tui` independentl
 
 Ship one package: `@lk251066/dsh-tui`. Its package manifest already defines `dsh.bundle.patch`, so the repository will not create or publish a separate `@lk251066/dsh-tui-bundle` compatibility package.
 
-Version `1.7.1` is the current release against public `@deepseek-ai/dsh@0.1.0-rc.6`. The package, annotated tag, checksummed GitHub Release, source version, and lockfile identify one release commit.
+Version `1.7.1` is the current release against public `@deepseek-ai/dsh@0.1.0-rc.6`. The current source targets `1.8.0`; it is not a public release until the source, artifact, profile, PTY, npm, tag, and GitHub Release records identify one commit.
 
-The `1.7.1` release makes `/exit` and `/quit` cancel a running turn and begin bounded shutdown immediately. It retains the factory-agent ownership, rewind replacement, fixed workbench, queue interaction, clipboard image drafts, and durable per-session memory switch from `1.7.0`.
+The `1.8.0` source separates whole-TUI exit from project-session closing and gives the fixed assistant read-only access to visible dialogue in other Active project sessions.
+
+## Version 1.8.0 session closing and assistant conversation reads
+
+`/exit` remains the bounded whole-TUI shutdown command. `/quit` and empty-input `Delete` cancel a running turn, open the fixed assistant, remove the current project from Active, remove its mounted slot, release an owned agent handle, and preserve its durable history. Failure to detach Active membership switches back to the project. The assistant cannot be closed.
+
+The assistant-scoped `read_session_conversation` tool accepts only an Active project session id. It reads a live-preferred durable log without activating the target and returns newest-first pages in chronological display order. Projection keeps append-origin direct user text, `[Image]` placeholders, and completed assistant text. It excludes reasoning, tool calls and results, diffs, injected context, replacement events, and unfinished chunks. Membership is checked before and after the read.
 
 ## Version 1.7.1 bounded command exit
 
@@ -66,7 +72,7 @@ The same source also renders user messages before their assistant responses, sta
 
 ## Version 1.2.0 workspace sessions
 
-The current source uses the official dsh workspace registry as the durable active-session index. Current-directory startup resumes the first active project session or creates and attaches one. The sidebar shows active membership rather than recent history; `/sessions` searches complete history and changes membership without deleting logs; `/assistant` remains a fixed entry. The assistant receives only the six direct session tools and no additional management prompt rules.
+The current source uses the official dsh workspace registry as the durable active-session index. Current-directory startup resumes the first active project session or creates and attaches one. The sidebar shows active membership rather than recent history; `/sessions` searches complete history and changes membership without deleting logs; `/assistant` remains a fixed entry. The assistant receives only direct session tools and no additional management prompt rules.
 
 Type checking, all 422 tests, lint, build, artifact packing, empty-profile installation against public dsh rc.6, and the clean Linux real-PTY flow are the required evidence for the `1.3.0` tarball. The artifact audit checks the workspace launcher export and dependency, and the public-host check confirms every bundle row is active.
 

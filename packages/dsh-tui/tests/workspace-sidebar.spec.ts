@@ -34,12 +34,9 @@ describe('WorkspaceSidebarComponent', () => {
       cwd: 'D:\\work\\deepseekharness',
       branch: 'feature/sidebar',
       status: 'running',
-      model: 'deepseek-v4-flash',
-      contextPercent: 63,
       inputTokens: 1_234,
       outputTokens: 987,
       cacheHitRate: 80,
-      queued: 2,
       permission: 'acceptEdits',
       plan: true,
     })

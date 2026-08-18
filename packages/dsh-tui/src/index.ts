@@ -21,6 +21,7 @@ import {
   visibleWidth,
   type Component,
   type EditorTheme,
+  type RgbColor,
   type SlashCommand,
   type TerminalColorScheme,
 } from '@earendil-works/pi-tui'
@@ -78,7 +79,7 @@ import type {
 } from './extension/types.ts'
 import { displayInlineText, displayText } from './components/text.ts'
 import { createCodeHighlighter } from './components/highlight.ts'
-import { brandText, createPalette, markdownTheme, selectTheme } from './components/theme.ts'
+import { brandText, createPalette, markdownTheme, selectTheme, type PaletteOptions } from './components/theme.ts'
 import { THEME_PRESETS, THEME_PRESET_NAMES, type ThemePreset } from './components/theme-presets.ts'
 import {
   cacheHitRate,
@@ -100,6 +101,7 @@ import {
 import {
   type CondensedHeaderInfo,
   type ToolCardVisibility,
+  type WelcomeSuggestion,
   HeaderComponent,
 } from './components/transcript.ts'
 import { FramedEditorComponent } from './components/framed-editor.ts'
@@ -160,10 +162,15 @@ import {
 } from './chat/model-command.ts'
 import { createApprovalAnswerer, type ApprovalAnswerer } from './chat/approval.ts'
 import { createGoalBar, type GoalBarController } from './chat/goal-bar.ts'
-import { createPermissionController } from './chat/permission.ts'
+import { createPermissionController, type PermissionPresetsService } from './chat/permission.ts'
 import { createQuestionQueue } from './chat/questions.ts'
 import { createQueueDock, replaceQueuedMessage, type QueueDockController } from './chat/queue-dock.ts'
-import { ImageDraft, pasteClipboardImage, type ImageAttachmentWriter } from './chat/image-draft.ts'
+import {
+  deleteImagePlaceholderAtCursor,
+  ImageDraft,
+  pasteClipboardImage,
+  type ImageAttachmentWriter,
+} from './chat/image-draft.ts'
 import type { MemoryScopeDisposer, TuiMemoryService } from './chat/memory.ts'
 import { forkSession } from './chat/fork.ts'
 import {
@@ -426,9 +433,13 @@ function createTuiChatInternal(
   const initialPreset = resolved.theme.name === 'deepseek' ? undefined : THEME_PRESETS[resolved.theme.name]
   let currentPreset: ThemePreset | undefined = initialPreset
   let currentThemeName = initialPreset === undefined ? 'deepseek' : resolved.theme.name
-  const paletteOptions = (): { preset?: ThemePreset; truecolor?: boolean } => currentPreset === undefined
-    ? {}
-    : { preset: currentPreset, truecolor: resolved.theme.truecolor }
+  // The terminal's probed background (OSC 11); the bubble fill mixes from it.
+  let terminalBackground: RgbColor | undefined
+  const paletteOptions = (): PaletteOptions => ({
+    ...currentPreset === undefined ? {} : { preset: currentPreset },
+    truecolor: resolved.theme.truecolor,
+    ...terminalBackground === undefined ? {} : { background: terminalBackground },
+  })
   const palette = createPalette(resolved.theme.color, 'dark', paletteOptions())
   // The highlighter reads the live palette per call; once the lazily-loaded
   // module lands, blocks that rendered plain get a transcript rebuild.
@@ -525,6 +536,16 @@ function createTuiChatInternal(
 
   let sessionTitle = foldSessionTitle(agent.session.events)?.title
   let formattedCwd = displayText(runtime.formatCwd?.(agent.session.header.cwd) ?? formatCwd(agent.session.header.cwd))
+  /**
+   * Whether the session log is still pristine: nothing beyond the opening
+   * lifecycle prelude (`turn/start`, `step/start`), and no title. The
+   * codex-style welcome box greets only a pristine session; any conversation
+   * traffic — a prompt, a streamed reply, a tool call, injected context —
+   * swaps in the condensed identity instead.
+   */
+  const sessionPristine = (): boolean =>
+    sessionTitle === undefined
+    && agent.session.events.every(event => event.type === 'turn/start' || event.type === 'step/start')
   /** Compact workbench identity read per render for session and model changes. */
   const condensedHeaderInfo = (): CondensedHeaderInfo => ({
     version: TUI_VERSION,
@@ -532,15 +553,26 @@ function createTuiChatInternal(
       ? undefined
       : config.welcome),
   })
+  // The codex-style welcome box's suggested commands, drawn from the commands
+  // this bundle actually owns (see the command registrations below).
+  const welcomeSuggestions: readonly WelcomeSuggestion[] = [
+    { command: '/new', description: 'start another session in this project' },
+    { command: '/sessions', description: 'browse complete history' },
+    { command: '/model', description: 'switch the model' },
+    { command: '/memory', description: 'toggle session memory' },
+    { command: '/help', description: 'list every command' },
+  ]
   const header = new HeaderComponent(
-    () => sessionTitle ?? config.welcome,
+    () => ({
+      welcome: sessionTitle ?? config.welcome,
+      model: target.current === undefined ? 'model unset' : compactTargetLabel(target.current),
+      directory: formattedCwd,
+      suggestions: welcomeSuggestions,
+    }),
     palette,
     resolved.theme.color && resolved.theme.truecolor,
-    () => agent.session.events.some(event => event.type === 'user/message') || sessionTitle !== undefined
-      ? condensedHeaderInfo()
-      : undefined,
+    () => sessionPristine() ? undefined : condensedHeaderInfo(),
   )
-  let welcomeDelay: ReturnType<typeof setTimeout> | undefined
   let welcomeShimmer: ReturnType<typeof setInterval> | undefined
   let branch = runtime.gitBranch?.(initialCwd) ?? gitBranch(initialCwd)
   const promptValues: TuiPromptValueHandle[] = [
@@ -555,15 +587,16 @@ function createTuiChatInternal(
     ctx.tuiPrompt.register('permission'),
     ctx.tuiPrompt.register('plan'),
     ctx.tuiPrompt.register('stats'),
+    ctx.tuiPrompt.register('memory'),
   ]
   const [
     cwdValue, gitValue, tokenValue, modelValue, contextValue, queuedValue,
-    symbolValue, indicatorValue, permissionValue, planValue, statsValue,
+    symbolValue, indicatorValue, permissionValue, planValue, statsValue, memoryValue,
   ] = promptValues
   /* v8 ignore next -- the fixed built-in registration list always supplies each handle. */
   if (cwdValue === undefined || gitValue === undefined || tokenValue === undefined || modelValue === undefined
     || contextValue === undefined || queuedValue === undefined || symbolValue === undefined || indicatorValue === undefined
-    || permissionValue === undefined || planValue === undefined || statsValue === undefined) {
+    || permissionValue === undefined || planValue === undefined || statsValue === undefined || memoryValue === undefined) {
     throw new Error('TUI prompt built-ins failed to initialize')
   }
   /**
@@ -630,18 +663,20 @@ function createTuiChatInternal(
       : undefined)
     const stats = statsStrip(insights)
     statsValue.set(stats === undefined ? undefined : palette.dim(`  ${stats}`))
+    // The `${memory}` fragment keeps the session's memory switch visible after
+    // the transient /memory notice fades; an absent service or a disabled
+    // switch renders nothing so the status row stays clean.
+    const memory = memoryService()
+    memoryValue.set(memory !== undefined && memory.isEnabled(agent.session.id)
+      ? palette.dim(' mem on')
+      : undefined)
     sessionLayout?.updateStatus({
       cwd: displayText(activeCwd()),
       branch: branch === undefined ? undefined : displayText(branch),
       status: agent.status,
-      model: displayText(target.current === undefined ? 'model unset' : compactTargetLabel(target.current)),
-      contextPercent: occupancy,
       inputTokens: tokens.input,
       outputTokens: tokens.output,
       cacheHitRate: rate,
-      // The channel tracks newly submitted steering until the inbox projection
-      // catches up. Both counts can describe the same messages, so never sum.
-      queued: Math.max(queueDock.pendingCount(), channel.pendingSteeringCount()),
       permission: preset,
       plan: planActive,
     })
@@ -695,7 +730,8 @@ function createTuiChatInternal(
   const docks = new Container()
   auxiliary.addChild(docks)
   auxiliary.addChild(compactionStatusLine)
-  // The right sidebar owns live working status; the main input area stays quiet.
+  // The working line mounts above the editor inside the input area; the right
+  // sidebar carries only session navigation and the status summary.
   const workingLine = new WorkingLineComponent(palette, now)
   const editorFrame = new FramedEditorComponent(editor)
   inputArea.addChild(workingLine)
@@ -709,13 +745,21 @@ function createTuiChatInternal(
   }
   updateTerminalTitle()
 
-  const requestRender = (): void => {
+  /**
+   * Request a frame. The default path also refreshes every prompt value and
+   * the editor prompt; a light tick (the welcome reveal/shimmer animation)
+   * only repaints, so the token meter, session layout, and prompt templates
+   * do not recompute on every animation frame.
+   */
+  const requestRender = (light = false): void => {
     if (isDisposed()) return
-    updatePromptValues()
-    const inputPrompt = renderInputPrompt()
-    editor.setPrompt({ first: inputPrompt, continuation: ' '.repeat(visibleWidth(inputPrompt)) })
-    editor.hintPrefix = inputPrompt
-    promptContext.invalidate()
+    if (!light) {
+      updatePromptValues()
+      const inputPrompt = renderInputPrompt()
+      editor.setPrompt({ first: inputPrompt, continuation: ' '.repeat(visibleWidth(inputPrompt)) })
+      editor.hintPrefix = inputPrompt
+      promptContext.invalidate()
+    }
     ui.requestRender()
   }
   // A prompt value that changes on its own schedule (e.g. a plugin-owned
@@ -736,7 +780,7 @@ function createTuiChatInternal(
   // lightweight operation receipts (state-switch feedback) that must not
   // pollute the durable transcript. Errors, warnings, and anything the user
   // may need to scroll back to keep going through appendNotice.
-  const noticeSlot = new NoticeSlotComponent(palette, requestRender)
+  const noticeSlot = new NoticeSlotComponent(palette, requestRender, resolved.theme.color && resolved.theme.truecolor)
   inputArea.addChild(noticeSlot)
   const showTransientNotice = (message: string, kind: NoticeKind = 'info'): void => {
     noticeSlot.show(message, kind)
@@ -1063,6 +1107,11 @@ function createTuiChatInternal(
 
   /** Final teardown for one slot (eviction or shutdown): scoped listeners and overlays. */
   const disposeSlot = (slot: TuiSessionSlot): void => {
+    // A detached slot can still own a running/compaction animation when it is
+    // removed immediately after cancellation. Clear the channel state before
+    // releasing the rest of its scoped resources so no interval survives the
+    // slot's lifetime.
+    slot.channel.clearStatus()
     slot.approvals.drain()
     slot.approvals.unregister()
     slot.goalBar.dispose()
@@ -1429,8 +1478,40 @@ function createTuiChatInternal(
     applyEditorHint()
   }
 
+  /**
+   * Whether the session sits on the danger permission preset. The preset
+   * service is optional and its `custom` state names no resolvable preset;
+   * either way the border stays dim.
+   */
+  const dangerPresetActive = (): boolean => {
+    const name = permissionController.chip()
+    if (name === undefined || name === 'custom') return false
+    const service = ctx.get('permissionPresets') as PermissionPresetsService | undefined
+    if (service === undefined) return false
+    try {
+      return service.resolve(name).sandbox === 'danger-full-access'
+    } catch {
+      // An unhealthy optional provider resolves nothing; the border stays dim.
+      return false
+    }
+  }
+
+  /**
+   * The input border flags only the two modes that change what a submission
+   * does: plan mode (accent) and the danger permission preset (warning).
+   * Running state no longer repaints it — the working line, the sidebar
+   * status dot, and the breathing prompt glyph already carry that state, and
+   * the border's instant accent flip read as a second, clashing rhythm next
+   * to the glyph's pulse.
+   */
+  const editorBorderColor = (): ((text: string) => string) => {
+    if (foldPlanMode(agent.session.events)) return text => palette.accent(text)
+    if (dangerPresetActive()) return text => palette.warning(text)
+    return text => palette.dim(text)
+  }
+
   const setStatus = (status: AgentStatus): void => {
-    editor.borderColor = status === 'running' ? text => palette.accent(text) : text => palette.dim(text)
+    editor.borderColor = editorBorderColor()
     // Running keeps the steering placeholder; idle plan mode carries its own;
     // plain idle carries the queue hint or the example-commands hint.
     applyEditorHint()
@@ -1673,26 +1754,63 @@ function createTuiChatInternal(
     activateSession(next)
   }
 
-  let removingActiveSession: SessionId | undefined
-  const removeCurrentActiveSession = (): void => {
-    const sessionId = agent.session.id
+  let quittingActiveSession: SessionId | undefined
+  const quitCurrentActiveSession = (): void => {
+    const source = agent
+    const sessionId = source.session.id
     if (sessionId === ASSISTANT_SESSION_ID) {
-      showTransientNotice('The assistant is always active.')
+      showTransientNotice('The assistant session cannot be closed.')
       return
     }
-    if (removingActiveSession !== undefined) return
+    if (quittingActiveSession !== undefined) return
     if (!workspaceSessions.has(sessionId)) {
       showTransientNotice('This session is not in active sessions.')
       return
     }
-    removingActiveSession = sessionId
-    void workspaceSessions.remove(sessionId).then((removed) => {
-      if (isDisposed()) return
-      if (removed) showTransientNotice('Removed from active sessions. History preserved.')
-    }, (error: unknown) => {
-      if (!isDisposed()) appendNotice(`Remove active session failed: ${errorChain(error)}`, 'error')
+    quittingActiveSession = sessionId
+    if (source.status === 'running') {
+      source.cancel({ kind: 'user' })
+      appendNotice('Cancelling the active turn and closing this session…', 'warning')
+    }
+    void (async () => {
+      if (!await assistant.open()) throw new Error('the assistant session could not be opened')
+      let removedMembership: boolean
+      try {
+        removedMembership = await workspaceSessions.remove(sessionId)
+      } catch (error: unknown) {
+        registry.switchTo(sessionId)
+        throw error
+      }
+      const sourceStillMounted = registry.get(sessionId) !== undefined
+      if (sourceStillMounted && !registry.remove(sessionId)) {
+        const cleanupErrors: unknown[] = []
+        if (removedMembership) {
+          try {
+            await workspaceSessions.add(sessionId)
+          } catch (error: unknown) {
+            cleanupErrors.push(error)
+          }
+        }
+        registry.switchTo(sessionId)
+        throw cleanupErrors.length === 0
+          ? new Error('the closed session remained mounted')
+          : new AggregateError(cleanupErrors, 'the closed session remained mounted and workspace membership could not be restored')
+      }
+      for (const [messageId, pending] of queuedReferenceContexts) {
+        if (pending.agent === source) queuedReferenceContexts.delete(messageId)
+      }
+      const handle = ownedAgentHandles.get(sessionId)
+      if (handle !== undefined) {
+        ownedAgentHandles.delete(sessionId)
+        await handle.dispose().catch((error: unknown) => {
+          if (!isDisposed()) appendNotice(`Closed session cleanup failed: ${errorChain(error)}`, 'warning')
+        })
+      }
+      if (!isDisposed()) showTransientNotice('Session closed. History preserved.')
+    })().catch((error: unknown) => {
+      if (!isDisposed()) appendNotice(`Close session failed: ${errorChain(error)}`, 'error')
     }).finally(() => {
-      if (removingActiveSession === sessionId) removingActiveSession = undefined
+      if (quittingActiveSession === sessionId) quittingActiveSession = undefined
       if (!isDisposed()) requestRender()
     })
   }
@@ -1881,6 +1999,18 @@ function createTuiChatInternal(
   // same reason.
   ui.queryTerminalColorScheme({ timeoutMs: 2000 }).catch(() => {})
 
+  // Ask the terminal for its background color (OSC 11); the user-message
+  // bubble fill mixes from the real canvas when the reply lands. Most
+  // terminals do not respond, leaving the scheme/preset-derived fill.
+  // Swallow a query-write failure for the same reason as the scheme query.
+  void ui.queryTerminalBackgroundColor({ timeoutMs: 2000 }).then((background) => {
+    if (background === undefined) return
+    terminalBackground = background
+    Object.assign(palette, createPalette(resolved.theme.color, currentScheme, paletteOptions()))
+    rebuildTranscript(false)
+    requestRender()
+  }).catch(() => {})
+
   const toggleTools = (): void => {
     // The cycle order puts the two common reading modes adjacent: preview ->
     // full detail -> conversation-only, then back to the preview default.
@@ -2028,7 +2158,7 @@ function createTuiChatInternal(
     channel.chat.addChild(new Text([
       'Enter send/steer • Tab queue while running • Shift/Alt+Enter newline • Up/Down prompt history',
       'Esc cancel turn; double Esc edits a checkpoint • Alt+Left/Right switch active sessions',
-      'Delete remove the current project session from Active; history is preserved',
+      'Delete close the current project session; history is preserved',
       'Ctrl+O cycle cards (collapse/expand/hide) • Ctrl+R toggle reasoning • Ctrl+L redraw',
       'Shift+Tab cycle permission preset • Ctrl+G goal actions • Ctrl+C cancel/clear/exit • Ctrl+D exit',
       '',
@@ -2357,19 +2487,15 @@ function createTuiChatInternal(
         return { kind: 'success' }
       },
     })
-    const exitHandler = (): CommandResult => {
-      requestExit()
-      return { kind: 'success' }
-    }
     commandCtx.commands.register({
       name: 'exit',
       description: 'Cancel the active turn and exit the TUI',
-      handler: exitHandler,
+      handler: () => { requestExit(); return { kind: 'success' } },
     })
     commandCtx.commands.register({
       name: 'quit',
-      description: 'Cancel the active turn and exit the TUI',
-      handler: exitHandler,
+      description: 'Close this project session and return to the assistant',
+      handler: () => { quitCurrentActiveSession(); return { kind: 'success' } },
     })
     commandCtx.commands.register({
       name: 'sessions',
@@ -2637,7 +2763,9 @@ function createTuiChatInternal(
       return
     }
     const targetSlot = registry.active()
-    const imageBlocks = targetSlot.imageDraft.contentBlocks()
+    // Only images whose placeholder survives in the editor text ship with the
+    // message; pruning also drops stale entries from the draft.
+    const imageBlocks = targetSlot.imageDraft.pruneToText(value)
     if (imageBlocks.length === 0) {
       submitEditorValuePrepared(value, delivery, targetSlot, imageBlocks)
       return
@@ -2738,6 +2866,14 @@ function createTuiChatInternal(
       return { consume: true }
     }
 
+    // Backspace right after an `[Image #N]` token removes the whole
+    // placeholder (and its draft image) instead of one character at a time.
+    if (editor.focused && matchesKey(data, Key.backspace)
+      && deleteImagePlaceholderAtCursor(editor, registry.active().imageDraft)) {
+      requestRender()
+      return { consume: true }
+    }
+
     const fastSessionSwitch = editor.focused
       && editor.getText() === ''
       && !editor.isShowingAutocomplete()
@@ -2750,7 +2886,7 @@ function createTuiChatInternal(
       return { consume: true }
     }
     if (fastSessionSwitch && matchesKey(data, Key.delete)) {
-      removeCurrentActiveSession()
+      quitCurrentActiveSession()
       return { consume: true }
     }
     if (matchesKey(data, Key.pageUp)) {
@@ -2879,9 +3015,7 @@ function createTuiChatInternal(
   // detach them with the slot itself. The initial slot is already attached.
 
   const detachListeners = (): void => {
-    if (welcomeDelay !== undefined) clearTimeout(welcomeDelay)
     if (welcomeShimmer !== undefined) clearInterval(welcomeShimmer)
-    welcomeDelay = undefined
     welcomeShimmer = undefined
     stoppedTitleAbort?.abort()
     if (stoppedTitleRetry !== undefined) clearTimeout(stoppedTitleRetry)
@@ -2922,6 +3056,11 @@ function createTuiChatInternal(
     )
   }
   setStatus(agent.status)
+  // The welcome box's reveal sweep starts from a fully clipped box, so park
+  // the clip before the first frame rather than flash the whole box for the
+  // delay span.
+  const welcomePending = sessionPristine()
+  if (welcomePending) header.setRevealWidth(0)
   try {
     ui.start()
   } catch (error: unknown) {
@@ -2939,28 +3078,40 @@ function createTuiChatInternal(
     ui.stop()
     throw error
   }
-  if (!agent.session.events.some(event => event.type === 'user/message') && sessionTitle === undefined) {
-    welcomeDelay = setTimeout(() => {
-      welcomeDelay = undefined
-      let offset = -SHIMMER_WIDTH
-      welcomeShimmer = setInterval(() => {
-        if (agent.session.events.some(event => event.type === 'user/message') || sessionTitle !== undefined) {
-          if (welcomeShimmer !== undefined) clearInterval(welcomeShimmer)
-          welcomeShimmer = undefined
-          header.setShimmerOffset(undefined)
-          requestRender()
-          return
-        }
+  if (welcomePending) {
+    // Two animation phases over the welcome box, started with the first
+    // frame: the reveal sweep clips it left-to-right (~6 columns per tick,
+    // parking at full width), then the shimmer pass sweeps the logo inside
+    // it. Both run on light render ticks — the header is all that moves, so
+    // the prompt values are not recomputed per frame.
+    let revealed = 0
+    let offset = -SHIMMER_WIDTH
+    const stopWelcomeAnimation = (): void => {
+      if (welcomeShimmer !== undefined) clearInterval(welcomeShimmer)
+      welcomeShimmer = undefined
+      header.setRevealWidth(undefined)
+      header.setShimmerOffset(undefined)
+    }
+    welcomeShimmer = setInterval(() => {
+      if (!sessionPristine()) {
+        stopWelcomeAnimation()
+        requestRender()
+        return
+      }
+      // Read the target per tick: the first frame may land after the interval
+      // starts, and only a rendered box reports its width.
+      const revealTarget = header.welcomeBoxWidth()
+      if (revealed < revealTarget) {
+        revealed = Math.min(revealTarget, revealed + 6)
+        header.setRevealWidth(revealed >= revealTarget ? undefined : revealed)
+      } else if (offset <= logoFullWidth()) {
         header.setShimmerOffset(offset)
         offset += 2
-        if (offset > logoFullWidth()) {
-          if (welcomeShimmer !== undefined) clearInterval(welcomeShimmer)
-          welcomeShimmer = undefined
-          header.setShimmerOffset(undefined)
-        }
-        requestRender()
-      }, SHIMMER_INTERVAL_MS)
-    }, 350)
+      } else {
+        stopWelcomeAnimation()
+      }
+      requestRender(true)
+    }, SHIMMER_INTERVAL_MS)
   }
   tuiServiceFiber = ctx.inject([], (serviceCtx) => {
     new TuiExtensionServiceImpl(serviceCtx, agent, overlayManager)

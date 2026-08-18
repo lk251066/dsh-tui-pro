@@ -20,7 +20,12 @@ export interface TuiThemeConfig {
   truecolor?: boolean
   /** Named color preset (`/theme`); the default adapts to the terminal's own scheme. */
   name?: string
-  /** Left-aligned template on the row above the editor. */
+  /**
+   * Left-aligned template on the row above the editor. The default
+   * `${cwd}${git/worktree}${model}${context}${memory}` ends with the memory
+   * fragment, which renders ` mem on` while session memory is enabled and
+   * nothing otherwise.
+   */
   leftPrompt?: string
   /** Right-aligned template on the row above the editor. */
   rightPrompt?: string
@@ -38,6 +43,8 @@ export interface TuiConfig {
   showReasoning?: boolean
   /** Maximum tool-card body lines retained in its collapsed head/tail preview. */
   maxToolOutputLines?: number
+  /** Maximum rendered lines of a settled assistant reply before it folds behind a click-to-expand disclosure. */
+  maxMessageLines?: number
   /** Maximum added and removed lines explored while deriving an exact line diff. */
   maxDiffEditLength?: number
   /** Maximum options visible at once in a user-question panel. */
@@ -75,6 +82,7 @@ export interface TuiConfig {
 const showReasoningSchema = z.boolean().default(false)
 const sidebarWidthSchema = z.number().step(1).min(24).default(32)
 const maxToolOutputLinesSchema = z.number().step(1).min(1).default(6)
+const maxMessageLinesSchema = z.number().step(1).min(1).default(30)
 const maxDiffEditLengthSchema = z.number().step(1).min(1).default(1000)
 const maxQuestionOptionsSchema = z.number().step(1).min(1).default(8)
 const maxModelOptionsSchema = z.number().step(1).min(1).default(8)
@@ -94,7 +102,7 @@ const colorSchema = z.boolean().default(true)
 const truecolorSchema = z.boolean()
 // No default: an unset theme name means the adaptive default (`deepseek`).
 const themeNameSchema = z.string()
-const DEFAULT_LEFT_PROMPT = '${cwd}${git/worktree}${model}${context}'
+const DEFAULT_LEFT_PROMPT = '${cwd}${git/worktree}${model}${context}${memory}'
 const DEFAULT_RIGHT_PROMPT = ''
 const DEFAULT_INPUT_PROMPT = '${symbol} ${indicator}'
 const DEFAULT_INPUT_PLACEHOLDER = 'Enter steer · Tab queue · Esc cancel'
@@ -113,6 +121,7 @@ const tuiConfigSchemaFields = {
   sidebarWidth: sidebarWidthSchema,
   showReasoning: showReasoningSchema,
   maxToolOutputLines: maxToolOutputLinesSchema,
+  maxMessageLines: maxMessageLinesSchema,
   maxDiffEditLength: maxDiffEditLengthSchema,
   maxQuestionOptions: maxQuestionOptionsSchema,
   maxModelOptions: maxModelOptionsSchema,
@@ -136,7 +145,7 @@ export const TuiConfigSchema: z<TuiConfig> = z.object(tuiConfigSchemaFields)
 
 /** Serializable plugin configuration. */
 export interface Config extends TuiConfig {
-  /** Banner subtitle line. When absent, the banner has no subtitle and sweeps in on start. */
+  /** Welcome-box line under the logo; absent shows the default welcome. */
   welcome?: string
   /** Exact shared agent/session identity driven by this terminal. Defaults to `main`. */
   sessionId?: string
@@ -157,6 +166,7 @@ export const Config: z<Config> = z.object({
   sidebarWidth: tuiConfigSchemaFields.sidebarWidth,
   showReasoning: tuiConfigSchemaFields.showReasoning,
   maxToolOutputLines: tuiConfigSchemaFields.maxToolOutputLines,
+  maxMessageLines: tuiConfigSchemaFields.maxMessageLines,
   maxDiffEditLength: tuiConfigSchemaFields.maxDiffEditLength,
   maxQuestionOptions: tuiConfigSchemaFields.maxQuestionOptions,
   maxModelOptions: tuiConfigSchemaFields.maxModelOptions,
@@ -191,6 +201,7 @@ export interface ResolvedTuiConfig {
   sidebarWidth: number
   showReasoning: boolean
   maxToolOutputLines: number
+  maxMessageLines: number
   maxDiffEditLength: number
   maxQuestionOptions: number
   maxModelOptions: number
@@ -220,6 +231,7 @@ export function resolveTuiConfig(config: TuiConfig | undefined): ResolvedTuiConf
     sidebarWidth: config?.sidebarWidth ?? 32,
     showReasoning: config?.showReasoning ?? false,
     maxToolOutputLines: config?.maxToolOutputLines ?? 6,
+    maxMessageLines: config?.maxMessageLines ?? 30,
     maxDiffEditLength: config?.maxDiffEditLength ?? 1000,
     maxQuestionOptions: config?.maxQuestionOptions ?? 8,
     maxModelOptions: config?.maxModelOptions ?? 8,

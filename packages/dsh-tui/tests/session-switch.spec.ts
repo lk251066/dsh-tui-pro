@@ -633,7 +633,7 @@ describe('multi-session switching (/new, /sessions)', () => {
     }
   })
 
-  it('removes the clicked current project session from Active with Delete while preserving history and use', async () => {
+  it('closes the clicked project session with Delete, preserves history, and returns to the assistant', async () => {
     const root = await mkdtemp(join(tmpdir(), 'dsh-tui-sidebar-remove-'))
     const { harness, created } = await switchHarness(root)
     try {
@@ -654,19 +654,83 @@ describe('multi-session switching (/new, /sessions)', () => {
       expect(detach).toHaveBeenCalledTimes(1)
       expect(detach).toHaveBeenCalledWith(SessionId('main-session'))
       expect(workspace.sessionIds).not.toContain(SessionId('main-session'))
-      expect(harness.terminal.output).toContain('Removed from active sessions. History preserved.')
+      expect(harness.terminal.output).toContain('Session closed. History preserved.')
+      expect(created.filter(record => record.agent.id === ASSISTANT_SESSION_ID)).toHaveLength(1)
 
-      submit(harness, 'still using removed session')
+      submit(harness, 'message after closing project')
       await tick()
-      expect(harness.agent.sentMessages.at(-1)?.content).toEqual([
-        { type: 'text', text: 'still using removed session' },
-      ])
+      const assistant = created.find(record => record.agent.id === ASSISTANT_SESSION_ID)
+      expect(assistant?.followups).toEqual(['message after closing project'])
 
       submit(harness, '/sessions')
       await tick()
       const history = harness.terminal.output.slice(harness.terminal.output.lastIndexOf('Sessions'))
-      expect(history).toContain('all history (2)')
-      expect(history).toContain('current · history')
+      expect(history).toContain('all history (3)')
+      expect(history).toContain('current · assistant')
+      expect(history).toContain('history · live')
+    } finally {
+      await disposeTuiTestHarness(harness)
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it('/quit cancels and disposes an owned project session without exiting the TUI', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dsh-tui-session-quit-'))
+    const { harness, created } = await switchHarness(root)
+    const intervalSpy = vi.spyOn(globalThis, 'setInterval')
+    const clearIntervalSpy = vi.spyOn(globalThis, 'clearInterval')
+    try {
+      submit(harness, '/new')
+      await tick()
+      const project = created[0]!
+      Object.assign(project.agent, { status: 'running' as const })
+      intervalSpy.mockClear()
+      clearIntervalSpy.mockClear()
+      agentEvents(harness.ctx, project.agent).emit('agent/status', { status: 'running' })
+      const projectStatusTimer = intervalSpy.mock.results[0]?.value
+      expect(projectStatusTimer).toBeDefined()
+      const cancel = vi.spyOn(project.agent, 'cancel')
+      const workspace = harness.ctx.workspaceRegistry.list()[0]!
+
+      submit(harness, '/quit')
+      await tick()
+
+      expect(cancel).toHaveBeenCalledWith({ kind: 'user' })
+      expect(project.disposed).toBe(1)
+      expect(clearIntervalSpy).toHaveBeenCalledWith(projectStatusTimer)
+      expect(workspace.sessionIds).not.toContain(project.agent.id)
+      expect(harness.terminal.stopped).toBe(0)
+      expect(harness.terminal.output).toContain('Session closed. History preserved.')
+      const assistant = created.find(record => record.agent.id === ASSISTANT_SESSION_ID)
+      expect(assistant).toBeDefined()
+      submit(harness, 'assistant remains open')
+      await tick()
+      expect(assistant?.followups).toEqual(['assistant remains open'])
+    } finally {
+      await disposeTuiTestHarness(harness)
+      intervalSpy.mockRestore()
+      clearIntervalSpy.mockRestore()
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it('/quit restores the project when removing Active membership fails', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dsh-tui-session-quit-rollback-'))
+    const { harness } = await switchHarness(root)
+    try {
+      const workspace = harness.ctx.workspaceRegistry.list()[0]!
+      vi.spyOn(workspace, 'detachSession').mockRejectedValueOnce(new Error('detach failed'))
+
+      submit(harness, '/quit')
+      await tick()
+
+      expect(workspace.sessionIds).toContain(SessionId('main-session'))
+      expect(harness.terminal.output).toContain('Close session failed: detach failed')
+      submit(harness, 'project remains current')
+      await tick()
+      expect(harness.agent.sentMessages.at(-1)?.content).toEqual([
+        { type: 'text', text: 'project remains current' },
+      ])
     } finally {
       await disposeTuiTestHarness(harness)
       await rm(root, { recursive: true, force: true })
@@ -692,7 +756,11 @@ describe('multi-session switching (/new, /sessions)', () => {
       harness.terminal.send('\x1b[3~')
       await tick()
       expect(workspace.sessionIds).toEqual(before)
-      expect(harness.terminal.output).toContain('The assistant is always active.')
+      expect(harness.terminal.output).toContain('The assistant session cannot be closed.')
+      submit(harness, '/quit')
+      await tick()
+      expect(workspace.sessionIds).toEqual(before)
+      expect(harness.terminal.output).toContain('The assistant session cannot be closed.')
     } finally {
       await disposeTuiTestHarness(harness)
       await rm(root, { recursive: true, force: true })

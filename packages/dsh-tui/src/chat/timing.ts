@@ -297,6 +297,24 @@ export function pulseLevel(nowMs: number): number {
 }
 
 /**
+ * Truecolor gray SGR parameters at one brightness fraction of
+ * {@link STATUS_FADE_GRAY} (0 = near-background trough, 1 = settled dim
+ * gray), shared by the status glyph's fade/throb and the notice slot's
+ * fade-out.
+ * @param opacity - Brightness fraction; clamped to [0, 1].
+ * @returns The `38;2;r;g;b` SGR parameters.
+ */
+export function fadeGraySpec(opacity: number): string {
+  const o = Math.min(Math.max(opacity, 0), 1)
+  const [tr, tg, tb] = STATUS_FADE_GRAY.trough
+  const [sr, sg, sb] = STATUS_FADE_GRAY.settled
+  const r = Math.round(tr + (sr - tr) * o)
+  const g = Math.round(tg + (sg - tg) * o)
+  const b = Math.round(tb + (sb - tb) * o)
+  return `38;2;${r};${g};${b}`
+}
+
+/**
  * One frame of the status glyph at fade `opacity` (0 = near-background trough
  * gray, 1 = settled dim gray). The character and its width never change — only
  * the gray fades — so the prompt caret column stays fixed and the glyph reads as
@@ -329,13 +347,7 @@ export function fadeGlyph(
   visible: boolean,
 ): string {
   if (truecolor && colorEnabled) {
-    const o = Math.min(Math.max(opacity, 0), 1)
-    const [tr, tg, tb] = STATUS_FADE_GRAY.trough
-    const [sr, sg, sb] = STATUS_FADE_GRAY.settled
-    const r = Math.round(tr + (sr - tr) * o)
-    const g = Math.round(tg + (sg - tg) * o)
-    const b = Math.round(tb + (sb - tb) * o)
-    return `\x1b[38;2;${r};${g};${b}m${glyph}\x1b[39m`
+    return `\x1b[${fadeGraySpec(opacity)}m${glyph}\x1b[39m`
   }
   if (!visible) return ' '
   return colorEnabled ? palette.dim(glyph) : glyph
@@ -374,6 +386,18 @@ export function formatTimingTotals(totals: TimingTotals, includeModelWait = fals
  */
 export function formatQueuedStatus(queued: number): string | undefined {
   return queued > 0 ? `${queued} queued` : undefined
+}
+
+/**
+ * Format a wall-clock time as `HH:MM` in local time, for role headers.
+ * @param time - Epoch milliseconds.
+ * @returns The formatted local clock time.
+ */
+export function formatClockTime(time: number): string {
+  const date = new Date(time)
+  return [date.getHours(), date.getMinutes()]
+    .map(value => value.toString().padStart(2, '0'))
+    .join(':')
 }
 
 /**

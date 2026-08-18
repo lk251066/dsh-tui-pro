@@ -65,7 +65,7 @@ INTERACTIONS = (
     (0.3, b"/sessions\r"),
     (0.5, b"\x1b"),
     (0.2, b"/assistant\r"),
-    (0.8, b"/quit\r"),
+    (0.8, b"/exit\r"),
 )
 
 

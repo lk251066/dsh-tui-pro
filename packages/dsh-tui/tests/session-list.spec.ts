@@ -46,6 +46,19 @@ describe('SessionListComponent', () => {
     expect(list.itemAtRow(5)?.id).toBe('main')
   })
 
+  it('omits the group header when every session shares one workspace', () => {
+    const list = createList()
+    list.setItems(items.filter(item => item.workspace === 'project'))
+    const lines = list.render(44)
+    const text = lines.join('\n')
+    expect(text).toContain('Active sessions · 2')
+    expect(text).toContain('Main session')
+    expect(text).toContain('Debug session')
+    expect(text).not.toContain('project')
+    expect(list.itemAtRow(2)?.id).toBe('main')
+    expect(list.itemAtRow(3)?.id).toBe('debug')
+  })
+
   it('centers a bounded window around the current session', () => {
     const many = Array.from({ length: 10 }, (_, index): SessionListItem => ({
       id: `session-${index}`,

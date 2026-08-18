@@ -239,3 +239,76 @@ describe('renderDiff syntax highlighting', () => {
     expect(plain(rendered.lines)).toEqual(rendered.lines)
   })
 })
+
+describe('renderDiff word-level emphasis', () => {
+  it('emphasizes the changed words of a paired -/+ row over the line color', () => {
+    const rendered = renderDiff(
+      { path: 'a.txt', oldText: 'const a = 1', newText: 'const a = 2' },
+      2_000,
+      color,
+      true,
+    )
+    // Shared words keep the side's line color (one span per unchanged run);
+    // only the changed word takes the bold word role.
+    expect(rendered.lines[0]).toBe(
+      `${color.dim('   1')}${color.error('- ')}${color.error('const a = ')}${color.diffRemovedWord('1')}`,
+    )
+    expect(rendered.lines[1]).toBe(
+      `${color.dim('   1')}${color.success('+ ')}${color.success('const a = ')}${color.diffAddedWord('2')}`,
+    )
+    // The plain text still reads as the plain side rows.
+    expect(plain(rendered.lines)).toEqual(['   1- const a = 1', '   1+ const a = 2'])
+  })
+
+  it('keeps a fully replaced pair in the single line color', () => {
+    const rendered = renderDiff(
+      { path: 'a.txt', oldText: 'aaa bbb', newText: 'ccc ddd' },
+      2_000,
+      color,
+      true,
+    )
+    expect(rendered.lines).toEqual([
+      `${color.dim('   1')}${color.error('- aaa bbb')}`,
+      `${color.dim('   1')}${color.success('+ ccc ddd')}`,
+    ])
+  })
+
+  it('does not word-diff unpaired rows or the whole-side fallback', () => {
+    const added = renderDiff({ path: 'n.txt', oldText: null, newText: 'x\ny\n' }, 2_000, color, true)
+    expect(added.lines.join('\n')).not.toContain('1;32')
+    const fallback = renderDiff(
+      { path: 'b.txt', oldText: 'old one\nold two', newText: 'new one\nnew two' },
+      1,
+      color,
+      true,
+    )
+    expect(fallback.approximate).toBe(true)
+    expect(fallback.lines.join('\n')).not.toContain('1;31')
+    expect(fallback.lines.join('\n')).not.toContain('1;32')
+  })
+
+  it('word-diffs unchanged plain text when color is off', () => {
+    const rendered = renderDiff(
+      { path: 'a.txt', oldText: 'const a = 1', newText: 'const a = 2' },
+      2_000,
+      mono,
+      true,
+    )
+    expect(rendered.lines).toEqual(['   1- const a = 1', '   1+ const a = 2'])
+    expect(plain(rendered.lines)).toEqual(rendered.lines)
+  })
+
+  it('keeps syntax-highlighted rows on their syntax colors alone', () => {
+    const rendered = renderDiff(
+      { path: 'a.ts', oldText: 'const a = 1', newText: 'const a = 2' },
+      2_000,
+      color,
+      true,
+      fakeHighlight,
+    )
+    // Highlighted rows never take word segments: marker colored, content SGR.
+    expect(rendered.lines[0]).toBe(`${color.dim('   1')}${color.error('-')} \x1b[36mts:const a = 1\x1b[39m`)
+    expect(rendered.lines.join('\n')).not.toContain('1;31')
+    expect(rendered.lines.join('\n')).not.toContain('1;32')
+  })
+})
