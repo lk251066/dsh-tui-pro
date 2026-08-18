@@ -9,6 +9,7 @@ import {
   ThemeDialog,
 } from '../src/components/dialogs.ts'
 import { createPalette } from '../src/components/theme.ts'
+import { stripTerminalControls } from '../src/components/transcript-selection.ts'
 import { ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 
 /** Color-disabled palette: frames render plain text, so glyphs assert exactly. */
@@ -58,6 +59,61 @@ describe('browse dialogs render the Claude Code pane form', () => {
     const lines = dialog.render(60)
     expect(lines[1]).toBe(color.bold('Context'))
     expect(lines[2]).toBe(color.accent('─'.repeat(60)))
+  })
+
+  it('bounds long content and scrolls by line, page, and endpoint keys', () => {
+    const close = vi.fn()
+    const dialog = new StaticDialog(
+      'Diagnostics',
+      Array.from({ length: 10 }, (_, index) => `row ${String(index + 1)}`),
+      plain,
+      close,
+      undefined,
+      () => 9,
+    )
+
+    const first = dialog.render(60)
+    expect(first).toHaveLength(9)
+    expect(first.join('\n')).toContain('row 1')
+    expect(first.join('\n')).toContain('row 4')
+    expect(first.join('\n')).not.toContain('row 5')
+
+    dialog.handleInput('\x1b[B')
+    expect(dialog.render(60).join('\n')).toContain('row 5')
+    dialog.handleInput('\x1b[6~')
+    expect(dialog.render(60).join('\n')).toContain('row 9')
+    dialog.handleInput('\x1b[F')
+    expect(dialog.render(60).join('\n')).toContain('row 10')
+    dialog.handleInput('\x1b[H')
+    expect(dialog.render(60).join('\n')).toContain('1-4 of 10')
+
+    dialog.handleInput('q')
+    expect(close).toHaveBeenCalledOnce()
+  })
+
+  it('renders a compact scroll position and persistent navigation footer', () => {
+    const dialog = new StaticDialog(
+      'Diagnostics',
+      ['alpha', 'beta', 'gamma', 'delta', 'epsilon'],
+      plain,
+      vi.fn(),
+      () => ['refreshed'],
+      () => 8,
+    )
+
+    const visibleLines = dialog.render(72).map(line => stripTerminalControls(line).trimEnd())
+    expect(visibleLines).toMatchInlineSnapshot(`
+      [
+        "",
+        "Diagnostics",
+        "────────────────────────────────────────────────────────────────────────",
+        "  alpha",
+        "  beta",
+        "  gamma",
+        "",
+        "  1-3 of 5 · ↑/↓ line · PgUp/PgDn page · Home/End · r refresh · Esc/q",
+      ]
+    `)
   })
 })
 

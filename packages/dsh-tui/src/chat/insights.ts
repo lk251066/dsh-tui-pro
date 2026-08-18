@@ -12,7 +12,7 @@ import { randomUUID } from 'node:crypto'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { ContentBlock, Message } from '@deepseek-ai/dsh-llm'
 import type { Session } from '@deepseek-ai/dsh-session'
-import { diagnosticMeter, formatDiagnosticNumber, contextMeter, StaticDialog } from '../components/dialogs.ts'
+import { contextMeter, diagnosticMeter, formatDiagnosticCount, formatDiagnosticNumber, StaticDialog } from '../components/dialogs.ts'
 import type { Palette } from '../components/theme.ts'
 import { displayText } from '../components/text.ts'
 import { contentText } from '../components/content.ts'
@@ -36,20 +36,19 @@ interface SessionStats {
 }
 
 /**
- * One compact stats-strip value for the LEFT prompt row (the right prompt
- * crowds out the left when both are wide, so the strip lives after the context
- * bar and is the first thing a narrow terminal truncates). `undefined` without
- * the sessionStats projection.
+ * Average decoded-token throughput for completed model steps. The projection
+ * reports aggregate decoded tokens and time, so this is a session-weighted
+ * average rather than a live per-chunk rate.
+ * @param deps - Active session and projection registry.
+ * @returns A compact `tok/s` value, or `undefined` before a measured step.
  */
-export function statsStrip(deps: InsightsDeps): string | undefined {
+export function throughputStrip(deps: InsightsDeps): string | undefined {
   const stats = projectionValue<SessionStats>(deps, 'sessionStats')
   if (stats === undefined) return undefined
-  const parts: string[] = []
-  if (stats.turns !== undefined && stats.turns > 0) parts.push(`${stats.turns} turns`)
   if (stats.decodeMs !== undefined && stats.decodeTokens !== undefined && stats.decodeMs > 0 && stats.decodeTokens > 0) {
-    parts.push(`${Math.round(stats.decodeTokens / (stats.decodeMs / 1000))} tok/s`)
+    return `${Math.round(stats.decodeTokens / (stats.decodeMs / 1000))} tok/s`
   }
-  return parts.length === 0 ? undefined : parts.join(' · ')
+  return undefined
 }
 
 /** Read one projection value off the optional projection registry. */
@@ -68,6 +67,11 @@ function projectionValue<T>(deps: InsightsDeps, key: string): T | undefined {
 
 /** Cell width of the `/context` segmented composition bar. */
 const SEGMENT_BAR_WIDTH = 20
+
+/** Section label shared by the read-only diagnostic panes. */
+function sectionTitle(title: string, palette: Palette): string {
+  return palette.bold(palette.accent(title))
+}
 
 /** Cell counts for the four segments of the `/context` composition bar. */
 export interface SegmentCells {
@@ -164,28 +168,30 @@ export function contextLines(deps: InsightsDeps, palette: Palette): string[] {
   const window = pressure?.contextWindow
   const rows: string[] = []
   if (window === undefined || window <= 0) {
-    rows.push(`${formatDiagnosticNumber(used)} tokens in play · context window unknown`)
+    rows.push(sectionTitle('Usage', palette), `  ${formatDiagnosticNumber(used)} tokens in play · context window unknown`)
     return rows
   }
   const percent = Math.min(100, used / window * 100)
-  rows.push(palette.bold(`~${formatDiagnosticNumber(used)} / ${formatDiagnosticNumber(window)} · ${Math.round(percent)}%`))
-  rows.push(`${contextMeter(percent, palette)} ${diagnosticMeter(percent, palette)}`)
+  rows.push(sectionTitle('Usage', palette))
+  rows.push(`  ${palette.bold(`~${formatDiagnosticNumber(used)} / ${formatDiagnosticNumber(window)} · ${Math.round(percent)}%`)}`)
+  rows.push(`  ${contextMeter(percent, palette)} ${diagnosticMeter(percent, palette)}`)
   if (breakdown !== undefined) {
     const system = breakdown.systemTokens ?? 0
     const tools = breakdown.toolsTokens ?? 0
     const messages = breakdown.messageTokens ?? 0
     const total = Math.max(1, system + tools + messages)
-    rows.push('', segmentBar(contextSegmentCells({ system, tools, messages }, window), palette))
+    rows.push('', sectionTitle('Composition', palette))
+    rows.push(`  ${segmentBar(contextSegmentCells({ system, tools, messages }, window), palette)}`)
     // Legend swatches reuse each segment's color; category percentages stay
     // relative to the composition total (the heuristic sum), while the free
     // row reports the window's unclaimed remainder.
     const legend = (tokens: number): string =>
       `${formatDiagnosticNumber(tokens)} (${Math.round(tokens / total * 100)}%)`
-    rows.push(`${palette.accent('██')} system  ${legend(system)}`)
-    rows.push(`${palette.warning('██')} tools   ${legend(tools)}`)
-    rows.push(`${palette.success('██')} messages ${legend(messages)}`)
+    rows.push(`  ${palette.accent('██')} system   ${legend(system)}`)
+    rows.push(`  ${palette.warning('██')} tools    ${legend(tools)}`)
+    rows.push(`  ${palette.success('██')} messages ${legend(messages)}`)
     const free = Math.max(0, window - (system + tools + messages))
-    rows.push(palette.dim(`·· free    ${formatDiagnosticNumber(free)} (${Math.round(free / window * 100)}%)`))
+    rows.push(palette.dim(`  ·· free     ${formatDiagnosticNumber(free)} (${Math.round(free / window * 100)}%)`))
     rows.push('', palette.dim('Heuristic composition — proportions are approximate.'))
   }
   return rows
@@ -211,12 +217,18 @@ export async function agentsLines(deps: InsightsDeps, signal: AbortSignal): Prom
   }
   const entries = await subagents.listDescendants(deps.agent.session.id, signal)
   if (entries.length === 0) return ['No subagent sessions.']
-  return entries.map((entry) => {
+  const rows = entries.map((entry) => {
     const status = entry.kind === 'child' ? (entry.activity ?? 'inactive') : 'unavailable'
-    const mode = entry.mode === undefined ? '' : ` · ${entry.mode}`
+    const mode = entry.mode === undefined ? '' : ` · ${displayText(entry.mode)}`
     const depth = entry.depth !== undefined && entry.depth > 0 ? ` · depth ${entry.depth}` : ''
-    return `${status === 'running' ? '●' : status === 'inactive' ? '○' : '·'} ${displayText(entry.label ?? entry.id)}${mode}${depth}`
+    const glyph = status === 'running'
+      ? deps.palette.accent('●')
+      : status === 'inactive'
+        ? deps.palette.dim('○')
+        : deps.palette.dim('·')
+    return `${glyph} ${deps.palette.bold(displayText(entry.label ?? entry.id))}${deps.palette.dim(`${mode}${depth}`)}`
   })
+  return [deps.palette.dim(`${formatDiagnosticCount(entries.length, 'subagent')} in this conversation`), '', ...rows]
 }
 
 /** One `/jobs` row: a background job owned by a session. */
@@ -235,7 +247,12 @@ export function jobsLines(deps: InsightsDeps): string[] {
   if (jobs?.list === undefined) return ['Background jobs are not available in this session.']
   const mine = jobs.list(deps.agent).filter(job => job.ownerSession === undefined || job.ownerSession === deps.agent.session.id)
   if (mine.length === 0) return ['No background jobs.']
-  return mine.map(job => `${job.status.padEnd(9)} ${job.id.padEnd(12)} ${displayText(job.label ?? '')}`)
+  const rows = mine.map((job) => {
+    const status = displayText(job.status)
+    const id = displayText(job.id)
+    return `${status.padEnd(10)} ${id.padEnd(14)} ${displayText(job.label ?? '')}`.trimEnd()
+  })
+  return [deps.palette.dim(`${formatDiagnosticCount(mine.length, 'job')} owned by this session`), '', deps.palette.dim('State      ID             Description'), ...rows]
 }
 
 /** One `/settings` row: a namespace with its user-override marker. */
@@ -253,10 +270,22 @@ export function settingsLines(deps: InsightsDeps): string[] {
     readonly documentPath?: string
   } | undefined
   if (settings?.describe === undefined) return ['Settings are not available in this session.']
-  const rows = settings.describe({ redactSecrets: true }).map(descriptor =>
-    `${descriptor.user === undefined ? ' ' : '*'} ${descriptor.ns.padEnd(16)} ${descriptor.user === undefined ? 'default' : 'user override'}`)
+  const descriptors = settings.describe({ redactSecrets: true })
+  const rows = descriptors.map((descriptor) => {
+    const namespace = displayText(descriptor.ns)
+    const source = descriptor.user === undefined ? deps.palette.dim('default') : deps.palette.accent('user override')
+    return `${descriptor.user === undefined ? ' ' : '*'} ${namespace.padEnd(18)} ${source}`
+  })
   const path = settings.documentPath
-  return [...rows, '', `Edit ${path ?? 'the settings file'} — changes hot-reload.`]
+  return [
+    deps.palette.dim(`${formatDiagnosticCount(descriptors.length, 'namespace')} · * has a user override`),
+    '',
+    ...rows,
+    '',
+    sectionTitle('Settings file', deps.palette),
+    `  ${displayText(path ?? '(path unavailable)')}`,
+    deps.palette.dim('  Changes hot-reload.'),
+  ]
 }
 
 /** Render one message's blocks as markdown-ish text for `/export`. */
@@ -324,7 +353,14 @@ export function openStaticDialog(
   refresh?: () => readonly string[],
 ): void {
   const session = deps.overlayManager.open({
-    create: () => new StaticDialog(title, lines, deps.palette, () => { void session.close() }, refresh),
+    create: host => new StaticDialog(
+      title,
+      lines,
+      deps.palette,
+      () => { void session.close() },
+      refresh,
+      () => Math.max(1, host.viewport.rows - 2),
+    ),
     options: { width: '100%', maxHeight: '100%' },
   }, 'main')
   deps.requestRender()

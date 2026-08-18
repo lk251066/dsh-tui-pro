@@ -33,6 +33,7 @@ TERMINAL_RESPONSES = (
 )
 INTERACTIONS = (
     (0.0, b"/help\r"),
+    (0.4, b"\x1b"),
     (0.3, b"/settings\r"),
     (0.4, b"\x1b"),
     (0.2, b"/effort\r"),
@@ -51,6 +52,7 @@ INTERACTIONS = (
     (0.2, b"\x1bv"),
     (0.6, b"\x1b"),
     (0.2, b"/status\r"),
+    (0.6, b"\x1b"),
     (0.6, b"/export ../pty-export.md\r"),
     (0.3, b"\x1b[<64;10;4M"),
     (0.2, b"\x1b[<65;10;4M"),

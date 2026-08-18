@@ -1,5 +1,5 @@
 /**
- * Manual `/skill:<name> [instructions]` parsing and model-visible rendering for
+ * Manual `/skill <name> [instructions]` parsing and model-visible rendering for
  * the terminal front door.
  * @module @deepseek-ai/dsh-tui/chat/skill-invocation
  */
@@ -7,27 +7,24 @@
 import { assertNever } from '@deepseek-ai/dsh-llm'
 import type { SkillDefinition, SkillResourceBase } from '@deepseek-ai/dsh-skill'
 
-/** Prefix that marks an editor submission as a manual skill invocation. */
-export const SKILL_COMMAND_PREFIX = '/skill:'
-
-/** Parsed `/skill:<name> [instructions]` submission; `name` is empty when the prefix carries no name. */
-export interface ParsedSkillCommand {
-  /** Skill name typed after `/skill:`, up to the first space. */
+/** Parsed `/skill <name> [instructions]` arguments; `name` is empty when no argument was typed. */
+export interface ParsedSkillArguments {
+  /** Skill name typed as the first argument. */
   name: string
   /** Trimmed text after the name; empty when none was typed. */
   instructions: string
 }
 
 /**
- * Split a `/skill:<name> [instructions]` submission into its name and trailing instructions.
- * @param text - trimmed submission that starts with {@link SKILL_COMMAND_PREFIX}.
+ * Split `/skill` arguments into the exact skill name and trailing instructions.
+ * @param rawInput - raw text after the `/skill` command name.
  * @returns the skill name and any trailing instructions.
  */
-export function parseSkillCommand(text: string): ParsedSkillCommand {
-  const rest = text.slice(SKILL_COMMAND_PREFIX.length)
-  const spaceIndex = rest.indexOf(' ')
-  if (spaceIndex === -1) return { name: rest, instructions: '' }
-  return { name: rest.slice(0, spaceIndex), instructions: rest.slice(spaceIndex + 1).trim() }
+export function parseSkillArguments(rawInput: string): ParsedSkillArguments {
+  const rest = rawInput.trim()
+  const separatorIndex = rest.search(/\s/u)
+  if (separatorIndex === -1) return { name: rest, instructions: '' }
+  return { name: rest.slice(0, separatorIndex), instructions: rest.slice(separatorIndex + 1).trim() }
 }
 
 /** Model-visible line locating a manually invoked skill's relative resources, or `undefined` when the provider has no base. */
@@ -54,7 +51,7 @@ function skillResourceReference(base: SkillResourceBase | undefined): string | u
  * same-process provider prose, so — unlike the model-facing `dsh-tool-skill`
  * result, which escapes for a tool channel — this user turn is assembled raw.
  * @param skill - the loaded skill definition.
- * @param instructions - trimmed text typed after `/skill:<name>`; empty when absent.
+ * @param instructions - trimmed text typed after `/skill <name>`; empty when absent.
  * @returns the user-message text delivered to the agent.
  */
 export function renderSkillInvocation(skill: SkillDefinition, instructions: string): string {

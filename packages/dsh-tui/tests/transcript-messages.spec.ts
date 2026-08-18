@@ -119,6 +119,36 @@ describe('StreamingAssistantComponent', () => {
     expect(rows.map(row => row.trimEnd())).toContain('▎ streamed thought')
   })
 
+  it('updates live thinking duration from the shared repaint clock', () => {
+    let now = STAMP
+    const step = new StreamingAssistantComponent(
+      { turn: 1, step: 1 },
+      false,
+      plain,
+      plainMd,
+      30,
+      () => now,
+    )
+    step.markStart(STAMP)
+    step.update({ type: 'block-start', index: 0, blockType: 'reasoning' }, STAMP + 500)
+    step.update({ type: 'reasoning-delta', index: 0, text: 'streamed thought' }, STAMP + 500)
+    now = STAMP + 2_500
+    expect(step.render(40).join('\n')).toContain('Thinking… 2.0s')
+  })
+
+  it('stops live thinking duration when response text begins', () => {
+    const step = new StreamingAssistantComponent({ turn: 1, step: 1 }, false, plain, plainMd, 30)
+    step.update({ type: 'block-start', index: 0, blockType: 'reasoning' }, STAMP)
+    step.update({ type: 'reasoning-delta', index: 0, text: 'thought' }, STAMP)
+    step.update({ type: 'block-start', index: 1, blockType: 'text' }, STAMP + 1_250)
+    step.update({ type: 'text-delta', index: 1, text: 'answer' }, STAMP + 1_250)
+    step.settle([
+      { type: 'reasoning', text: 'thought' },
+      { type: 'text', text: 'answer' },
+    ], STAMP + 3_000)
+    expect(step.render(40).join('\n')).toContain('Thinking for 1.2s')
+  })
+
   it('keeps the folded reasoning summary bar-free', () => {
     const step = new StreamingAssistantComponent({ turn: 1, step: 1 }, false, plain, plainMd, 30)
     step.markStart(STAMP)
@@ -200,6 +230,70 @@ describe('ToolCardComponent header tones', () => {
     })
     expect(card.render(80)[1]).toContain(`\x1b[31m${TOOL_SETTLED()}\x1b[39m`)
     expect(card.render(80)[1]).toContain('\x1b[2;39m')
+    expect(card.render(80).join('\n')).toContain('\x1b[31mboom')
+  })
+})
+
+describe('ToolCardComponent structured result views', () => {
+  const makeCard = (presentResult: () => unknown): ToolCardComponent => new ToolCardComponent(
+    'inspect',
+    parseArguments('{}'),
+    {
+      presentCall: () => ({ card: 'generic', title: 'Inspect' }),
+      presentResult,
+    } as never,
+    10,
+    2_000,
+    plain,
+    plainMd,
+  )
+
+  it('renders read results with source line numbers and a range summary', () => {
+    const card = makeCard(() => ({
+      card: 'read',
+      path: 'src/a.ts',
+      offset: 41,
+      lines: [{ number: 41, text: 'const answer = 42' }, { number: 42, text: 'export { answer }' }],
+      totalLines: 180,
+      lang: 'ts',
+    }))
+    card.updateResult(toolResult('raw fallback'))
+    const output = card.render(80).join('\n')
+    expect(output).toContain('41 const answer = 42')
+    expect(output).toContain('42 export { answer }')
+    expect(output).toContain('Showing 2 of 180 lines · through 42')
+    expect(output).not.toContain('raw fallback')
+  })
+
+  it('groups search matches by path and reports truncation', () => {
+    const card = makeCard(() => ({
+      card: 'search',
+      shape: 'matches',
+      files: [{ path: 'src/a.ts', matches: [{ lineNumber: 7, line: 'TODO refine' }] }],
+      truncated: true,
+      total: 14,
+    }))
+    card.updateResult(toolResult('raw search fallback'))
+    const output = card.render(80).join('\n')
+    expect(output).toContain('src/a.ts')
+    expect(output).toContain('7 TODO refine')
+    expect(output).toContain('limited result set · 14 total')
+  })
+
+  it('renders web search citations from structured sources', () => {
+    const card = makeCard(() => ({
+      card: 'web',
+      kind: 'search',
+      answer: 'Summary',
+      sources: [{ title: 'Reference', url: 'https://example.test', snippet: 'Useful excerpt' }],
+      truncated: false,
+    }))
+    card.updateResult(toolResult('raw web fallback'))
+    const output = card.render(80).join('\n')
+    expect(output).toContain('Summary')
+    expect(output).toContain('1. Reference')
+    expect(output).toContain('https://example.test')
+    expect(output).toContain('Useful excerpt')
   })
 })
 

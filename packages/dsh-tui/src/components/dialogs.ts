@@ -756,12 +756,16 @@ export interface ThemeChoice {
 
 /**
  * A read-only browse dialog over pre-rendered lines, framed by a bold title
- * over one full-width rule (Claude Code's pane form): Esc/Ctrl+C/q closes,
- * `r` recomputes the body through {@link refresh} when supplied. Backs
- * `/context`, `/agents`, `/jobs`, and `/settings`.
+ * over one full-width rule (Claude Code's pane form). The body owns a bounded
+ * viewport so long diagnostics never disappear below the workbench. Arrow,
+ * page, Home, and End keys scroll; Esc/Ctrl+C/q closes; `r` recomputes the body
+ * through {@link refresh} when supplied.
  */
 export class StaticDialog implements Component {
   private lines: readonly string[]
+  private offset = 0
+  private renderedRows = 0
+  private pageRows = 1
 
   constructor(
     private readonly title: string,
@@ -769,6 +773,7 @@ export class StaticDialog implements Component {
     private readonly palette: Palette,
     private readonly close: () => void,
     private readonly refresh?: () => readonly string[],
+    private readonly viewportRows?: () => number,
   ) {
     this.lines = lines
   }
@@ -776,18 +781,54 @@ export class StaticDialog implements Component {
   invalidate(): void {}
 
   handleInput(data: string): void {
-    if (matchesKey(data, Key.escape) || matchesKey(data, Key.ctrl('c'))) {
+    if (matchesKey(data, Key.escape) || matchesKey(data, Key.ctrl('c')) || matchesKey(data, 'q')) {
       this.close()
     } else if (matchesKey(data, 'r') && this.refresh !== undefined) {
       this.lines = this.refresh()
+      this.offset = 0
+    } else if (matchesKey(data, Key.up)) {
+      this.scrollBy(-1)
+    } else if (matchesKey(data, Key.down)) {
+      this.scrollBy(1)
+    } else if (matchesKey(data, Key.pageUp)) {
+      this.scrollBy(-this.pageRows)
+    } else if (matchesKey(data, Key.pageDown)) {
+      this.scrollBy(this.pageRows)
+    } else if (matchesKey(data, Key.home)) {
+      this.offset = 0
+    } else if (matchesKey(data, Key.end)) {
+      this.offset = this.maxOffset()
     }
   }
 
   render(width: number): string[] {
     const innerWidth = Math.max(1, width - 4)
-    const body = [...this.lines, '', this.palette.dim(this.refresh === undefined ? 'Esc close' : 'r refresh • Esc close')]
-    return renderDialog(this.title, body.flatMap(line =>
-      line === '' ? [''] : truncateToWidth(line, innerWidth, '')), width, this.palette, { frame: 'topline' })
+    const wrapped = this.lines.flatMap(line => line === '' ? [''] : wrapTextWithAnsi(line, innerWidth))
+    const naturalRows = wrapped.length + 5
+    const availableRows = Math.max(1, Math.floor(this.viewportRows?.() ?? naturalRows))
+    const footerRows = availableRows >= 5 ? 2 : 0
+    this.pageRows = Math.max(1, availableRows - 3 - footerRows)
+    this.renderedRows = wrapped.length
+    this.offset = Math.min(this.offset, this.maxOffset())
+    const visible = wrapped.slice(this.offset, this.offset + this.pageRows)
+    const scrolling = wrapped.length > this.pageRows
+    const position = scrolling
+      ? `${String(this.offset + 1)}-${String(this.offset + visible.length)} of ${String(wrapped.length)} · `
+      : ''
+    const navigation = scrolling ? '↑/↓ line · PgUp/PgDn page · Home/End · ' : ''
+    const refresh = this.refresh === undefined ? '' : 'r refresh · '
+    const body = footerRows === 0
+      ? visible
+      : [...visible, '', this.palette.dim(`${position}${navigation}${refresh}Esc/q close`)]
+    return renderDialog(this.title, body, width, this.palette, { frame: 'topline' }).slice(0, availableRows)
+  }
+
+  private maxOffset(): number {
+    return Math.max(0, this.renderedRows - this.pageRows)
+  }
+
+  private scrollBy(rows: number): void {
+    this.offset = Math.min(this.maxOffset(), Math.max(0, this.offset + rows))
   }
 }
 

@@ -98,7 +98,7 @@ export class WorkspaceSidebarComponent implements Component {
       ...sectionTitle('Workspace', width, palette),
       padToWidth(` ${palette.bold(palette.accent(workspace))}${state.branch === undefined ? '' : palette.dim(` · ${state.branch}`)}`, width),
     ]
-    const plan = state.plan ? palette.accent('plan on') : palette.dim('plan off')
+    const plan = state.plan ? palette.plan('plan on') : palette.dim('plan off')
     const cacheSuffix = state.cacheHitRate === undefined ? '' : palette.dim(` · cache ${cache}`)
     const statusLines = [
       ...sectionTitle('Status', width, palette),

@@ -87,41 +87,43 @@ describe('/context segmented bar and legend', () => {
 
   it('renders one 20-cell segmented bar after the meters, each segment in its role color', () => {
     const lines = contextLines(deps(values), color)
-    expect(lines[2]).toBe('')
-    expect(lines[3]).toBe(
-      color.accent('██') + color.warning('█') + color.success('█') + color.dim('·'.repeat(16)),
+    expect(lines[3]).toBe('')
+    expect(lines[4]).toBe(color.bold(color.accent('Composition')))
+    expect(lines[5]).toBe(
+      `  ${color.accent('██')}${color.warning('█')}${color.success('█')}${color.dim('·'.repeat(16))}`,
     )
     // Pin the actual SGR opens: system accent 95, tools warning 33, messages
     // success 32, free dim 2;39 — independent of the palette implementation.
-    expect(lines[3]).toContain('\x1b[95m██')
-    expect(lines[3]).toContain('\x1b[33m█\x1b[39m')
-    expect(lines[3]).toContain('\x1b[32m█\x1b[39m')
-    expect(lines[3]).toContain(`\x1b[2;39m${'·'.repeat(16)}\x1b[22;39m`)
-    expect(stripAnsi(lines[3] as string)).toBe('████' + '·'.repeat(16))
+    expect(lines[5]).toContain('\x1b[95m██')
+    expect(lines[5]).toContain('\x1b[33m█\x1b[39m')
+    expect(lines[5]).toContain('\x1b[32m█\x1b[39m')
+    expect(lines[5]).toContain(`\x1b[2;39m${'·'.repeat(16)}\x1b[22;39m`)
+    expect(stripAnsi(lines[5] as string)).toBe('  ' + '████' + '·'.repeat(16))
   })
 
   it('renders legend rows with two-cell swatches and composition-based percentages', () => {
     const lines = contextLines(deps(values), color)
-    expect(lines[4]).toBe(`${color.accent('██')} system  ${formatDiagnosticNumber(12345)} (61%)`)
-    expect(lines[5]).toBe(`${color.warning('██')} tools   ${formatDiagnosticNumber(3000)} (15%)`)
-    expect(lines[6]).toBe(`${color.success('██')} messages ${formatDiagnosticNumber(5000)} (25%)`)
-    expect(lines[7]).toBe(color.dim(`·· free    ${formatDiagnosticNumber(79655)} (80%)`))
+    expect(lines[6]).toBe(`  ${color.accent('██')} system   ${formatDiagnosticNumber(12345)} (61%)`)
+    expect(lines[7]).toBe(`  ${color.warning('██')} tools    ${formatDiagnosticNumber(3000)} (15%)`)
+    expect(lines[8]).toBe(`  ${color.success('██')} messages ${formatDiagnosticNumber(5000)} (25%)`)
+    expect(lines[9]).toBe(color.dim(`  ·· free     ${formatDiagnosticNumber(79655)} (80%)`))
   })
 
   it('keeps the pressure header, both meters, and the heuristic disclaimer', () => {
     const lines = contextLines(deps(values), color)
-    expect(lines[0]).toBe(color.bold('~20,345 / 100,000 · 20%'))
-    expect(lines[1]).toBe(`${contextMeter(20.345, color)} ${diagnosticMeter(20.345, color)}`)
-    expect(lines[8]).toBe('')
-    expect(lines[9]).toBe(color.dim('Heuristic composition — proportions are approximate.'))
-    expect(lines).toHaveLength(10)
+    expect(lines[0]).toBe(color.bold(color.accent('Usage')))
+    expect(lines[1]).toBe(`  ${color.bold('~20,345 / 100,000 · 20%')}`)
+    expect(lines[2]).toBe(`  ${contextMeter(20.345, color)} ${diagnosticMeter(20.345, color)}`)
+    expect(lines[10]).toBe('')
+    expect(lines[11]).toBe(color.dim('Heuristic composition — proportions are approximate.'))
+    expect(lines).toHaveLength(12)
   })
 
   it('renders the same shapes without any escapes on a color-disabled palette', () => {
     const lines = contextLines(deps(values), plain)
-    expect(lines[3]).toBe('████' + '·'.repeat(16))
-    expect(lines[4]).toBe('██ system  12,345 (61%)')
-    expect(lines[7]).toBe('·· free    79,655 (80%)')
+    expect(lines[5]).toBe('  ' + '████' + '·'.repeat(16))
+    expect(lines[6]).toBe('  ██ system   12,345 (61%)')
+    expect(lines[9]).toBe('  ·· free     79,655 (80%)')
     expect(lines.join('\n')).not.toContain('\x1b')
   })
 
@@ -134,9 +136,9 @@ describe('/context segmented bar and legend', () => {
       contextBreakdown: { systemTokens: 100000, toolsTokens: 1, messageTokens: 1 },
     }
     const lines = contextLines(deps(skewed), color)
-    expect(lines[3]).toBe(color.accent('█'.repeat(10)) + color.dim('·'.repeat(10)))
-    expect(lines[3]).not.toContain('\x1b[33m')
-    expect(lines[3]).not.toContain('\x1b[32m')
+    expect(lines[5]).toBe(`  ${color.accent('█'.repeat(10))}${color.dim('·'.repeat(10))}`)
+    expect(lines[5]).not.toContain('\x1b[33m')
+    expect(lines[5]).not.toContain('\x1b[32m')
   })
 
   it('fills all 20 cells with no free fill when the composition exceeds the window', () => {
@@ -145,24 +147,25 @@ describe('/context segmented bar and legend', () => {
       contextBreakdown: { systemTokens: 60000, toolsTokens: 30000, messageTokens: 60000 },
     }
     const lines = contextLines(deps(overflowing), color)
-    expect(lines[0]).toBe(color.bold('~150,000 / 100,000 · 100%'))
-    expect(lines[3]).toBe(
-      color.accent('█'.repeat(8)) + color.warning('█'.repeat(4)) + color.success('█'.repeat(8)),
+    expect(lines[1]).toBe(`  ${color.bold('~150,000 / 100,000 · 100%')}`)
+    expect(lines[5]).toBe(
+      `  ${color.accent('█'.repeat(8))}${color.warning('█'.repeat(4))}${color.success('█'.repeat(8))}`,
     )
-    expect(lines[7]).toBe(color.dim('·· free    0 (0%)'))
+    expect(lines[9]).toBe(color.dim('  ·· free     0 (0%)'))
   })
 })
 
 describe('/context fallbacks', () => {
   it('without the projections service, reports played tokens over an unknown window', () => {
     expect(contextLines(deps(undefined, 1234), color))
-      .toEqual(['1,234 tokens in play · context window unknown'])
+      .toEqual([color.bold(color.accent('Usage')), '  1,234 tokens in play · context window unknown'])
   })
 
   it('without a breakdown projection, keeps only the header and meters', () => {
     const lines = contextLines(deps({ contextPressure: { projectedTokens: 1000, contextWindow: 128000 } }), color)
-    expect(lines).toHaveLength(2)
-    expect(lines[0]).toBe(color.bold('~1,000 / 128,000 · 1%'))
+    expect(lines).toHaveLength(3)
+    expect(lines[0]).toBe(color.bold(color.accent('Usage')))
+    expect(lines[1]).toBe(`  ${color.bold('~1,000 / 128,000 · 1%')}`)
     expect(lines.join('\n')).not.toContain('Heuristic')
     expect(lines.join('\n')).not.toContain('free')
   })

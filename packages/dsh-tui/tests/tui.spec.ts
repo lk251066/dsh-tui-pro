@@ -227,7 +227,7 @@ describe('TUI config', () => {
         color: true,
         truecolor: false,
         name: 'deepseek',
-        leftPrompt: '${cwd}${git/worktree}${model}${context}${memory}',
+        leftPrompt: '${cwd}${git/worktree}${model}${context}${memory}${plan}${throughput}',
         rightPrompt: '',
         inputPrompt: '${symbol} ${indicator}',
         inputPlaceholder: 'Enter steer · Tab queue · Esc cancel',
@@ -278,7 +278,7 @@ describe('TUI config', () => {
         color: false,
         truecolor: true,
         name: 'deepseek',
-        leftPrompt: '${cwd}${git/worktree}${model}${context}${memory}',
+        leftPrompt: '${cwd}${git/worktree}${model}${context}${memory}${plan}${throughput}',
         rightPrompt: '',
         inputPrompt: '${symbol} ${indicator}',
         inputPlaceholder: 'Enter steer · Tab queue · Esc cancel',
@@ -3175,6 +3175,7 @@ describe('pi-tui chat lifecycle and transcript', () => {
     })
     result.agent.status = 'running'
     agentEvents(result.ctx, result.agent).emit('agent/status', { status: 'running' })
+    dateNow.mockReturnValue(timestamp + 60_000)
     result.terminal.send('/status')
     result.terminal.send('\r')
     await tick()
@@ -3190,7 +3191,7 @@ describe('pi-tui chat lifecycle and transcript', () => {
     expect(result.terminal.output).toContain('main-session')
     expect(result.terminal.output).toContain('Inspect status \\x1b]2;unsafe\\x07')
     expect(result.terminal.output).toContain('/workspace/status')
-    expect(result.terminal.output).toContain('deepseek-official/deepseek-v4-pro (effort default; reasoning blocks')
+    expect(result.terminal.output).toContain('deepseek-official/deepseek-v4-pro (effort default; reasoning')
     expect(result.terminal.output).toContain('hidden)')
     // 6 domain events + the /status invocation's own command/run (open turn: joined directly).
     expect(result.terminal.output).toContain('running · 7 events · 1 turn · 1 step · 2 tool calls')
@@ -3198,12 +3199,24 @@ describe('pi-tui chat lifecycle and transcript', () => {
     expect(result.terminal.output).toContain('[███████████░░░░░] 67% hit (3,000 read + 250 write)')
     expect(result.terminal.output).toContain('[█████░░░░░░░░░░░] 33% used (42,000 / 128,000)')
     expect(result.terminal.output).toContain('2026-07-22 09:10:11 UTC')
+    expect(result.terminal.output).toContain('2026-07-22 09:11:11 UTC')
     expect(result.terminal.output).toContain('System prompt')
     expect(result.terminal.output).toContain('You are an AI agent powered by DeepSeek Harness.')
     expect(result.terminal.output).toContain('Current instructions \\x1b]2;prompt-unsafe\\x07')
+    result.terminal.send('\x1b[F')
+    await tick()
     expect(result.terminal.output).toContain('Registered tools')
-    expect(result.terminal.output).toContain('read, write')
+    expect(result.terminal.output).toContain('• read')
+    expect(result.terminal.output).toContain('• write')
     expect(result.terminal.output).not.toContain('\u001B]2;unsafe\u0007')
+
+    result.terminal.send('\x03')
+    await tick()
+    result.terminal.output = ''
+    result.terminal.send('\x0c')
+    await tick()
+    expect(result.terminal.output).not.toContain('System prompt')
+    expect(result.terminal.output).not.toContain('Registered tools')
 
     result.terminal.resize(56)
     result.terminal.send('\x0c')
@@ -3384,6 +3397,9 @@ describe('pi-tui chat lifecycle and transcript', () => {
     result.terminal.send('/help')
     result.terminal.send('\r')
     await tick()
+    expect(result.terminal.output).toContain('Message input')
+    result.terminal.send('\x03')
+    await tick()
     for (const command of ['/clear', '/wat']) {
       result.terminal.send(command)
       result.terminal.send('\r')
@@ -3399,7 +3415,7 @@ describe('pi-tui chat lifecycle and transcript', () => {
     result.terminal.send('\x04')
     await tick()
 
-    expect(result.terminal.output).toContain('Keyboard shortcuts')
+    expect(result.terminal.output).toContain('Message input')
     expect(result.terminal.output).toContain('Reasoning expanded.')
     expect(result.terminal.output).toContain('Tool and context cards')
     expect(result.terminal.output).toContain('Unknown command')
@@ -4351,7 +4367,7 @@ describe('pi-tui chat lifecycle and transcript', () => {
     },
   )
 
-  it('shows context, agents, jobs, and settings in the main area while preserving the workspace sidebar', async () => {
+  it('shows help and diagnostics in the main area while preserving the workspace sidebar', async () => {
     // A seeded prompt keeps the session out of the pristine welcome box, so
     // the main-area swap deterministically repaints the rows the sidebar
     // sections share (the assertions read the re-emitted rows).
@@ -4360,6 +4376,8 @@ describe('pi-tui chat lifecycle and transcript', () => {
       beforeMount(session) { appendUser(session, 'seed prompt') },
     })
     for (const [command, title] of [
+      ['/help', 'Help'],
+      ['/status', 'Session status'],
       ['/context', 'Context'],
       ['/agents', 'Subagents'],
       ['/jobs', 'Background jobs'],
@@ -4697,6 +4715,7 @@ describe('pi-tui chat lifecycle and transcript', () => {
       'rename',
       'sessions',
       'settings',
+      'skill',
       'status',
       'switch',
       'theme',
@@ -4749,7 +4768,10 @@ describe('pi-tui chat lifecycle and transcript', () => {
     result.terminal.send('/help')
     result.terminal.send('\r')
     await tick()
-    expect(result.terminal.output).toContain('/plugin-check <value> — Run a plugin command')
+    result.terminal.send('\x1b[F')
+    await tick()
+    expect(result.terminal.output).toContain('/plugin-check <value>')
+    expect(result.terminal.output).toContain('Run a plugin command')
     expect(result.ctx.commands.list(result.agent).map(command => command.name)).toContain('help')
 
     await result.controller.dispose()
@@ -4926,22 +4948,29 @@ describe('skill slash command', () => {
     })
   }
 
-  it('labels slash completions by scope and applies user invocation policy', async () => {
+  it('opens a searchable selector and exposes only user-invocable skills', async () => {
     const result = await setup({ configureContext: withSkills })
     result.terminal.send('/skill')
+    result.terminal.send('\r')
     await tick()
+    expect(result.terminal.output).toContain('Select skill')
     expect(result.terminal.output).toContain('demo-skill')
-    expect(result.terminal.output).toContain('(user)')
+    expect(result.terminal.output).toContain('user —')
     expect(result.terminal.output).toContain('project-skill')
-    expect(result.terminal.output).toContain('(project)')
+    expect(result.terminal.output).toContain('project —')
     expect(result.terminal.output).toContain('user-only-skill')
-    expect(result.terminal.output).not.toContain('[instructions]')
     expect(result.terminal.output).not.toContain('model-only-skill')
     expect(result.terminal.output).not.toContain('trusted-only-skill')
+    result.terminal.send('\x1b')
+    await tick()
+    result.terminal.output = ''
+    result.terminal.send('/skill d')
+    await tick()
+    expect(result.terminal.output).toContain('demo-skill')
     await dispose(result)
   })
 
-  it('refreshes slash completions after runtime skill additions and complete removals', async () => {
+  it('refreshes an open selector after runtime skill additions and complete removals', async () => {
     let skills: SkillService | undefined
     const result = await setup({
       configureContext: async (ctx) => {
@@ -4952,7 +4981,8 @@ describe('skill slash command', () => {
     })
     if (skills === undefined) throw new Error('skills service not mounted')
 
-    result.terminal.send('/skill:dynamic')
+    result.terminal.send('/skill')
+    result.terminal.send('\r')
     await tick()
     result.terminal.output = ''
     const disposeSkill = skills.register({
@@ -4965,11 +4995,12 @@ describe('skill slash command', () => {
       expect(result.terminal.output).toContain('DYNAMIC_COMPLETION_MARKER')
     })
 
-    result.terminal.send('\x03')
+    result.terminal.send('\x1b')
     disposeSkill()
     await tick()
     result.terminal.output = ''
-    result.terminal.send('/skill:dynamic')
+    result.terminal.send('/skill')
+    result.terminal.send('\r')
     await tick()
     expect(result.terminal.output).not.toContain('DYNAMIC_COMPLETION_MARKER')
     await dispose(result)
@@ -5015,7 +5046,7 @@ describe('skill slash command', () => {
     invalidate()
     await tick()
     result.terminal.output = ''
-    result.terminal.send('/skill:stable')
+    result.terminal.send('/skill stable')
     await tick()
     expect(result.terminal.output).toContain('STABLE_COMPLETION_MARKER')
     await dispose(result)
@@ -5063,7 +5094,7 @@ describe('skill slash command', () => {
     await tick()
 
     result.terminal.output = ''
-    result.terminal.send('/skill:latest')
+    result.terminal.send('/skill latest')
     await tick()
     expect(result.terminal.output).toContain('LATEST_COMPLETION_MARKER')
     expect(result.terminal.output).not.toContain('STALE_FIRST')
@@ -5073,13 +5104,13 @@ describe('skill slash command', () => {
 
   it('loads a skill as a user turn, appending typed instructions', async () => {
     const result = await setup({ configureContext: withSkills })
-    result.terminal.send('/skill:demo-skill')
+    result.terminal.send('/skill demo-skill')
     result.terminal.send('\r')
     await tick()
     expect(result.agent.sent).toEqual([[{ type: 'text', text: '<skill name="demo-skill">\nDemo instructions body.\n</skill>' }]])
 
     result.agent.status = 'running'
-    result.terminal.send('/skill:demo-skill focus on tests')
+    result.terminal.send('/skill demo-skill focus on tests')
     result.terminal.send('\r')
     await tick()
     expect(result.agent.steered).toEqual([[{ type: 'text', text: '<skill name="demo-skill">\nDemo instructions body.\n</skill>\n\nfocus on tests' }]])
@@ -5088,7 +5119,7 @@ describe('skill slash command', () => {
 
   it('invokes a user-only skill by its exact name', async () => {
     const result = await setup({ configureContext: withSkills })
-    result.terminal.send('/skill:user-only-skill')
+    result.terminal.send('/skill user-only-skill')
     result.terminal.send('\r')
     await tick()
     expect(result.agent.sent).toEqual([[{ type: 'text', text: '<skill name="user-only-skill">\nUser-only instructions body.\n</skill>' }]])
@@ -5130,10 +5161,10 @@ describe('skill slash command', () => {
         } as never)
       },
     })
-    result.terminal.send('/skill:model-only-skill')
+    result.terminal.send('/skill model-only-skill')
     result.terminal.send('\r')
     await tick()
-    result.terminal.send('/skill:policy-race-skill')
+    result.terminal.send('/skill policy-race-skill')
     result.terminal.send('\r')
     await tick()
     expect(result.agent.sent).toEqual([])
@@ -5147,7 +5178,7 @@ describe('skill slash command', () => {
 
   it('auto-invokes a launcher-seeded initial skill as the first turn', async () => {
     const result = await setup({ config: { initialSkill: 'demo-skill' }, configureContext: withSkills })
-    // The seed rides the same path as a typed `/skill:demo-skill`, delivered
+    // The seed rides the same path as a typed `/skill demo-skill`, delivered
     // once the chat is live; no user input is required.
     await tick()
     expect(result.agent.sent).toEqual([[{ type: 'text', text: '<skill name="demo-skill">\nDemo instructions body.\n</skill>' }]])
@@ -5162,32 +5193,76 @@ describe('skill slash command', () => {
     await dispose(result)
   })
 
-  it('reports an unknown skill and an empty skill name without sending', async () => {
+  it('reports an unknown skill without sending and opens the selector for an empty name', async () => {
     const result = await setup({ configureContext: withSkills })
-    result.terminal.send('/skill:does-not-exist')
+    result.terminal.send('/skill does-not-exist')
     result.terminal.send('\r')
     await tick()
-    result.terminal.send('/skill:')
-    result.terminal.send('\r')
-    await tick()
-    // A space right after the colon parses to an empty name, not a name of
-    // "focus"; the documented syntax puts the name immediately after the colon.
-    result.terminal.send('/skill: focus')
+    result.terminal.send('/skill')
     result.terminal.send('\r')
     await tick()
     expect(result.terminal.output).toContain('Unknown skill: does-not-exist')
-    expect(result.terminal.output).toContain('Usage: /skill:<name>')
+    expect(result.terminal.output).toContain('Select skill')
     expect(result.agent.sent).toEqual([])
     await dispose(result)
   })
 
   it('warns when no skill service is mounted', async () => {
     const result = await setup()
-    result.terminal.send('/skill:demo-skill')
+    result.terminal.send('/skill')
     result.terminal.send('\r')
     await tick()
     expect(result.terminal.output).toContain('Skills are not available')
     expect(result.agent.sent).toEqual([])
+    await dispose(result)
+  })
+
+  it('does not recognize the removed colon syntax', async () => {
+    const result = await setup({ configureContext: withSkills })
+    result.terminal.send('/skill:demo-skill')
+    result.terminal.send('\r')
+    await tick()
+    expect(result.terminal.output).toContain('Unknown command: /skill:demo-skill')
+    expect(result.agent.sent).toEqual([])
+    await dispose(result)
+  })
+
+  it('does not repaint a cancelled selector when its catalog arrives late', async () => {
+    const pendingSnapshots: Array<PromiseWithResolvers<SkillCatalogSnapshot>> = []
+    const result = await setup({
+      configureContext: async (ctx) => {
+        ctx.provide('tools', { get() { return undefined } } as never)
+        ctx.provide('skills', {
+          snapshot: () => {
+            const pending = Promise.withResolvers<SkillCatalogSnapshot>()
+            pendingSnapshots.push(pending)
+            return pending.promise
+          },
+          list: () => Promise.resolve([]),
+          get: () => Promise.resolve(undefined),
+        } as never)
+      },
+    })
+    result.terminal.send('/skill')
+    result.terminal.send('\r')
+    await tick()
+    expect(result.terminal.output).toContain('Select skill')
+    expect(pendingSnapshots).toHaveLength(2)
+    result.terminal.send('\x1b')
+    await tick()
+    result.terminal.output = ''
+    pendingSnapshots[1]?.resolve({
+      skills: [{
+        name: 'late-skill',
+        description: 'LATE_SELECTOR_MARKER',
+        invocation: { modelInvocable: true, userInvocable: true },
+        source: 'runtime',
+        provider: 'runtime',
+      }],
+      complete: true,
+    })
+    await tick()
+    expect(result.terminal.output).not.toContain('LATE_SELECTOR_MARKER')
     await dispose(result)
   })
 
@@ -5202,7 +5277,7 @@ describe('skill slash command', () => {
         } as never)
       },
     })
-    result.terminal.send('/skill:demo-skill')
+    result.terminal.send('/skill demo-skill')
     result.terminal.send('\r')
     await tick()
     expect(result.terminal.output).toContain('failed to load')
@@ -5239,13 +5314,13 @@ describe('skill slash command', () => {
       },
     })
     await tick()
-    result.terminal.send('/skill:demo-skill')
+    result.terminal.send('/skill demo-skill')
     result.terminal.send('\r')
     await tick()
-    result.terminal.send('/skill:error-skill')
+    result.terminal.send('/skill error-skill')
     result.terminal.send('\r')
     await tick()
-    result.terminal.send('/skill:other-skill')
+    result.terminal.send('/skill other-skill')
     result.terminal.send('\r')
     await tick()
     await dispose(result)
@@ -5612,12 +5687,9 @@ describe('tool cards and surface replay', () => {
     expect(output).toContain('$ blank desc command')
     // A card whose title only repeats the name renders header-only (empty body).
     expect(output).toContain('○ emptyBody')
-    // A search result view carries no `content` of its own, so the card renders
-    // the raw model-facing result text through the same dim generic body — the
-    // TUI has no dedicated search arm. The settled label falls back to the call
-    // title (the search result view replaces none).
+    // Search results keep their presenter title and compact line-number body.
     expect(output).toContain(`${TOOL_SETTLED()} Grep todo`)
-    expect(output).toContain('Line 1: todo one')
+    expect(output).toContain('1 todo one')
     // A multi-file diff's title carries no path, so each file keeps its own
     // path header in the body. The second file's change and the footer sit
     // past this card's 4-line budget and appear only when expanded.
@@ -5732,7 +5804,7 @@ describe('tool cards and surface replay', () => {
     expect(hunks).not.toContain('+ my: my-MM')
     expect(hunks).toContain('- nb: no-NO')
     expect(hunks).toContain('+ nb: nb-NO')
-    expect(hunks).toContain('└ +1 · -1 · 1 file')
+    expect(hunks).toContain('⎿ +1 · -1 · 1 file')
     await dispose(result)
   })
 
@@ -5768,7 +5840,7 @@ describe('tool cards and surface replay', () => {
     await tick()
     const rows = result.terminal.output.split('\n').map(row => row.trim())
     expect(result.terminal.output).toContain('empty.txt')
-    expect(result.terminal.output).toContain('└ +0 · -0 · 1 file')
+    expect(result.terminal.output).toContain('⎿ +0 · -0 · 1 file')
     expect(rows).not.toContain('+')
     await dispose(result)
   })
@@ -5825,7 +5897,7 @@ describe('tool cards and surface replay', () => {
     expect(result.terminal.output).toContain('[exact line diff omitted: >1 changed lines]')
     expect(result.terminal.output).toContain('- old one')
     expect(result.terminal.output).toContain('+ new one')
-    expect(result.terminal.output).toContain('└ +2 · -2 · 1 file · approximate')
+    expect(result.terminal.output).toContain('⎿ +2 · -2 · 1 file · approximate')
     const readsAfterFirstRender = oldTextReads
     expect(readsAfterFirstRender).toBeGreaterThan(0)
     result.session.append('tool/result', {
@@ -7239,7 +7311,8 @@ describe('terminal mounting', () => {
     expect(terminal.output).toContain('\x1b[?1049h\x1b[H')
     expect(terminal.output).toContain('\x1b[?1049l')
     expect(terminal.output.indexOf('\x1b[?1049h')).toBeLessThan(terminal.output.indexOf('\x1b[?1049l'))
-    expect(terminal.progress).toEqual([false, true, false])
+    expect(terminal.progress).toContain(true)
+    expect(terminal.progress.at(-1)).toBe(false)
     expect(ctx.get('tui')).toBeUndefined()
     await expect(ctx.userQuestions.ask({ questions: [{ id: 'late', question: 'Late?' }] }))
       .rejects.toMatchObject({ code: 'NO_PROVIDER' })

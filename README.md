@@ -32,7 +32,7 @@ The package itself owns the TUI plugin and its `cordis.patch.yml` profile layer.
 - `/quit` and empty-input `Delete` session closing, with complete history preserved
 - Assistant-only paged reading of visible user/assistant dialogue from Active project sessions
 - Direct transcript drag selection with automatic clipboard delivery
-- Fixed bottom selectors for questions, approvals, models, reasoning effort, details, themes, permissions, renaming, and goals
+- Fixed bottom selectors for questions, approvals, models, reasoning effort, skills, details, themes, permissions, renaming, and goals
 - `Alt+V` clipboard image attachment for vision-capable models
 - Per-session `/memory on|off`, enabled by default for the assistant and disabled by default for project sessions
 - A fixed personal assistant entry with workspace-session tools
@@ -46,7 +46,7 @@ New untitled conversations show the large welcome view. Existing conversations u
 
 Launching in a directory resumes its first manually ordered active project session. If that directory has no active session, dsh creates one and adds it to the workspace. To close a project session, open it and run `/quit`, or press `Delete` while the input is empty. A running turn is cancelled, the session leaves Active, the assistant opens, and history remains available through `/sessions`. The assistant cannot be closed.
 
-The TUI commands are `/help`, `/model`, `/effort`, `/clear`, `/details`, `/theme`, `/rename`, `/fork`, `/status`, `/context`, `/agents`, `/jobs`, `/settings`, `/memory`, `/export`, `/sessions`, `/switch`, `/new`, `/assistant`, `/exit`, and `/quit`. `/exit` cancels the current turn and exits the TUI; `/quit` closes the current project session and returns to the assistant. `/context`, `/agents`, `/jobs`, `/settings`, and `/sessions` use the chat main area while the frame and sidebar remain fixed. dsh-base may additionally provide `/feedback`, `/goal`, `/compact`, `/permission`, and `/plan`. `/queue`, `/palette`, `/reload`, `/fleet`, and `/memories` are not part of this bundle.
+The TUI commands are `/help`, `/model`, `/effort`, `/clear`, `/details`, `/theme`, `/rename`, `/fork`, `/status`, `/context`, `/agents`, `/jobs`, `/settings`, `/memory`, `/skill`, `/export`, `/sessions`, `/switch`, `/new`, `/assistant`, `/exit`, and `/quit`. `/skill` opens the searchable bottom selector; `/skill <name> [instructions]` loads one user-invocable skill directly. `/exit` cancels the current turn and exits the TUI; `/quit` closes the current project session and returns to the assistant. `/help`, `/status`, `/context`, `/agents`, `/jobs`, `/settings`, and `/sessions` use the scrollable chat main area while the frame and sidebar remain fixed. dsh-base may additionally provide `/feedback`, `/goal`, `/compact`, `/permission`, and `/plan`. `/queue`, `/palette`, `/reload`, `/fleet`, and `/memories` are not part of this bundle.
 
 Press `Alt+V` to read an image from the system clipboard and add an `[Image #N]` placeholder to the active session draft. Submission succeeds only when the selected model explicitly advertises image input; otherwise the draft is retained so a vision-capable model can be selected. PNG, JPEG, WebP, and GIF are supported. Windows uses PowerShell, macOS requires `pngpaste`, and Linux uses `wl-paste` or `xclip`.
 

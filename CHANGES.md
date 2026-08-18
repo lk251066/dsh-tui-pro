@@ -6,6 +6,10 @@
 
 The fixed assistant can read another Active project session through its scoped `read_session_conversation` tool. The result contains only direct user text, image placeholders, and completed assistant text. It excludes reasoning, tool calls and results, diffs, injected context, and unfinished streaming output. Long conversations are read newest-page first and support earlier-page continuation.
 
+The fixed status line includes weighted-average `token/s`, and plan mode uses its own palette role in the prompt and sidebar. `/help`, `/status`, `/context`, `/agents`, `/jobs`, and `/settings` open in one bounded main-area viewer with line, page, Home, and End navigation. `/skill` opens a searchable bottom selector, while `/skill <name> [instructions]` supports name completion and direct invocation without filling the top-level command list with one entry per skill.
+
+Streaming reasoning shows a live elapsed time until answer text begins. Read, search, web fetch/search, error, and diff results use structured terminal cards with source lines, grouped matches, URLs, summaries, and consistent result markers. In-process subagents inherit the provider, model, and explicit reasoning effort used by the delegating parent request instead of its creation-time route.
+
 ## 1.7.0 changes
 
 The fixed workbench keeps one compact header, a workspace-grouped Active-session list, and a compact Status section. The bottom line is the single home for cwd, branch, model, and context. New untitled sessions show the welcome view until their first user message. The outer frame remains fixed while only the transcript scrolls.

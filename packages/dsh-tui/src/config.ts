@@ -102,7 +102,7 @@ const colorSchema = z.boolean().default(true)
 const truecolorSchema = z.boolean()
 // No default: an unset theme name means the adaptive default (`deepseek`).
 const themeNameSchema = z.string()
-const DEFAULT_LEFT_PROMPT = '${cwd}${git/worktree}${model}${context}${memory}'
+const DEFAULT_LEFT_PROMPT = '${cwd}${git/worktree}${model}${context}${memory}${plan}${throughput}'
 const DEFAULT_RIGHT_PROMPT = ''
 const DEFAULT_INPUT_PROMPT = '${symbol} ${indicator}'
 const DEFAULT_INPUT_PLACEHOLDER = 'Enter steer · Tab queue · Esc cancel'
@@ -151,7 +151,7 @@ export interface Config extends TuiConfig {
   sessionId?: string
   /**
    * Skill name auto-invoked as this session's first user turn, exactly as if
-   * the user typed `/skill:<name>`. Set only by a launcher for a fresh
+   * the user typed `/skill <name>`. Set only by a launcher for a fresh
    * skill-guided session (`dsh migrate`/`dsh upgrade`); absent
    * leaves the first turn to the user.
    */

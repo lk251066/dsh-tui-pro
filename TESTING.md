@@ -4,17 +4,16 @@
 
 ## 1.8.0 source verification
 
-The `1.8.0` checks cover the split command semantics and assistant-only conversation reads. `/exit` retains bounded process shutdown. `/quit` and empty-input `Delete` cancel and close a project session, preserve history, return to the assistant, release owned handles, and restore the project when Active detachment fails. The assistant conversation tool enforces Active membership, paginates from the newest messages, retains image placeholders, and excludes reasoning, tools, injected context, and unfinished output.
+The `1.8.0` checks cover split command semantics, assistant-only conversation reads, weighted-average throughput, plan styling, scrollable diagnostics, skill selection and completion, live thinking time, and structured read/search/web/tool/diff cards. `/exit` retains bounded process shutdown. `/quit` and empty-input `Delete` cancel and close a project session, preserve history, return to the assistant, release owned handles, and restore the project when Active detachment fails. The assistant conversation tool enforces Active membership, paginates from the newest messages, retains image placeholders, and excludes reasoning, tools, injected context, and unfinished output.
 
 | Check | Result |
 | --- | --- |
-| Affected command, lifecycle, and assistant-tool tests | Passed: 3 files, 223 tests, including the Active-membership read race |
+| Complete source tests | Passed: 46 files, 590 tests |
 | `pnpm run typecheck` | Passed |
-| `pnpm run test` | Passed: 44 files, 524 tests |
-| `pnpm run lint` | Passed with 39 existing warnings and no errors |
+| `pnpm run lint` | Passed with 38 existing warnings and no errors |
 | `pnpm run build` | Passed through the artifact build |
 | `git diff --check` | Passed; Git reported only the configured LF-to-CRLF checkout notices |
-| `pnpm run pack:artifact` | Passed: 325 files, 733.4 kB, SHA-1 `2828fee2bdecd8e4ec6a23f0646b5a3a9b9e4c8d` |
+| `pnpm run pack:artifact` | Passed: 328 files, 748.6 kB, SHA-1 `ea60ad7f96a757310f32b5e3b79baef8b9cdb7b3` |
 | Packed-artifact audit | Passed for exports, bundle metadata, patched editor, dependencies, and excluded source/tests |
 | Windows empty-profile public-host installation | Passed against public dsh rc.6; `why`, `--dump-config`, and module loading resolved `1.8.0` |
 | Linux clean-host real PTY | Passed welcome and compact headers, fixed layout, command paths, memory, image-paste failure, session switching, export, assistant opening, and `/exit` shutdown |

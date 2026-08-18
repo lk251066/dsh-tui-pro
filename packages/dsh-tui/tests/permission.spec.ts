@@ -170,7 +170,7 @@ describe('Shift+Tab permission ring', () => {
 })
 
 describe('editor frame border modes', () => {
-  it('flags plan mode in accent and never tracks the running status', async () => {
+  it('flags plan mode in its dedicated color and never tracks the running status', async () => {
     const terminal = new FakeTerminal()
     const result = await createTuiTestHarness(terminal, vi.fn(), {
       status: 'running',
@@ -181,10 +181,10 @@ describe('editor frame border modes', () => {
     // Running keeps the border dim (the working line and prompt glyph own that state).
     expect(terminal.output).toContain('\x1b[2;39m╭')
     expect(terminal.output).not.toContain('\x1b[95m╭')
-    // Plan mode flags the border in accent.
+    // Plan mode flags the border with the palette's dedicated plan role.
     result.session.append('plan/mode', { active: true })
     await new Promise(resolve => setTimeout(resolve, 25))
-    expect(terminal.output).toContain('\x1b[95m╭')
+    expect(terminal.output).toContain('\x1b[37m╭')
     // Leaving plan mode restores the dim border.
     result.session.append('plan/mode', { active: false })
     await new Promise(resolve => setTimeout(resolve, 25))
@@ -192,7 +192,7 @@ describe('editor frame border modes', () => {
     agentEvents(result.ctx, result.agent).emit('agent/status', { status: 'idle' })
     await new Promise(resolve => setTimeout(resolve, 25))
     expect(terminal.output).toContain('\x1b[2;39m╭')
-    expect(terminal.output).not.toContain('\x1b[95m╭')
+    expect(terminal.output).not.toContain('\x1b[37m╭')
     await disposeTuiTestHarness(result)
   })
 })

@@ -722,6 +722,7 @@ function assistantMessageChildren(
     children.push(new Text(palette.underline(palette.bold(palette.accent('Assistant'))) + stamp, 0, 0))
   }
   const duration = thinkingMs === undefined ? '' : ` for ${formatStatusDuration(thinkingMs)}`
+  const liveDuration = thinkingMs === undefined ? '…' : `… ${formatStatusDuration(thinkingMs)}`
   const reasoningLines = reasoning === '' ? 0 : reasoning.split('\n').length
   if (foldsReasoning) {
     children.push(new Text(palette.italic(palette.dim(
@@ -733,7 +734,7 @@ function assistantMessageChildren(
     const quoted = reasoning.split('\n').map(line => line === '' ? '>' : `> ${line}`).join('\n')
     children.push(
       new Text(palette.italic(palette.dim(
-        `▼ ${THINKING_GLYPH} Thinking${settled ? duration : '…'}${settled ? ` ${shortcutHint('ctrl+r', 'collapse')}` : ''}`,
+        `▼ ${THINKING_GLYPH} Thinking${settled ? duration : liveDuration}${settled ? ` ${shortcutHint('ctrl+r', 'collapse')}` : ''}`,
       )), 0, 0),
       new Markdown(quoted, 0, 0, mdTheme, { color: value => palette.dim(value), italic: true }),
     )
@@ -758,6 +759,7 @@ export class StreamingAssistantComponent extends Container {
   private settledContent: readonly ContentBlock[] | undefined
   private foldedContinuation = false
   private startedAt: number | undefined
+  private thinkingStartedAt: number | undefined
   private thinkingMs: number | undefined
   /** Whether a settled over-long reply body is expanded past its fold. */
   private textExpanded = false
@@ -769,6 +771,8 @@ export class StreamingAssistantComponent extends Container {
     private readonly mdTheme: MarkdownTheme,
     /** Rendered-line budget for a settled reply body before it folds. */
     private readonly maxMessageLines: number,
+    /** Shared channel clock; the channel animation tick drives repaint. */
+    private readonly now: () => number = Date.now,
   ) {
     super()
     this.rebuild()
@@ -792,7 +796,11 @@ export class StreamingAssistantComponent extends Container {
    */
   settle(content: readonly ContentBlock[], at?: number): void {
     this.settledContent = content
-    if (at !== undefined && this.startedAt !== undefined) this.thinkingMs = Math.max(0, at - this.startedAt)
+    const hasReasoning = content.some(block => block.type === 'reasoning' && block.text !== '')
+    const timingStart = this.thinkingStartedAt ?? (hasReasoning ? this.startedAt : undefined)
+    if (this.thinkingMs === undefined && at !== undefined && timingStart !== undefined) {
+      this.thinkingMs = Math.max(0, at - timingStart)
+    }
     this.rebuild()
   }
 
@@ -813,7 +821,15 @@ export class StreamingAssistantComponent extends Container {
    * Fold one streamed chunk into the live block buffer and re-render.
    * @param chunk - The streamed assistant chunk.
    */
-  update(chunk: StreamChunk): void {
+  update(chunk: StreamChunk, at = this.now()): void {
+    if ((chunk.type === 'reasoning-delta' || (chunk.type === 'block-start' && chunk.blockType === 'reasoning'))
+      && this.thinkingStartedAt === undefined) {
+      this.thinkingStartedAt = at
+    }
+    if ((chunk.type === 'text-delta' || (chunk.type === 'block-start' && chunk.blockType === 'text'))
+      && this.thinkingStartedAt !== undefined && this.thinkingMs === undefined) {
+      this.thinkingMs = Math.max(0, at - this.thinkingStartedAt)
+    }
     if (chunk.type === 'block-start') {
       this.blocks.set(chunk.index, { type: chunk.blockType, text: '' })
     } else if (chunk.type === 'text-delta' || chunk.type === 'reasoning-delta') {
@@ -825,6 +841,13 @@ export class StreamingAssistantComponent extends Container {
       this.blocks.set(chunk.index, { type: chunk.block.type, text: chunk.block.text })
     }
     this.rebuild()
+  }
+
+  override render(width: number): string[] {
+    if (this.settledContent === undefined && this.thinkingStartedAt !== undefined && this.thinkingMs === undefined) {
+      this.rebuild()
+    }
+    return super.render(width)
   }
 
   /**
@@ -897,7 +920,7 @@ export class StreamingAssistantComponent extends Container {
       this.palette,
       this.mdTheme,
       this.settledContent !== undefined,
-      this.thinkingMs,
+      this.thinkingMs ?? (this.thinkingStartedAt === undefined ? undefined : Math.max(0, this.now() - this.thinkingStartedAt)),
       this.startedAt,
       this.maxMessageLines,
       this.textExpanded,
@@ -1095,7 +1118,7 @@ export class ToolCardComponent extends CachedCardComponent {
     // settled; the header color (warning/success/error) doubles the state.
     const pending = this.result === undefined
     const glyph = pending ? this.spinnerFrame ?? '○' : TOOL_SETTLED()
-    const rawBody = this.renderBody()
+    const rawBody = this.renderBody(width)
     const view = this.resultView ?? this.callView
     // A generic card's own content, a read card's `content` fallback (the
     // envelope-stripped file text — the TUI has no dedicated read rendering, so a
@@ -1106,17 +1129,9 @@ export class ToolCardComponent extends CachedCardComponent {
     // reading as bare text. A search card thus stays byte-identical to the
     // pre-search-card generic fallback. Terminal and diff cards own their body
     // styling, so they are excluded (mirrors renderBody's post-terminal/diff fallback).
-    const markdownContent = view.card === 'generic' || view.card === 'read'
+    const markdownContent = view.card === 'generic'
       ? view.content ?? this.result?.content
-      : view.card === 'search'
-        ? this.result?.content
-        : view.card === 'web'
-          // A web resultView is only assigned alongside this.result (the result
-          // handler sets both) and the pending callView is never a web card, so
-          // the optional-chain undefined side is unreachable here.
-          /* v8 ignore next */
-          ? this.result?.content
-          : undefined
+      : undefined
     const unknownXml = this.definition === undefined && markdownContent !== undefined
       ? renderUnknownXml(
         displayText(contentText(markdownContent)),
@@ -1132,9 +1147,17 @@ export class ToolCardComponent extends CachedCardComponent {
     // A generic card renders title and result as one Markdown document, so the
     // document's own block spacing is preserved, then dims every row — the whole
     // card body reads as one dim block under the status-colored header.
-    const body = unknownXml ?? (markdownContent !== undefined && rawBody.lines.length > 0
+    let body = unknownXml ?? (markdownContent !== undefined && rawBody.lines.length > 0
       ? this.dimBody(rawBody, width)
       : [...rawBody.prelude, ...rawBody.lines])
+    if (isError) {
+      let styled = false
+      body = body.map((line) => {
+        if (styled || line === '') return line
+        styled = true
+        return this.palette.error(stripTerminalControls(line))
+      })
+    }
     const visibleBody = unknownXml !== undefined || this.visibility === 'expanded'
       ? body
       : preview(body, this.maxOutputLines, count => this.palette.dim(`… +${count} lines ${shortcutHint('ctrl+o', 'expand')}`))
@@ -1201,7 +1224,7 @@ export class ToolCardComponent extends CachedCardComponent {
     }
   }
 
-  private renderBody(): CardBody {
+  private renderBody(width: number): CardBody {
     const view = this.resultView ?? this.callView
     if (view.card === 'terminal') {
       const pending = this.terminalPending()
@@ -1257,7 +1280,7 @@ export class ToolCardComponent extends CachedCardComponent {
       })
       const files = new Set(view.diffs.map(diff => diff.path)).size
       const footer = [
-        this.palette.dim('└ '),
+        this.palette.dim('⎿ '),
         this.palette.success(this.palette.bold(`+${added}`)),
         this.palette.dim(' · '),
         this.palette.error(this.palette.bold(`-${removed}`)),
@@ -1269,14 +1292,14 @@ export class ToolCardComponent extends CachedCardComponent {
       this.diffBodyCache = { view, body }
       return body
     }
-    // A generic or read card carries its own envelope-stripped `content`; a
-    // search or web card carries no `content` copy and falls back to the raw
-    // result content here. (Mirrors the `markdownContent` selection in render();
-    // a read card has no dedicated TUI rendering, so its `content` takes the same
-    // body path, and a search card stays byte-identical to the generic fallback.)
+    if (view.card === 'read') return this.renderRead(view)
+    if (view.card === 'search') return this.renderSearch(view)
+    if (view.card === 'web') return this.renderWeb(view, width)
+    // A generic card carries its own formatted content, falling back to the
+    // raw result text when its presenter omits a replacement.
     // The presenter title headlines the HEADER (progressive/settled verb title),
     // so the body carries only the output itself.
-    const content = (view.card === 'generic' || view.card === 'read' ? view.content : undefined) ?? this.result?.content
+    const content = view.content ?? this.result?.content
     const prelude: string[] = []
     const lines: string[] = []
     if (content !== undefined) lines.push(...displayText(contentText(content)).split('\n'))
@@ -1295,6 +1318,64 @@ export class ToolCardComponent extends CachedCardComponent {
         return line.length > 0 || (row > 0 && row < total - 1)
       }),
     }
+  }
+
+  /** Render one completed file read with stable source line numbers. */
+  private renderRead(view: Extract<ToolResultView, { card: 'read' }>): CardBody {
+    const gutterWidth = Math.max(1, String(Math.max(view.totalLines, view.offset)).length)
+    const lines = view.lines.map((line) => {
+      const source = displayText(line.text)
+      const highlighted = view.lang === undefined
+        ? source
+        : this.mdTheme.highlightCode?.(source, view.lang)?.[0] ?? source
+      return `${this.palette.dim(String(line.number).padStart(gutterWidth))} ${highlighted}`
+    })
+    if (lines.length === 0) lines.push(this.palette.dim(`No lines returned from ${displayText(view.path)}.`))
+    const returned = view.lines.length
+    const end = view.lines.at(-1)?.number ?? Math.max(0, view.offset - 1)
+    lines.push(this.palette.dim(`Showing ${returned} of ${view.totalLines} lines · through ${end}`))
+    return { prelude: [], lines }
+  }
+
+  /** Render completed grep/glob results from their structured presentation. */
+  private renderSearch(view: Extract<ToolResultView, { card: 'search' }>): CardBody {
+    const lines: string[] = []
+    if (view.shape === 'matches') {
+      for (const file of view.files) {
+        if (lines.length > 0) lines.push('')
+        lines.push(this.palette.code(displayText(file.path)))
+        const gutterWidth = Math.max(1, ...file.matches.map(match => String(match.lineNumber).length))
+        for (const match of file.matches) {
+          lines.push(`${this.palette.dim(String(match.lineNumber).padStart(gutterWidth))} ${displayText(match.line)}`)
+        }
+      }
+    } else {
+      lines.push(...view.paths.map(path => this.palette.code(displayText(path))))
+    }
+    if (lines.length === 0) lines.push(this.palette.dim('No matches.'))
+    if (view.truncated) lines.push(this.palette.warning(`Showing a limited result set · ${view.total} total`))
+    else lines.push(this.palette.dim(`${view.total} result${view.total === 1 ? '' : 's'}`))
+    return { prelude: [], lines }
+  }
+
+  /** Render structured web search citations or a fetch summary plus body. */
+  private renderWeb(view: Extract<ToolResultView, { card: 'web' }>, width: number): CardBody {
+    if (view.kind === 'search') {
+      const lines: string[] = []
+      if (view.answer !== undefined && view.answer !== '') lines.push(...this.dimOutput(view.answer), '')
+      for (const [index, source] of view.sources.entries()) {
+        const label = source.title === undefined || source.title === '' ? source.url : source.title
+        lines.push(`${this.palette.dim(`${index + 1}.`)} ${this.palette.code(displayText(label))}`)
+        if (label !== source.url) lines.push(`   ${this.palette.dim(displayText(source.url))}`)
+        if (source.snippet !== undefined && source.snippet !== '') lines.push(`   ${this.palette.dim(displayText(source.snippet))}`)
+      }
+      if (lines.length === 0) lines.push(...this.dimBody({ prelude: [], lines: displayText(contentText(this.result?.content ?? [])).split('\n') }, width))
+      if (view.truncated) lines.push(this.palette.warning('Source list truncated'))
+      return { prelude: [], lines }
+    }
+    const summary = `${view.statusCode} · ${displayText(view.url)}${view.truncated ? ' · truncated' : ''}`
+    const content = displayText(contentText(this.result?.content ?? [])).split('\n')
+    return { prelude: [this.palette.dim(summary)], lines: this.dimBody({ prelude: [], lines: content }, width) }
   }
 
   /**

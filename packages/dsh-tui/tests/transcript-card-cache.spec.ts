@@ -111,7 +111,7 @@ describe('transcript card render caches', () => {
     expect(first.join('\n')).toContain('   1- old')
     expect(first.join('\n')).toContain('   1+ new')
     expect(first.join('\n')).toContain('   2  keep')
-    expect(first.join('\n')).toContain('└ +1 · -1 · 1 file')
+    expect(first.join('\n')).toContain('⎿ +1 · -1 · 1 file')
     expect(card.render(80)).toBe(first)
 
     card.updateResult(toolResult('done'))

@@ -424,6 +424,7 @@ export function createSessionChannel(deps: SessionChannelDeps): SessionChannel {
       palette,
       mdTheme,
       resolved.maxMessageLines,
+      deps.now,
     )
     streaming.markStart(startedAt)
   }
@@ -510,7 +511,7 @@ export function createSessionChannel(deps: SessionChannelDeps): SessionChannel {
         lastOutputAt = event.time
         if (options.renderChunks && streaming !== undefined) {
           attachStreaming()
-          streaming.update(event.data.chunk)
+          streaming.update(event.data.chunk, event.time)
           // The first streamed text/reasoning may make this step the turn's
           // hidden-mode header owner (or a continuation with a visible body).
           applyTurnFolding(streaming.position.turn)

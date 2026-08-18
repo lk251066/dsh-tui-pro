@@ -8,7 +8,13 @@ Ship one package: `@lk251066/dsh-tui`. Its package manifest already defines `dsh
 
 Version `1.7.1` is the current release against public `@deepseek-ai/dsh@0.1.0-rc.6`. The current source targets `1.8.0`; it is not a public release until the source, artifact, profile, PTY, npm, tag, and GitHub Release records identify one commit.
 
-The `1.8.0` source separates whole-TUI exit from project-session closing and gives the fixed assistant read-only access to visible dialogue in other Active project sessions.
+The `1.8.0` source separates whole-TUI exit from project-session closing, gives the fixed assistant read-only access to visible dialogue in other Active project sessions, and completes the diagnostic, skill, throughput, plan, thinking, tool-card, and in-process subagent model-inheritance work described below.
+
+## Version 1.8.0 terminal diagnostics and delegation
+
+The fixed status row reports weighted-average token throughput and uses the plan palette role when plan mode is active. Help and diagnostics share one bounded main-area viewer with line, page, Home, and End navigation. Skills use one `/skill` command with argument completion and a searchable bottom selector; the removed `/skill:<name>` syntax is not recognized.
+
+Streaming reasoning reports elapsed time until answer text starts. Structured read, search, web, error, and diff presenters retain their own content hierarchy rather than flattening every result into a generic card. In-process spawn, fork, and continuable subagents capture the provider, model, and explicit reasoning effort from the delegating request; continuable descriptor version 3 preserves that selection across cold resume.
 
 ## Version 1.8.0 session closing and assistant conversation reads
 

@@ -55,7 +55,7 @@ import { foldSessionTitle } from '@deepseek-ai/dsh-session-title'
 import type {} from '@deepseek-ai/dsh-session-persistence'
 import type { SessionQueryEngine } from '@deepseek-ai/dsh-session-query'
 import type {} from '@deepseek-ai/dsh-workspace'
-import type { SkillRegistry } from '@deepseek-ai/dsh-skill'
+import type { SkillRegistry, SkillSummary } from '@deepseek-ai/dsh-skill'
 // Merges the `permissionPresets` service and the `permission/preset` session
 // event onto their ambient declarations; the service itself is optional at runtime.
 import type {} from '@deepseek-ai/dsh-permission-presets'
@@ -121,20 +121,18 @@ import {
   formatDiagnosticNumber,
   formatDiagnosticTime,
   initialTarget,
-  StatusCardComponent,
   PromptContextComponent,
   RenameDialog,
   SessionSwitchDialog,
   targetLabel,
   ThemeDialog,
   type DetailsSelection,
-  type StatusCardRow,
 } from './components/dialogs.ts'
 import {
-  parseSkillCommand,
+  parseSkillArguments,
   renderSkillInvocation,
-  SKILL_COMMAND_PREFIX,
 } from './chat/skill-invocation.ts'
+import { SkillSelector } from './components/skill-selector.ts'
 import { ReferenceAutocompleteProvider } from './chat/autocomplete.ts'
 import {
   formatCwd,
@@ -179,7 +177,7 @@ import {
   jobsLines,
   openStaticDialog,
   settingsLines,
-  statsStrip,
+  throughputStrip,
   writeExport,
   type InsightsDeps,
 } from './chat/insights.ts'
@@ -283,7 +281,7 @@ export const TUI_GOODBYE_MESSAGE_KEY = 'tuiGoodbyeMessage'
 /**
  * Context key a launcher sets before any Loader entry mounts
  * (`ctx.provide(INITIAL_SKILL_KEY, name)`) to seed a fresh session's first user
- * turn with `/skill:<name>` — the `dsh migrate`/`dsh upgrade`
+ * turn with `/skill <name>` — the `dsh migrate`/`dsh upgrade`
  * guided-session entry. The launcher sets it only when minting a fresh session,
  * so it never re-fires on a resumed one. Absent leaves the first turn to the user.
  */
@@ -586,17 +584,17 @@ function createTuiChatInternal(
     ctx.tuiPrompt.register('indicator', palette.dim('> ')),
     ctx.tuiPrompt.register('permission'),
     ctx.tuiPrompt.register('plan'),
-    ctx.tuiPrompt.register('stats'),
+    ctx.tuiPrompt.register('throughput'),
     ctx.tuiPrompt.register('memory'),
   ]
   const [
     cwdValue, gitValue, tokenValue, modelValue, contextValue, queuedValue,
-    symbolValue, indicatorValue, permissionValue, planValue, statsValue, memoryValue,
+    symbolValue, indicatorValue, permissionValue, planValue, throughputValue, memoryValue,
   ] = promptValues
   /* v8 ignore next -- the fixed built-in registration list always supplies each handle. */
   if (cwdValue === undefined || gitValue === undefined || tokenValue === undefined || modelValue === undefined
     || contextValue === undefined || queuedValue === undefined || symbolValue === undefined || indicatorValue === undefined
-    || permissionValue === undefined || planValue === undefined || statsValue === undefined || memoryValue === undefined) {
+    || permissionValue === undefined || planValue === undefined || throughputValue === undefined || memoryValue === undefined) {
     throw new Error('TUI prompt built-ins failed to initialize')
   }
   /**
@@ -659,10 +657,10 @@ function createTuiChatInternal(
     permissionValue.set(preset === undefined || preset === 'custom' ? undefined : palette.dim(` [${preset}]`))
     const planActive = foldPlanMode(agent.session.events)
     planValue.set(planActive
-      ? palette.bold(palette.accent(' ⎇ plan'))
+      ? palette.bold(palette.plan('  ⎇ plan'))
       : undefined)
-    const stats = statsStrip(insights)
-    statsValue.set(stats === undefined ? undefined : palette.dim(`  ${stats}`))
+    const throughput = throughputStrip(insights)
+    throughputValue.set(throughput === undefined ? undefined : palette.dim(`  ${throughput}`))
     // The `${memory}` fragment keeps the session's memory switch visible after
     // the transient /memory notice fades; an absent service or a disabled
     // switch renders nothing so the status row stays clean.
@@ -1505,7 +1503,7 @@ function createTuiChatInternal(
    * to the glyph's pulse.
    */
   const editorBorderColor = (): ((text: string) => string) => {
-    if (foldPlanMode(agent.session.events)) return text => palette.accent(text)
+    if (foldPlanMode(agent.session.events)) return text => palette.plan(text)
     if (dangerPresetActive()) return text => palette.warning(text)
     return text => palette.dim(text)
   }
@@ -2150,22 +2148,29 @@ function createTuiChatInternal(
 
   const showHelp = (): void => {
     const commandLines = ctx.commands.list(agent).map((command) => {
-      const input = command.input === undefined ? '' : ` ${command.input.hint}`
-      return `/${command.name}${input} — ${command.description}`
+      const input = command.input === undefined ? '' : ` ${displayText(command.input.hint)}`
+      return `${palette.accent(`/${displayText(command.name)}${input}`)}  ${palette.dim(displayText(command.description))}`
     })
-    channel.chat.addChild(new Spacer(1))
-    channel.chat.addChild(new Text(palette.bold(palette.accent('Keyboard shortcuts')), 0, 0))
-    channel.chat.addChild(new Text([
-      'Enter send/steer • Tab queue while running • Shift/Alt+Enter newline • Up/Down prompt history',
-      'Esc cancel turn; double Esc edits a checkpoint • Alt+Left/Right switch active sessions',
-      'Delete close the current project session; history is preserved',
-      'Ctrl+O cycle cards (collapse/expand/hide) • Ctrl+R toggle reasoning • Ctrl+L redraw',
-      'Shift+Tab cycle permission preset • Ctrl+G goal actions • Ctrl+C cancel/clear/exit • Ctrl+D exit',
+    const section = (title: string): string => palette.bold(palette.accent(title))
+    openStaticDialog(insights, 'Help', [
+      section('Message input'),
+      '  Enter send or steer · Tab queue while running · Shift/Alt+Enter newline',
+      '  Up recalls the latest submission when input is empty',
+      '  Esc restores the latest queued message before cancelling a running turn',
       '',
+      section('Conversation'),
+      '  Double Esc edit from a checkpoint · Alt+Left/Right switch active sessions',
+      '  Delete remove the current project session from Active; history is preserved',
+      '  Alt+V attach a clipboard image · Page Up/Page Down scroll the transcript',
+      '',
+      section('Display and control'),
+      '  Ctrl+O cycle tool cards · Ctrl+R toggle reasoning · Ctrl+L redraw',
+      '  Shift+Tab cycle permission · Ctrl+G goal actions',
+      '  Ctrl+C cancel/clear/exit · Ctrl+D exit',
+      '',
+      section('Commands'),
       ...commandLines,
-      '/skill:<name> [instructions] — load a skill into the conversation',
-    ].map(line => palette.dim(line)).join('\n'), 0, 0))
-    requestRender()
+    ])
   }
 
   const showStatus = async (signal: AbortSignal): Promise<void> => {
@@ -2174,9 +2179,8 @@ function createTuiChatInternal(
     if (disposed) return
     /* v8 ignore next -- SystemPrompt always emits at least its required base section. */
     const systemPrompt = displayText(renderPrompt(assembly)) || '(empty)'
-    const registeredTools = assembly.tools.map(tool => displayText(tool.name)).join(', ') || '(none)'
     const events = agent.session.events
-    const latestActivity = agent.session.header.createdAt
+    const latestActivity = events.at(-1)?.time ?? agent.session.header.createdAt
     const pressure = contextPressure()
     const usedContext = Math.max(0, Math.round(
       pressure?.projectedTokens ?? pressure?.pressureTokens ?? ctx.tokenMeter.measure(agent.session).totalTokens,
@@ -2198,62 +2202,72 @@ function createTuiChatInternal(
       : target.current.reasoningEffort === undefined
         ? 'default'
         : displayText(target.current.reasoningEffort)
-    const groups: readonly (readonly StatusCardRow[])[] = [
-      [
-        ['Session', displayText(agent.session.id)],
-        ['Title', displayText(sessionTitle ?? 'untitled')],
-        ['Directory', displayText(activeCwd())],
-        ['Model', `${model} ${palette.dim(`(effort ${effort}; reasoning blocks ${showReasoning ? 'shown' : 'hidden'})`)}`],
-      ],
-      [
-        ['Agent', [
-          agent.status,
-          formatDiagnosticCount(events.length, 'event'),
-          formatDiagnosticCount(turns, 'turn'),
-          formatDiagnosticCount(steps, 'step'),
-          formatDiagnosticCount(toolCalls, 'tool call'),
-        ].join(' · ')],
-      ],
-      [
-        ['Tokens', `${formatDiagnosticNumber(tokens.input)} input + ${formatDiagnosticNumber(tokens.output)} output`],
-        ['KV cache', rate === undefined
-          ? `n/a (${formatDiagnosticNumber(tokens.cacheRead)} read + ${formatDiagnosticNumber(tokens.cacheWrite)} write)`
-          : `${diagnosticMeter(rate, palette)} ${String(rate)}% hit (${formatDiagnosticNumber(tokens.cacheRead)} read + ${formatDiagnosticNumber(tokens.cacheWrite)} write)`],
-        ['Context', context],
-      ],
-      [
-        ['Created', formatDiagnosticTime(agent.session.header.createdAt)],
-        ['Active', formatDiagnosticTime(latestActivity)],
-      ],
+    const section = (title: string): string => palette.bold(palette.accent(title))
+    const field = (label: string, value: string): string => `  ${palette.dim(label.padEnd(11))}${value}`
+    const lines = [
+      section('Session'),
+      field('ID', displayText(agent.session.id)),
+      field('Title', displayText(sessionTitle ?? 'untitled')),
+      field('Directory', displayText(activeCwd())),
+      field('Model', `${model} ${palette.dim(`(effort ${effort}; reasoning ${showReasoning ? 'shown' : 'hidden'})`)}`),
+      '',
+      section('Activity'),
+      field('Agent', [
+        agent.status,
+        formatDiagnosticCount(events.length, 'event'),
+        formatDiagnosticCount(turns, 'turn'),
+        formatDiagnosticCount(steps, 'step'),
+        formatDiagnosticCount(toolCalls, 'tool call'),
+      ].join(' · ')),
+      field('Created', formatDiagnosticTime(agent.session.header.createdAt)),
+      field('Latest', formatDiagnosticTime(latestActivity)),
+      '',
+      section('Usage'),
+      field('Tokens', `${formatDiagnosticNumber(tokens.input)} input + ${formatDiagnosticNumber(tokens.output)} output`),
+      field('KV cache', rate === undefined
+        ? `n/a (${formatDiagnosticNumber(tokens.cacheRead)} read + ${formatDiagnosticNumber(tokens.cacheWrite)} write)`
+        : `${diagnosticMeter(rate, palette)} ${String(rate)}% hit (${formatDiagnosticNumber(tokens.cacheRead)} read + ${formatDiagnosticNumber(tokens.cacheWrite)} write)`),
+      field('Context', context),
+      '',
+      section('System prompt'),
+      ...systemPrompt.split('\n').map(line => `  ${line}`),
+      '',
+      section('Registered tools'),
+      ...assembly.tools.length === 0
+        ? ['  (none)']
+        : assembly.tools.map(tool => `  • ${displayText(tool.name)}`),
     ]
-    const card = new StatusCardComponent(groups, palette)
-    channel.chat.addChild(new Spacer(1))
-    channel.chat.addChild(card)
-    channel.chat.addChild(new Spacer(1))
-    channel.chat.addChild(new Text(palette.bold(palette.accent('System prompt')), 0, 0))
-    channel.chat.addChild(new Text(systemPrompt, 0, 0))
-    channel.chat.addChild(new Spacer(1))
-    channel.chat.addChild(new Text(palette.bold(palette.accent('Registered tools')), 0, 0))
-    channel.chat.addChild(new Text(registeredTools, 0, 0))
-    requestRender()
+    openStaticDialog(insights, 'Session status', lines)
   }
 
-  // Skill listing is async while `createTuiChat` is synchronous, so the TUI
-  // retains the last complete invocation-neutral catalog for synchronous
-  // editor completion, filters it for user invocation, and refreshes it after
-  // registry invalidation.
-  let skillCommands: SlashCommand[] = []
+  // Skill listing is async while `createTuiChat` is synchronous. Keep the last
+  // complete user-invocable catalog for the selector and argument completion.
+  let skillCatalog: readonly SkillSummary[] = []
   let skillCommandScan = 0
+  let skillScanController: AbortController | undefined
+  let skillSelector: SkillSelector | undefined
+  let skillOverlay: TuiOverlaySession | undefined
+  const skillArgumentCompletions = (argumentPrefix: string) => {
+    const trimmed = argumentPrefix.trimStart()
+    if (trimmed !== argumentPrefix || /\s/u.test(trimmed)) return null
+    const query = trimmed.toLocaleLowerCase()
+    return skillCatalog
+      .filter(skill => query === '' || skill.name.toLocaleLowerCase().includes(query))
+      .map(skill => ({
+        value: skill.name,
+        label: skill.name,
+        description: `${skill.source.startsWith('project-') ? 'project' : 'user'} — ${skill.description}`,
+      }))
+  }
   const refreshCommandAutocomplete = (): void => {
+    const commands: SlashCommand[] = ctx.commands.list(agent).map(command => ({
+      name: command.name,
+      description: command.description,
+      ...(command.input === undefined ? {} : { argumentHint: command.input.hint }),
+      ...command.name === 'skill' ? { getArgumentCompletions: skillArgumentCompletions } : {},
+    }))
     const base = new CombinedAutocompleteProvider(
-      [
-        ...ctx.commands.list(agent).map(command => ({
-          name: command.name,
-          description: command.description,
-          ...(command.input === undefined ? {} : { argumentHint: command.input.hint }),
-        })),
-        ...skillCommands,
-      ],
+      commands,
       agent.session.header.cwd ?? process.cwd(),
     )
     const sessionReferences = ctx.get('sessionReferenceResolver')
@@ -2264,13 +2278,13 @@ function createTuiChatInternal(
       agent,
     ))
   }
-  const refreshVisibleSlashAutocomplete = (): void => {
+  const refreshVisibleSkillAutocomplete = (): void => {
     const cursor = editor.getCursor()
     const textBeforeCursor = editor.getLines().slice(cursor.line, cursor.line + 1).join('').slice(0, cursor.col)
-    if (cursor.line === 0 && textBeforeCursor.startsWith('/') && !textBeforeCursor.includes(' ')) {
+    if (cursor.line === 0 && (/^\/skill(?: [^\s]*)?$/u).test(textBeforeCursor)) {
       // pi-tui's provider setter closes an existing menu but does not query
-      // the replacement for the current draft. Tab in a slash-name context
-      // only requests suggestions, so it refreshes without editing the text.
+      // the replacement for the current draft. Tab requests the new catalog
+      // without editing the command or its first argument.
       editor.handleInput('\t')
     }
   }
@@ -2283,22 +2297,17 @@ function createTuiChatInternal(
 
   const refreshSkillCommands = (service: SkillRegistry): void => {
     const scan = ++skillCommandScan
-    service.snapshot({ cwd: activeCwd(), signal: skillAbort.signal }).then(
+    skillScanController?.abort()
+    const controller = new AbortController()
+    skillScanController = controller
+    const signal = AbortSignal.any([skillAbort.signal, controller.signal])
+    service.snapshot({ cwd: activeCwd(), signal }).then(
       (snapshot) => {
-        if (disposed || scan !== skillCommandScan || !snapshot.complete) return
-        const invocable = snapshot.skills.filter(skill => skill.invocation.userInvocable)
-        // The argument-hint slot shows in the menu but is never inserted on
-        // selection, so it carries the skill's scope instead of an
-        // instructions placeholder. `SkillSource` is open-ended; every
-        // non-project source (user, custom, bundled, runtime, …) collapses
-        // to `(user)`.
-        skillCommands = invocable.map(skill => ({
-          name: `skill:${skill.name}`,
-          description: skill.description,
-          argumentHint: skill.source.startsWith('project-') ? '(project)' : '(user)',
-        }))
+        if (disposed || signal.aborted || scan !== skillCommandScan || !snapshot.complete) return
+        skillCatalog = snapshot.skills.filter(skill => skill.invocation.userInvocable)
+        skillSelector?.setSkills(skillCatalog)
         refreshCommandAutocomplete()
-        refreshVisibleSlashAutocomplete()
+        refreshVisibleSkillAutocomplete()
         requestRender()
       },
       () => {
@@ -2469,6 +2478,17 @@ function createTuiChatInternal(
       },
     })
     commandCtx.commands.register({
+      name: 'skill',
+      description: 'Load a skill into the conversation',
+      input: { hint: '[name] [instructions]' },
+      handler: async ({ rawInput, signal }) => {
+        const { name, instructions } = parseSkillArguments(rawInput)
+        if (name === '') showSkillSelector()
+        else await invokeSkill(name, instructions, signal)
+        return { kind: 'success' }
+      },
+    })
+    commandCtx.commands.register({
       name: 'export',
       description: 'Write this session\'s transcript to a markdown file',
       input: { hint: '[path]' },
@@ -2577,52 +2597,88 @@ function createTuiChatInternal(
     registry.get(targetAgent.session.id)?.submissions.push({ text, messageId: message.id })
   }
 
-  /** Deliver a user turn to the agent: steer while running, send while idle, or report a disposed agent. */
-  const deliver = (payload: string): void => {
-    dispatchMessage([{ type: 'text', text: payload }])
-  }
-
-  /** Load a manually invoked skill and deliver its rendered body as a user turn, reporting lookup outcomes as notices. */
-  const invokeSkill = (name: string, instructions: string): void => {
+  /** Load a manually invoked skill and deliver its rendered body to the session that issued the command. */
+  const invokeSkill = async (name: string, instructions: string, commandSignal?: AbortSignal): Promise<void> => {
     if (skills === undefined) {
       appendNotice('Skills are not available in this session.', 'warning')
       return
     }
-    const lookup = { cwd: activeCwd(), signal: skillAbort.signal }
+    const targetAgent = agent
+    const targetChannel = channel
+    const signal = commandSignal === undefined
+      ? skillAbort.signal
+      : AbortSignal.any([skillAbort.signal, commandSignal])
+    const lookup = { cwd: activeCwd(), signal }
     const reportFailure = (error: unknown): void => {
-      if (disposed) return
+      if (disposed || signal.aborted) return
       appendNotice(`Skill "${name}" failed to load: ${errorChain(error)}`, 'error')
     }
-    skills.list(lookup).then(
-      (summaries) => {
-        if (disposed) return
-        const summary = summaries.find(skill => skill.name === name)
-        if (summary === undefined) {
-          appendNotice(`Unknown skill: ${name}`, 'warning')
-          return
-        }
-        if (!summary.invocation.userInvocable) {
-          appendNotice(`Skill "${name}" is not available for user invocation.`, 'warning')
-          return
-        }
-        skills.get(name, lookup).then(
+    try {
+      const summaries = await skills.list(lookup)
+      if (disposed || signal.aborted) return
+      const summary = summaries.find(skill => skill.name === name)
+      if (summary === undefined) {
+        appendNotice(`Unknown skill: ${name}`, 'warning')
+        return
+      }
+      if (!summary.invocation.userInvocable) {
+        appendNotice(`Skill "${name}" is not available for user invocation.`, 'warning')
+        return
+      }
+      const skill = await skills.get(name, lookup)
+      if (disposed || signal.aborted) return
+      if (skill === undefined) {
+        appendNotice(`Unknown skill: ${name}`, 'warning')
+        return
+      }
+      if (!skill.invocation.userInvocable) {
+        appendNotice(`Skill "${name}" is not available for user invocation.`, 'warning')
+        return
+      }
+      dispatchMessage(
+        [{ type: 'text', text: renderSkillInvocation(skill, instructions) }],
+        undefined,
+        'auto',
+        targetAgent,
+        targetChannel,
+      )
+    } catch (error: unknown) {
+      reportFailure(error)
+    }
+  }
+
+  const showSkillSelector = (): void => {
+    if (skills === undefined) {
+      appendNotice('Skills are not available in this session.', 'warning')
+      return
+    }
+    void skillOverlay?.close()
+    const session = overlayManager.open({
+      create: () => {
+        skillSelector = new SkillSelector(
+          skillCatalog,
+          resolved.maxModelOptions,
+          palette,
           (skill) => {
-            if (disposed) return
-            if (skill === undefined) {
-              appendNotice(`Unknown skill: ${name}`, 'warning')
-              return
-            }
-            if (!skill.invocation.userInvocable) {
-              appendNotice(`Skill "${name}" is not available for user invocation.`, 'warning')
-              return
-            }
-            deliver(renderSkillInvocation(skill, instructions))
+            void session.close()
+            void invokeSkill(skill.name, '')
           },
-          reportFailure,
+          () => { void session.close() },
         )
+        return skillSelector
       },
-      reportFailure,
-    )
+      options: { width: resolved.modelDialogWidth, maxHeight: resolved.modelDialogMaxHeight },
+      signal: skillAbort.signal,
+    }, 'inline')
+    skillOverlay = session
+    void session.closed.then(() => {
+      if (skillOverlay === session) {
+        skillOverlay = undefined
+        skillSelector = undefined
+      }
+    })
+    refreshSkillCommands(skills)
+    requestRender()
   }
 
   const submitEditorValuePrepared = (
@@ -2668,20 +2724,6 @@ function createTuiChatInternal(
       targetSlot.imageDraft.clear()
       refreshQueueDock()
       channel.refreshStatus()
-      return
-    }
-    // `/skill:<name>` carries a colon, which the command registry's name
-    // grammar rejects, so it is intercepted before generic command routing.
-    if (text.startsWith(SKILL_COMMAND_PREFIX)) {
-      if (imageBlocks.length > 0) {
-        appendNotice('Images can be attached only to user messages, not skill commands.', 'warning')
-        return
-      }
-      editor.addToHistory(text)
-      editor.setText('')
-      const { name: skillName, instructions } = parseSkillCommand(text)
-      if (skillName === '') appendNotice('Usage: /skill:<name> [instructions]', 'warning')
-      else invokeSkill(skillName, instructions)
       return
     }
     if (value.startsWith('/')) {
@@ -3118,11 +3160,11 @@ function createTuiChatInternal(
   })
 
   // A launcher-seeded first turn (`dsh migrate`/`dsh upgrade`):
-  // invoke the named skill exactly as a typed `/skill:<name>` would, once the
+  // invoke the named skill exactly as a typed `/skill <name>` would, once the
   // chat is live and the agent is idle. The launcher sets this only for a fresh
   // session, so there is no prior turn to collide with; invokeSkill reports an
   // unknown skill as a notice.
-  if (config.initialSkill !== undefined) invokeSkill(config.initialSkill, '')
+  if (config.initialSkill !== undefined) void invokeSkill(config.initialSkill, '')
 
   // A configured theme name that matches no shipped preset falls back to the
   // adaptive default; say so once at startup rather than failing silently.
