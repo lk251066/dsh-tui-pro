@@ -11,7 +11,6 @@ import * as StorageJson from '@deepseek-ai/dsh-storage-json'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRegistry from '@deepseek-ai/dsh-tools'
 import TuiMemoryService, {
-  DEFAULT_MAX_MEMORIES,
   DEFAULT_MAX_TEXT_CHARS,
   DEFAULT_RECALL_MAX_CHARS,
   memoryEnabledByDefault,
@@ -41,8 +40,7 @@ async function harness(root: string, config: MemoryConfig = {}) {
 }
 
 describe('TUI memory persistence', () => {
-  it('uses the reviewed store, text, and recall defaults', () => {
-    expect(DEFAULT_MAX_MEMORIES).toBe(200)
+  it('uses the reviewed text and recall defaults', () => {
     expect(DEFAULT_MAX_TEXT_CHARS).toBe(2_000)
     expect(DEFAULT_RECALL_MAX_CHARS).toBe(4_000)
   })
@@ -78,9 +76,78 @@ describe('TUI memory persistence', () => {
     await ctx.fiber.dispose()
   })
 
-  it('shares memories, enforces Unicode character limits, and evicts oldest records', async () => {
+  it('keeps more than 200 memories across a service restart without eviction', async () => {
+    const root = await freshRoot()
+    const first = await harness(root)
+    for (let index = 0; index < 201; index += 1) {
+      await first.memory.add(`durable memory ${String(index)}`)
+    }
+    expect(first.memory.list()).toHaveLength(201)
+    expect(first.memory.list()[0]?.text).toBe('durable memory 0')
+    await first.ctx.fiber.dispose()
+
+    const second = await harness(root)
+    expect(second.memory.list()).toHaveLength(201)
+    expect(second.memory.list().at(-1)?.text).toBe('durable memory 200')
+    await second.ctx.fiber.dispose()
+  })
+
+  it('returns the existing record for exact duplicate text', async () => {
+    const { ctx, memory } = await harness(await freshRoot())
+    const first = await memory.add('prefers concise answers', ['style'])
+    const duplicate = await memory.add('prefers concise answers', ['ignored'])
+
+    expect(duplicate).toEqual(first)
+    expect(memory.list()).toEqual([first])
+    await ctx.fiber.dispose()
+  })
+
+  it('updates a record in place, preserves createdAt, and advances updatedAt', async () => {
+    const { ctx, memory } = await harness(await freshRoot())
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(1_000)
+    const original = await memory.add('uses light mode', ['ui'])
+    clock.mockReturnValue(2_000)
+
+    const updated = await memory.update(original.id, {
+      text: 'uses dark mode',
+      tags: [' UI ', 'preference'],
+    })
+
+    expect(updated).toMatchObject({
+      id: original.id,
+      text: 'uses dark mode',
+      tags: ['ui', 'preference'],
+      createdAt: 1_000,
+      updatedAt: 2_000,
+    })
+    expect(memory.list()).toEqual([updated])
+    await ctx.fiber.dispose()
+  })
+
+  it('advances updatedAt when correction happens in the same clock millisecond', async () => {
+    const { ctx, memory } = await harness(await freshRoot())
+    vi.spyOn(Date, 'now').mockReturnValue(1_000)
+    const original = await memory.add('old fact')
+
+    const updated = await memory.update(original.id, { text: 'correct fact' })
+
+    expect(updated?.createdAt).toBe(1_000)
+    expect(updated?.updatedAt).toBe(1_001)
+    await ctx.fiber.dispose()
+  })
+
+  it('deletes a durable memory by id', async () => {
+    const { ctx, memory } = await harness(await freshRoot())
+    const record = await memory.add('obsolete preference')
+
+    await expect(memory.remove(record.id)).resolves.toBe(true)
+    await expect(memory.remove(record.id)).resolves.toBe(false)
+    expect(memory.list()).toEqual([])
+    await ctx.fiber.dispose()
+  })
+
+  it('shares memories and enforces configured Unicode character limits', async () => {
     const { ctx, memory } = await harness(await freshRoot(), {
-      maxMemories: 2,
       maxTextChars: 4,
       recallMaxChars: 100,
     })
@@ -93,7 +160,7 @@ describe('TUI memory persistence', () => {
     clock.mockReturnValueOnce(3_000)
     await memory.add('WXYZ')
 
-    expect(memory.list().map(record => record.text)).toEqual(['ABCD', 'WXYZ'])
+    expect(memory.list().map(record => record.text)).toEqual(['甲乙丙丁', 'ABCD', 'WXYZ'])
     expect(memory.search('abcd').map(record => record.text)).toEqual(['ABCD'])
     expect(memory.search('missing')).toEqual([])
     await ctx.fiber.dispose()
@@ -115,9 +182,12 @@ describe('TUI memory persistence', () => {
   })
 
   it('rejects invalid limits and uninitialized direct service use', async () => {
-    const invalid = new Context()
-    expect(() => new TuiMemoryService(invalid, { maxMemories: 0 })).toThrow('maxMemories')
-    await invalid.fiber.dispose()
+    const invalidText = new Context()
+    expect(() => new TuiMemoryService(invalidText, { maxTextChars: 0 })).toThrow('maxTextChars')
+    await invalidText.fiber.dispose()
+    const invalidRecall = new Context()
+    expect(() => new TuiMemoryService(invalidRecall, { recallMaxChars: 0 })).toThrow('recallMaxChars')
+    await invalidRecall.fiber.dispose()
     const ctx = new Context()
     const raw = new TuiMemoryService(ctx)
     expect(() => raw.list()).toThrow('durable domain is not initialized')
@@ -127,13 +197,18 @@ describe('TUI memory persistence', () => {
 })
 
 describe('TUI memory agent scope', () => {
-  it('installs working save/search tools and removes every contribution through one disposer', async () => {
+  it('installs and executes all four memory tools, then removes every contribution', async () => {
     const { ctx, memory } = await harness(await freshRoot())
     await ctx.plugin(SystemPrompt)
     await ctx.plugin(ToolRegistry)
 
     const dispose = memory.installTools(ctx)
-    expect(ctx.tools.schemas().map(schema => schema.name)).toEqual(['memory_save', 'memory_search'])
+    expect(ctx.tools.schemas().map(schema => schema.name)).toEqual([
+      'memory_save',
+      'memory_search',
+      'memory_update',
+      'memory_delete',
+    ])
     expect((await ctx.systemPrompt.assemble()).sections.map(section => section.name))
       .toEqual(expect.arrayContaining(['tool:memory', 'memory:recalled']))
 
@@ -162,8 +237,29 @@ describe('TUI memory agent scope', () => {
       total: 2,
       results: [{ text: 'owns a coffee grinder', tags: ['coffee'] }],
     })
+
+    clock.mockReturnValue(3_000)
+    const savedId = String((saved.value as { id: string }).id)
+    const updated = await ctx.tools.execute({
+      callId: CallId('memory-update'),
+      name: 'memory_update',
+      arguments: { id: savedId, text: 'likes filter coffee', tags: [' Brew '] },
+      signal: new AbortController().signal,
+    })
+    expect(updated.isError).toBe(false)
+    expect(updated.value).toEqual({ id: savedId, text: 'likes filter coffee', tags: ['brew'] })
+
+    const deleted = await ctx.tools.execute({
+      callId: CallId('memory-delete'),
+      name: 'memory_delete',
+      arguments: { id: savedId },
+      signal: new AbortController().signal,
+    })
+    expect(deleted.isError).toBe(false)
+    expect(deleted.value).toEqual({ id: savedId, removed: true })
+    expect(memory.search('filter coffee')).toEqual([])
     expect((await ctx.systemPrompt.assemble()).sections.find(section => section.name === 'memory:recalled')?.text)
-      .toContain('likes espresso')
+      .toContain('owns a coffee grinder')
 
     await dispose()
     expect(ctx.tools.schemas().map(schema => schema.name)).toEqual([])

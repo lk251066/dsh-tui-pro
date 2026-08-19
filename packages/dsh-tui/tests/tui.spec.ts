@@ -216,9 +216,9 @@ describe('TUI config', () => {
   it('defaults every direct-call TUI option', () => {
     expect(resolveTuiConfig(undefined)).toEqual({
       sidebarWidth: 32,
+      assistantCwd: join(homedir(), '.dsh', 'assistant'),
       showReasoning: false,
       maxToolOutputLines: 6,
-      maxMessageLines: 30,
       maxDiffEditLength: 1000,
       maxQuestionOptions: 8,
       maxModelOptions: 8,
@@ -237,7 +237,7 @@ describe('TUI config', () => {
         color: true,
         truecolor: false,
         name: 'deepseek',
-        leftPrompt: '${cwd}${git/worktree}${model}${context}${memory}${plan}${throughput}',
+        leftPrompt: '${cwd}${git/worktree}${model}${context}${memory}${plan}${throughput}${queued}',
         rightPrompt: '',
         inputPrompt: '${indicator}',
         inputPlaceholder: 'Enter steer · Tab queue · Esc cancel',
@@ -246,9 +246,9 @@ describe('TUI config', () => {
     })
     expect(resolveTuiConfig({
       sidebarWidth: 36,
+      assistantCwd: 'D:\\assistant-home',
       showReasoning: false,
       maxToolOutputLines: 2,
-      maxMessageLines: 13,
       maxDiffEditLength: 12,
       maxQuestionOptions: 3,
       maxModelOptions: 4,
@@ -267,9 +267,9 @@ describe('TUI config', () => {
       title: 'DSH',
     })).toEqual({
       sidebarWidth: 36,
+      assistantCwd: 'D:\\assistant-home',
       showReasoning: false,
       maxToolOutputLines: 2,
-      maxMessageLines: 13,
       maxDiffEditLength: 12,
       maxQuestionOptions: 3,
       maxModelOptions: 4,
@@ -288,7 +288,7 @@ describe('TUI config', () => {
         color: false,
         truecolor: true,
         name: 'deepseek',
-        leftPrompt: '${cwd}${git/worktree}${model}${context}${memory}${plan}${throughput}',
+        leftPrompt: '${cwd}${git/worktree}${model}${context}${memory}${plan}${throughput}${queued}',
         rightPrompt: '',
         inputPrompt: '${indicator}',
         inputPlaceholder: 'Enter steer · Tab queue · Esc cancel',
@@ -1973,21 +1973,15 @@ describe('pi-tui chat lifecycle and transcript', () => {
     expect(result.terminal.output).toContain('Tool and context cards expanded.')
     expect(result.terminal.output).toContain('instruction line 5')
 
-    // Third state: tool cards hide; a context card is injected instructions,
-    // not tool traffic, so it stays visible at its collapsed preview.
-    result.terminal.send('\x0f')
-    await tick()
-    expect(result.terminal.output).toContain('Tool cards hidden.')
-    // A repaint proves the context card SURVIVES the hidden phase: injected
-    // instructions are not tool traffic, so they stay at the collapsed preview.
-    result.terminal.send('\x0c')
-    await tick()
-    const hidden = result.terminal.output.slice(result.terminal.output.lastIndexOf('\x1b[2J'))
-    expect(hidden).toContain('Context · workspace-context')
-    // Fourth press returns to the collapsed default, closing the cycle.
+    // Second press returns both tool and context cards to their collapsed previews.
     result.terminal.send('\x0f')
     await tick()
     expect(result.terminal.output).toContain('Tool and context cards collapsed.')
+    result.terminal.send('\x0c')
+    await tick()
+    const collapsed = result.terminal.output.slice(result.terminal.output.lastIndexOf('\x1b[2J'))
+    expect(collapsed).toContain('Context · workspace-context')
+    expect(collapsed).not.toContain('instruction line 5')
 
     // Context with no frame renders as muted prose under the header; a frame
     // wrapping nothing renders header-only.
@@ -2131,11 +2125,12 @@ describe('pi-tui chat lifecycle and transcript', () => {
     await dispose(result)
   })
 
-  it('badges queued steering on the prompt context and clears it as each drains', async () => {
+  it('keeps a current-turn delivery receipt until each steering message drains', async () => {
     // Pin a cwd free of the substring under test; the prompt context renders the path.
     const result = await setup({ status: 'running', cwd: '/workspace' })
     // Running with nothing queued: the badge is absent and the editor keeps its hint.
     expect(result.terminal.output).toContain('Enter steer · Tab queue · Esc cancel')
+    expect(result.terminal.output).not.toContain('sent to current turn')
     expect(result.terminal.output).not.toMatch(/Queue\s+[1-9]/)
 
     result.terminal.output = ''
@@ -2188,25 +2183,27 @@ describe('pi-tui chat lifecycle and transcript', () => {
 
     // Two steering messages queue while the turn runs.
     submitSteering('first')
+    await tick()
+    expect(result.terminal.output).toContain('sent to current turn')
     result.terminal.output = ''
     submitSteering('second')
     await tick()
     expect(result.inbox.nextStep).toHaveLength(2)
-    expect(result.terminal.output).toContain('Queued')
+    expect(result.terminal.output).toContain('2 sent to current turn')
 
     // Draining one submitted message decrements the badge.
     result.terminal.output = ''
     drainSteering('first')
     await tick()
     expect(result.inbox.nextStep).toHaveLength(1)
-    expect(result.terminal.output).toContain('Queued')
+    expect(result.terminal.output).toContain('sent to current turn')
 
     // Draining the last queued message returns the plain hint.
     result.terminal.output = ''
     drainSteering('second')
     await tick()
     expect(result.inbox.nextStep).toHaveLength(0)
-    expect(result.terminal.output).not.toContain('Queued')
+    expect(result.terminal.output).not.toContain('sent to current turn')
 
     // A drain with no matching queued entry is ignored rather than underflowing.
     result.terminal.output = ''
@@ -3307,7 +3304,8 @@ describe('pi-tui chat lifecycle and transcript', () => {
     }
 
     await run('/details hidden')
-    expect(result.terminal.output).toContain('Tool cards hidden.')
+    expect(result.terminal.output).toContain('Unknown /details argument "hidden"')
+    expect(result.terminal.output).toContain('/details [collapsed|expanded]')
 
     // One command, two receipts: the transient notice slot shows only the
     // latest, so 'Reasoning collapsed.' is swallowed by the visibility receipt
@@ -3355,15 +3353,11 @@ describe('pi-tui chat lifecycle and transcript', () => {
     await tick()
 
     // Each Tab applies one step immediately while the dialog stays open:
-    // collapsed -> expanded -> hidden -> collapsed (wraparound).
+    // collapsed -> expanded -> collapsed (wraparound).
     let changed = result.terminal.output.length
     result.terminal.send('\t')
     await tick()
     expect(result.terminal.output.slice(changed)).toMatch(/Tool cards\s+expanded/u)
-    changed = result.terminal.output.length
-    result.terminal.send('\t')
-    await tick()
-    expect(result.terminal.output.slice(changed)).toMatch(/Tool cards\s+hidden/u)
     changed = result.terminal.output.length
     result.terminal.send('\t')
     await tick()
@@ -5771,41 +5765,28 @@ describe('tool cards and surface replay', () => {
     expect(diffPlain).toContain('+ after')
     expect(diffPlain).toContain('· 2 files')
 
-    // Third Ctrl+O phase hides every tool card: after a redraw the repainted
-    // frame carries no tool header at all, only the conversation.
+    // Second Ctrl+O press returns every tool card to its compact preview.
     result.terminal.send('\x0f')
     await tick()
-    expect(result.terminal.output).toContain('Tool cards hidden.')
-    // A result for an untracked call mints a fallback card mid-hidden: it must
-    // adopt the current visibility instead of rendering collapsed.
+    expect(result.terminal.output).toContain('Tool and context cards collapsed.')
+    // A result for an untracked call mints a fallback card in the current
+    // collapsed phase rather than expanding it.
     result.session.append('tool/result', {
       turn: 1, step: 1,
       message: createToolResultMessage({
         callId: 'untracked' as never,
         content: [{ type: 'text', text: 'fallback result body' }],
-        isError: false,
+        isError: true,
       }),
     }, { surfaceOp: 'append' })
     await tick()
     result.terminal.send('\x0c')
     await tick()
-    const hiddenFrame = result.terminal.output.slice(result.terminal.output.lastIndexOf('\x1b[2J'))
-    expect(hiddenFrame).not.toContain(TOOL_SETTLED())
-    expect(hiddenFrame).not.toContain('Run command')
-    expect(hiddenFrame).not.toContain('fallback result body')
-    // The dozen hidden cards leave no per-card blank rows behind: each card owns
-    // its leading gap, so the trimmed frame has no long blank run where the
-    // cards used to be.
-    const frameRows = hiddenFrame.split('\n').map(row => row.replaceAll(/\x1b\[[0-9;]*[A-Za-z]/g, '').trim())
-    const first = frameRows.findIndex(row => row.includes('Calling tools'))
-    expect(first).toBeGreaterThan(-1)
-    let blankRun = 0
-    let longestRun = 0
-    for (const row of frameRows.slice(first)) {
-      blankRun = row === '' ? blankRun + 1 : 0
-      longestRun = Math.max(longestRun, blankRun)
-    }
-    expect(longestRun).toBeLessThanOrEqual(2)
+    const collapsedFrame = result.terminal.output.slice(result.terminal.output.lastIndexOf('\x1b[2J'))
+    expect(collapsedFrame).toContain(TOOL_SETTLED())
+    expect(collapsedFrame).toContain('Run command')
+    expect(collapsedFrame).toContain('Unknown tool result · untracked')
+    expect(collapsedFrame).toContain('fallback result body')
     await dispose(result)
   })
 
@@ -6224,7 +6205,7 @@ describe('tool cards and surface replay', () => {
     session.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
   }
 
-  it('drops tool cards in hidden mode and restores them on cycle', async () => {
+  it('cycles tool cards between collapsed previews and expanded bodies', async () => {
     const result = await setup({ tools })
     appendTwoStepTurn(result.session)
     await tick()
@@ -6234,20 +6215,20 @@ describe('tool cards and surface replay', () => {
     await tick()
     expect(lastFrame(result.terminal)).toContain('Run command')
 
-    // collapsed -> expanded -> hidden.
-    result.terminal.send('\x0f')
+    // collapsed -> expanded exposes the complete card body.
     result.terminal.send('\x0f')
     await tick()
     result.terminal.send('\x0c')
     await tick()
-    const hidden = lastFrame(result.terminal)
-    expect(hidden).toContain('first step text')
-    expect(hidden).toContain('second step text')
-    expect(hidden).not.toContain('Run command')
+    const expanded = lastFrame(result.terminal)
+    expect(expanded).toContain('first step text')
+    expect(expanded).toContain('second step text')
+    expect(expanded).toContain('Run command')
+    expect(expanded).toContain('[exit 0]')
     // Model order survives the fold.
-    expect(hidden.indexOf('first step text')).toBeLessThan(hidden.indexOf('second step text'))
+    expect(expanded.indexOf('first step text')).toBeLessThan(expanded.indexOf('second step text'))
 
-    // hidden -> collapsed brings the cards back.
+    // expanded -> collapsed keeps the card while restoring its preview.
     result.terminal.send('\x0f')
     await tick()
     result.terminal.send('\x0c')
@@ -6256,7 +6237,7 @@ describe('tool cards and surface replay', () => {
     await dispose(result)
   })
 
-  it('gives the hidden-mode header to the first step with a visible body and keeps turns separate', async () => {
+  it('keeps a tool-only step from crowding later assistant text and keeps turns separate', async () => {
     const result = await setup({ tools })
     // Turn 1, step 1 is tool-only; step 2 carries the turn's text.
     appendUser(result.session, 'tool-only first step')
@@ -6282,21 +6263,18 @@ describe('tool cards and surface replay', () => {
     result.session.append('turn/end', { turn: 2, reason: { kind: 'completed' } })
     await tick()
 
-    result.terminal.send('\x0f')
-    result.terminal.send('\x0f')
-    await tick()
     result.terminal.send('\x0c')
     await tick()
-    const hidden = lastFrame(result.terminal)
+    const collapsed = lastFrame(result.terminal)
     // The tool-only step neither renders a blank segment nor crowds out the
     // late text step; turn two stays separate.
-    expect(hidden).not.toContain('tool body')
-    expect(hidden).toContain('late turn-one text')
-    expect(hidden).toContain('turn-two text')
+    expect(collapsed).toContain('Run command')
+    expect(collapsed).toContain('late turn-one text')
+    expect(collapsed).toContain('turn-two text')
     await dispose(result)
   })
 
-  it('folds live hidden-mode streaming once a later step shows text', async () => {
+  it('keeps live streaming steps after the detail cycle returns to collapsed', async () => {
     const result = await setup({ tools, status: 'running' })
     result.terminal.send('\x0f')
     result.terminal.send('\x0f')
@@ -6308,9 +6286,9 @@ describe('tool cards and surface replay', () => {
     await tick()
     result.terminal.send('\x0c')
     await tick()
-    const hidden = lastFrame(result.terminal)
-    expect(hidden).toContain('live first')
-    expect(hidden).toContain('live second')
+    const collapsed = lastFrame(result.terminal)
+    expect(collapsed).toContain('live first')
+    expect(collapsed).toContain('live second')
 
     // A transcript rebuild (resize) recomputes the same fold from the log.
     result.terminal.resize(89)

@@ -63,6 +63,7 @@
     - id: tui
       name: '@lk251066/dsh-tui'
       config:
+        assistantCwd: !!js dshHomePath('assistant')
         showReasoning: false
         maxToolOutputLines: 6
 

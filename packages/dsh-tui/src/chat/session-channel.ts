@@ -403,7 +403,6 @@ export function createSessionChannel(deps: SessionChannelDeps): SessionChannel {
       deps.showReasoning(),
       palette,
       mdTheme,
-      resolved.maxMessageLines,
       deps.now,
     )
     streaming.markStart(startedAt)
@@ -537,7 +536,7 @@ export function createSessionChannel(deps: SessionChannelDeps): SessionChannel {
         break
       }
       // No external Spacer for tool cards: the card renders its own leading
-      // gap, so the hidden state removes the row and the gap together.
+      // gap, so each card owns its complete transcript spacing.
       case 'tool/call': {
         const card = parsedTool(event)
         if (!FOLDABLE_TOOLS.has(event.data.name)) {
@@ -575,7 +574,7 @@ export function createSessionChannel(deps: SessionChannelDeps): SessionChannel {
         let card = toolCards.get(callId)
         if (card === undefined) {
           card = new ToolCardComponent(
-            'tool',
+            `Unknown tool result · ${String(callId)}`,
             { value: {}, valid: true },
             undefined,
             resolved.maxToolOutputLines,
@@ -925,11 +924,10 @@ export function createSessionChannel(deps: SessionChannelDeps): SessionChannel {
     },
     applyToolsVisibility: (visibility) => {
       for (const card of allToolCards) card.setVisibility(visibility)
-      // Group rows ride the same cycle: hidden drops the summary, expanded lists
-      // the member cards (the loop above already set their own visibility).
+      // Group rows ride the same cycle; expanded lists the member cards (the
+      // loop above already set their own visibility).
       for (const group of toolGroups) group.setVisibility(visibility)
-      // Context cards carry injected instructions rather than tool traffic, so
-      // they never hide: the hidden phase reads as their collapsed preview.
+      // Context cards carry injected instructions and follow the same detail phase.
       for (const card of contextCards) card.setExpanded(visibility === 'expanded')
       todo.setExpanded(visibility === 'expanded')
       chat.markDirty()

@@ -380,12 +380,13 @@ export function formatTimingTotals(totals: TimingTotals, includeModelWait = fals
 }
 
 /**
- * Format the queued-steering badge shown on the running status line.
- * @param queued - Number of queued steering messages.
- * @returns The badge text, or `undefined` when nothing is queued.
+ * Format the persistent receipt for messages sent into the current turn.
+ * @param pending - Number of steering messages not yet claimed or discarded.
+ * @returns The receipt text, or `undefined` when nothing is pending.
  */
-export function formatQueuedStatus(queued: number): string | undefined {
-  return queued > 0 ? `${queued} queued` : undefined
+export function formatSteeringStatus(pending: number): string | undefined {
+  if (pending <= 0) return undefined
+  return pending === 1 ? '  sent to current turn' : `  ${pending} sent to current turn`
 }
 
 /**

@@ -96,6 +96,7 @@ export function installAssistantTools(
   registry: ChannelRegistry<TuiSessionSlot>,
   workspaceSessions: WorkspaceSessions,
   adoptOwnedAgent: AdoptOwnedAgent,
+  assistantCwd: string,
 ): void {
   agentCtx.inject(['tools'], (toolCtx) => {
     const ensureLive = async (sessionId: SessionIdType, activate: boolean): Promise<Agent> => {
@@ -208,7 +209,7 @@ export function installAssistantTools(
         render: (_args, value) => [{ type: 'text', text: `Created active session ${value.sessionId} in ${value.cwd}.` }],
       },
       async execute(args) {
-        const cwd = resolve(process.cwd(), args.path?.trim() || '.')
+        const cwd = resolve(assistantCwd, args.path?.trim() || '.')
         if (!(await stat(cwd)).isDirectory()) throw new Error(`Not a project directory: ${cwd}`)
         const sessionId = SessionId(`session-${randomUUID()}`)
         const handle = await agentCtx.agents.create({ sessionId, seed: [], meta: { cwd } })

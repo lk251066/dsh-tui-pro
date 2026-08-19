@@ -638,45 +638,6 @@ export class UserMessageComponent extends Container {
 }
 
 /**
- * A settled assistant reply body rendered through Markdown. Past `maxLines`
- * rendered rows the body folds to a head preview plus one dim disclosure row
- * (`… +M lines (click to expand)`); the owning StreamingAssistantComponent
- * holds the expanded state and rebuilds this component when it flips, the
- * same disclosure pattern the folded Thinking line uses. Streaming replies
- * never reach this component — they render in full so the live tail stays
- * visible.
- */
-class FoldableBodyComponent implements Component {
-  private readonly markdown: Markdown
-
-  constructor(
-    text: string,
-    private readonly maxLines: number,
-    private readonly expanded: boolean,
-    private readonly palette: Palette,
-    mdTheme: MarkdownTheme,
-  ) {
-    this.markdown = new Markdown(text, 0, 0, mdTheme, { color: value => palette.text(value) })
-  }
-
-  invalidate(): void {
-    this.markdown.invalidate()
-  }
-
-  render(width: number): string[] {
-    const rows = this.markdown.render(width)
-    if (this.expanded || rows.length <= this.maxLines) return rows
-    return [
-      ...rows.slice(0, this.maxLines),
-      this.palette.dim(`… +${rows.length - this.maxLines} lines ${shortcutHint('click', 'expand')}`),
-    ]
-  }
-}
-
-/** The disclosure row a folded assistant body ends with (click target). */
-const FOLDED_BODY_HINT = /^… \+\d+ lines \(click to expand\)$/u
-
-/**
  * Children of a settled assistant message: optional reasoning block then the
  * response text. Every visible reply opens a single-row gap below the user
  * message or preceding tool output. A settled step folds its reasoning to one
@@ -684,9 +645,8 @@ const FOLDED_BODY_HINT = /^… \+\d+ lines \(click to expand\)$/u
  * streaming step keeps the reasoning live. A step with no visible body renders
  * nothing, so tool-only steps leave no blank segment behind. Shown reasoning
  * renders as a Markdown blockquote, so the quote style's dim `▎` bar gives the thinking
- * block a left edge apart from tool output and the reply. A settled reply
- * body longer than `maxMessageLines` rendered rows folds behind a
- * click-to-expand disclosure row; a streaming reply always renders in full.
+ * block a left edge apart from tool output and the reply. Assistant response
+ * text always renders in full; the transcript viewport owns length and scroll.
  */
 function assistantMessageChildren(
   content: readonly ContentBlock[],
@@ -695,8 +655,6 @@ function assistantMessageChildren(
   mdTheme: MarkdownTheme,
   settled: boolean,
   thinkingMs: number | undefined,
-  maxMessageLines: number,
-  textExpanded: boolean,
 ): Component[] {
   const reasoning = displayText(textBlocks(content, 'reasoning').trim())
   const text = displayText(textBlocks(content, 'text').trim())
@@ -733,9 +691,7 @@ function assistantMessageChildren(
   }
   if (text) {
     children.push(new TranscriptGutterComponent(
-      settled
-        ? new FoldableBodyComponent(text, maxMessageLines, textExpanded, palette, mdTheme)
-        : new Markdown(text, 0, 0, mdTheme, { color: value => palette.text(value) }),
+      new Markdown(text, 0, 0, mdTheme, { color: value => palette.text(value) }),
       palette.bold(palette.assistant(ASSISTANT_GLYPH)),
     ))
   }
@@ -755,8 +711,6 @@ export class StreamingAssistantComponent extends Container {
   private startedAt: number | undefined
   private thinkingStartedAt: number | undefined
   private thinkingMs: number | undefined
-  /** Whether a settled over-long reply body is expanded past its fold. */
-  private textExpanded = false
   private dirty = true
   constructor(
     /** The step's turn/step coordinates, used to group steps into its turn. */
@@ -764,8 +718,6 @@ export class StreamingAssistantComponent extends Container {
     private showReasoning: boolean,
     private readonly palette: Palette,
     private readonly mdTheme: MarkdownTheme,
-    /** Rendered-line budget for a settled reply body before it folds. */
-    private readonly maxMessageLines: number,
     /** Shared channel clock; the channel animation tick drives repaint. */
     private readonly now: () => number = Date.now,
   ) {
@@ -856,19 +808,12 @@ export class StreamingAssistantComponent extends Container {
   }
 
   /**
-   * Toggle this step's disclosure rows: the folded Thinking line switches the
-   * reasoning block, and a folded reply body's `… +M lines (click to expand)`
-   * row expands the body in place (one-way, like the tool-card preview).
+   * Toggle this step's folded Thinking line when its disclosure row is clicked.
    */
   clickTranscriptRow(row: number, width: number): boolean {
     const line = stripTerminalControls(this.render(width)[row] ?? '')
     if (line.includes('Thinking')) {
       this.setShowReasoning(!this.showReasoning)
-      return true
-    }
-    if (!this.textExpanded && FOLDED_BODY_HINT.test(line.trim())) {
-      this.textExpanded = true
-      this.dirty = true
       return true
     }
     return false
@@ -894,8 +839,6 @@ export class StreamingAssistantComponent extends Container {
       this.mdTheme,
       this.settledContent !== undefined,
       this.thinkingMs ?? (this.thinkingStartedAt === undefined ? undefined : Math.max(0, this.now() - this.thinkingStartedAt)),
-      this.maxMessageLines,
-      this.textExpanded,
     )
     for (const child of children) this.addChild(child)
   }
@@ -925,11 +868,8 @@ function callKind(view: ToolCallView): string | undefined {
     : undefined
 }
 
-/**
- * Ctrl+O card-visibility cycle: `hidden` drops tool cards from the transcript,
- * `collapsed` previews the first body lines, `expanded` shows everything.
- */
-export type ToolCardVisibility = 'hidden' | 'collapsed' | 'expanded'
+/** Ctrl+O card-visibility cycle: preview the first body lines or show everything. */
+export type ToolCardVisibility = 'collapsed' | 'expanded'
 
 /**
  * Transcript card with a width-keyed rendered-row cache. pi-tui re-renders
@@ -1062,7 +1002,7 @@ export class ToolCardComponent extends CachedCardComponent {
 
   /**
    * Set the card's visibility state.
-   * @param visibility - Hidden, collapsed preview, or full body.
+   * @param visibility - Collapsed preview or full body.
    */
   setVisibility(visibility: ToolCardVisibility): void {
     this.visibility = visibility
@@ -1071,15 +1011,12 @@ export class ToolCardComponent extends CachedCardComponent {
 
   /** Toggle this card only when its disclosure header row is clicked. */
   clickTranscriptRow(row: number, _width: number): boolean {
-    if (row !== 1 || this.visibility === 'hidden') return false
+    if (row !== 1) return false
     this.setVisibility(this.visibility === 'expanded' ? 'collapsed' : 'expanded')
     return true
   }
 
   protected renderLines(width: number): string[] {
-    // Hidden renders nothing — not even the leading gap — so the transcript
-    // keeps only the conversation, the way Codex hides tool calls.
-    if (this.visibility === 'hidden') return []
     const isError = this.result?.isError ?? false
     // Claude-Code-style marker: the braille spinner frame while pending (the
     // hollow dot before the first tick or in a replayed log), the filled
@@ -1161,8 +1098,7 @@ export class ToolCardComponent extends CachedCardComponent {
       new Text(pending ? this.palette.tool(headerText) : this.palette.dim(headerText), 0, 0),
       statusColor(glyph),
     ).render(width)[0] ?? ''
-    // The blank first row is the card's own paragraph gap (no external Spacer),
-    // so the hidden state removes the gap together with the card.
+    // The blank first row is the card's own paragraph gap (no external Spacer).
     const lines: string[] = ['', header]
     if (visibleBody.length > 0) {
       lines.push(...new TranscriptGutterComponent(
@@ -1176,7 +1112,6 @@ export class ToolCardComponent extends CachedCardComponent {
 
   /** Render the submitted plan as the transcript's one deliberate full panel. */
   private renderPlan(width: number, pending: boolean, isError: boolean): string[] {
-    if (this.visibility === 'hidden') return []
     const view = this.callView.card === 'generic' ? this.callView : undefined
     const source = view?.content === undefined ? '' : displayText(contentText(view.content))
     const title = displayInlineText(view?.title ?? 'Plan')
@@ -1441,8 +1376,7 @@ const TOOL_GROUP_ORDER = ['file', 'pattern', 'dir'] as const
  * reused, so results keep flowing into the same objects: `collapsed` renders
  * only the summary (its glyph tracks the newest pending member, with that
  * call's label as the activity hint), `expanded` lists each member's own rows
- * beneath the summary (through the members' per-card width caches), and
- * `hidden` drops the row together with the cards.
+ * beneath the summary through the members' per-card width caches.
  */
 export class CollapsedToolGroupComponent extends CachedCardComponent {
   private visibility: ToolCardVisibility = 'collapsed'
@@ -1461,7 +1395,7 @@ export class CollapsedToolGroupComponent extends CachedCardComponent {
 
   /** Toggle this group only when its summary row is clicked. */
   clickTranscriptRow(row: number, _width: number): boolean {
-    if (row !== 1 || this.visibility === 'hidden') return false
+    if (row !== 1) return false
     this.setVisibility(this.visibility === 'expanded' ? 'collapsed' : 'expanded')
     return true
   }
@@ -1502,8 +1436,7 @@ export class CollapsedToolGroupComponent extends CachedCardComponent {
 
   /**
    * Set the group's visibility state.
-   * @param visibility - Hidden (nothing at all), collapsed summary row, or the
-   * expanded list of member cards.
+   * @param visibility - Collapsed summary row or expanded member-card list.
    */
   setVisibility(visibility: ToolCardVisibility): void {
     this.visibility = visibility
@@ -1567,9 +1500,6 @@ export class CollapsedToolGroupComponent extends CachedCardComponent {
   }
 
   protected renderLines(width: number): string[] {
-    // Hidden renders nothing — not even the leading gap — so the group leaves
-    // the transcript exactly as its member cards would have.
-    if (this.visibility === 'hidden') return []
     const pending = this.pendingCard()
     const glyph = pending === undefined ? TOOL_SETTLED() : this.spinnerFrame ?? '○'
     if (this.visibility === 'expanded') {

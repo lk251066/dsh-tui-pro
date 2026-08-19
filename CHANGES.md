@@ -6,7 +6,7 @@ Established conversations no longer reserve a persistent top header or its surro
 
 The editor frame is the only boundary below the transcript; a second full-width rule no longer repeats that edge. The reclaimed row belongs to the transcript, and scrolling, disclosure clicks, and drag selection use the expanded viewport coordinates.
 
-User message bands and assistant Markdown now provide the speaker distinction directly. The repeated `You` and `Assistant` heading rows and their heading timestamps are removed. The user fill is deliberately subtle on dark terminals, while message wrapping, reasoning, tool cards, and reply folding remain unchanged.
+User message bands and assistant Markdown now provide the speaker distinction directly. The repeated `You` and `Assistant` heading rows and their heading timestamps are removed. The user fill is deliberately subtle on dark terminals, and final replies remain fully visible inside the scrolling transcript.
 
 Assistant replies now open one row below the preceding user message or tool output. The editor prompt no longer repeats `dsh`; it contains only the idle caret or the current running-state glyph.
 
@@ -34,7 +34,7 @@ Double Escape remains the current-conversation checkpoint navigator. Confirming 
 
 `Alt+V` reads PNG, JPEG, WebP, or GIF data from the system clipboard and adds an `[Image #N]` placeholder to that session's draft. Sending requires a selected model that explicitly advertises image input. A text-only or unknown model retains the draft.
 
-`/memory`, `/memory on`, and `/memory off` control long-term memory for the current session. The assistant defaults on and project sessions default off. Enabled sessions can save and search the shared durable memory store; disabling a session removes its memory tools and prompt sections without deleting stored memories.
+`/memory`, `/memory on`, and `/memory off` control long-term memory for the current session. The assistant defaults on and project sessions default off. Enabled sessions can save, search, correct, and delete records in the shared durable memory store. The store does not silently evict old records; disabling a session removes its memory tools and prompt sections without deleting stored memories.
 
 ## 1.6.3 changes
 

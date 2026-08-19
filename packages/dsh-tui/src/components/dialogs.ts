@@ -680,7 +680,7 @@ export interface DetailsSelection {
   readonly showReasoning: boolean
 }
 
-const TOOL_CARD_PHASES: readonly ToolCardVisibility[] = ['collapsed', 'expanded', 'hidden']
+const TOOL_CARD_PHASES: readonly ToolCardVisibility[] = ['collapsed', 'expanded']
 
 /**
  * Keyboard toggle over the two transcript-detail entries — tool-card

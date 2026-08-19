@@ -86,7 +86,7 @@ import {
 } from './chat/tokens.ts'
 import {
   fadeGlyph,
-  formatQueuedStatus,
+  formatSteeringStatus,
   formatStatusDuration,
   pulseLevel,
   runningPhaseGlyph,
@@ -460,19 +460,16 @@ function createTuiChatInternal(
   editor.hintPrefix = initialInputPrompt
   const compactionStatusLine = new Text('', 0, 0)
   let showReasoning = resolved.showReasoning
-  // Ctrl+O cycles collapsed -> expanded -> hidden. Codex-style: hidden drops
-  // tool cards entirely, collapsed previews, expanded shows full bodies.
+  // Ctrl+O switches between compact previews and full tool-card bodies.
   let toolsVisibility: ToolCardVisibility = 'collapsed'
   let disposed = false
   let shuttingDown: Promise<void> | undefined
   // Optional: skills mount conditionally, so read the global service store
   // rather than declaring an injection that would make the TUI require them.
   const skills = ctx.get('skills')
-  const initialCwd = agent.session.id === ASSISTANT_SESSION_ID
-    ? process.cwd()
-    : agent.session.header.cwd ?? process.cwd()
-  const activeSessionCwd = (): string | undefined =>
-    agent.session.id === ASSISTANT_SESSION_ID ? undefined : agent.session.header.cwd
+  const initialCwd = agent.session.header.cwd
+    ?? (agent.session.id === ASSISTANT_SESSION_ID ? resolved.assistantCwd : process.cwd())
+  const activeSessionCwd = (): string | undefined => agent.session.header.cwd
   const activeCwd = (): string => activeSessionCwd() ?? initialCwd
   const fileSearchConfig = {
     maxResults: resolved.fileSearchMaxResults,
@@ -513,9 +510,7 @@ function createTuiChatInternal(
 
   let sessionTitle = foldSessionTitle(agent.session.events)?.title
   const firstSessionCwd = activeSessionCwd()
-  let formattedCwd = agent.session.id === ASSISTANT_SESSION_ID
-    ? undefined
-    : displayText(runtime.formatCwd?.(firstSessionCwd) ?? formatCwd(firstSessionCwd))
+  let formattedCwd = displayText(runtime.formatCwd?.(firstSessionCwd) ?? formatCwd(firstSessionCwd))
   /**
    * Whether the session log is still pristine: nothing beyond the opening
    * lifecycle prelude (`turn/start`, `step/start`), and no title. The
@@ -683,7 +678,7 @@ function createTuiChatInternal(
           : palette.dim(percentText)
       contextValue.set(`  ${contextMeter(occupancy, palette)} ${percent}${palette.dim(' context')}`)
     }
-    const queued = channel.isRunning() ? formatQueuedStatus(channel.pendingSteeringCount()) : undefined
+    const queued = channel.isRunning() ? formatSteeringStatus(channel.pendingSteeringCount()) : undefined
     queuedValue.set(queued === undefined ? undefined : palette.dim(queued))
     // Shift+Tab's preset ring and the plan-mode chip; absent services render nothing.
     const preset = permissionController.chip()
@@ -1170,15 +1165,11 @@ function createTuiChatInternal(
       // its transcript from the log so events it missed render now.
       next.channel.syncTranscript(false)
       void ctx.sessions.flush(previous.agent.session).catch(() => {})
-      const nextSessionCwd = next.agent.session.id === ASSISTANT_SESSION_ID
-        ? undefined
-        : next.agent.session.header.cwd
+      const nextSessionCwd = next.agent.session.header.cwd
       const nextCwd = nextSessionCwd ?? initialCwd
       fileSearch.dispose()
       fileSearch = new WorkspaceFileSearch(nextCwd, fileSearchConfig)
-      formattedCwd = next.agent.session.id === ASSISTANT_SESSION_ID
-        ? undefined
-        : displayText(runtime.formatCwd?.(nextSessionCwd) ?? formatCwd(nextSessionCwd))
+      formattedCwd = displayText(runtime.formatCwd?.(nextSessionCwd) ?? formatCwd(nextSessionCwd))
       refreshBranch(nextSessionCwd)
       sessionTitle = foldSessionTitle(next.agent.session.events)?.title
       modelController.activateSelection()
@@ -1264,7 +1255,7 @@ function createTuiChatInternal(
   }
 
   if (agent.session.id === ASSISTANT_SESSION_ID) {
-    setupAssistant(agent.ctx, registry, workspaceSessions, adoptOwnedAgent)
+    setupAssistant(agent.ctx, registry, workspaceSessions, adoptOwnedAgent, activeCwd())
   }
 
   /**
@@ -1307,6 +1298,7 @@ function createTuiChatInternal(
     showTransientNotice,
     isDisposed,
     adoptOwnedAgent,
+    assistantCwd: resolved.assistantCwd,
   })
 
   // Every live session shares one workbench and swaps only its transcript.
@@ -1560,7 +1552,7 @@ function createTuiChatInternal(
     if (channel.hasCompactionCheckpoint()) rebuildTranscript(false)
     channel.applyToolsVisibility(toolsVisibility)
     // State-switch feedback: transient receipt, not transcript history.
-    showTransientNotice(toolsVisibility === 'hidden' ? 'Tool cards hidden.' : `Tool and context cards ${toolsVisibility}.`)
+    showTransientNotice(`Tool and context cards ${toolsVisibility}.`)
   }
 
   const questions = createQuestionQueue({
@@ -2011,10 +2003,7 @@ function createTuiChatInternal(
   }).catch(() => {})
 
   const toggleTools = (): void => {
-    // The cycle order puts the two common reading modes adjacent: preview ->
-    // full detail -> conversation-only, then back to the preview default.
-    setToolsVisibility(toolsVisibility === 'collapsed' ? 'expanded'
-      : toolsVisibility === 'expanded' ? 'hidden' : 'collapsed')
+    setToolsVisibility(toolsVisibility === 'collapsed' ? 'expanded' : 'collapsed')
   }
 
   const setReasoning = (show: boolean): void => {
@@ -2127,7 +2116,7 @@ function createTuiChatInternal(
     let visibility: ToolCardVisibility | undefined
     let reasoning: boolean | undefined
     for (let token = tokens.shift(); token !== undefined; token = tokens.shift()) {
-      if (token === 'collapsed' || token === 'expanded' || token === 'hidden') {
+      if (token === 'collapsed' || token === 'expanded') {
         visibility = token
       } else if (token === 'reasoning') {
         const value = tokens[0]
@@ -2138,7 +2127,7 @@ function createTuiChatInternal(
           reasoning = !showReasoning
         }
       } else {
-        return { kind: 'error', text: `Unknown /details argument "${token}". Usage: /details [collapsed|expanded|hidden] [reasoning [on|off]]` }
+        return { kind: 'error', text: `Unknown /details argument "${token}". Usage: /details [collapsed|expanded] [reasoning [on|off]]` }
       }
     }
     // Reasoning first: its transcript rebuild would drop the visibility notice.
@@ -2360,7 +2349,7 @@ function createTuiChatInternal(
     commandCtx.commands.register({
       name: 'details',
       description: 'Select tool-card visibility and reasoning display',
-      input: { hint: '[collapsed|expanded|hidden] [reasoning [on|off]]' },
+      input: { hint: '[collapsed|expanded] [reasoning [on|off]]' },
       handler: ({ rawInput }) => runDetails(rawInput),
     })
     commandCtx.commands.register({

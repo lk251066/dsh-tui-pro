@@ -125,12 +125,6 @@ describe('CollapsedToolGroupComponent', () => {
     expect(group.render(80)[1]).toContain('▶')
   })
 
-  it('hidden renders nothing', () => {
-    const group = new CollapsedToolGroupComponent([card('read'), card('read'), card('read')], palette)
-    group.setVisibility('hidden')
-    expect(group.render(80)).toEqual([])
-  })
-
   it('serves repeat same-width renders from the cache and drops it on add()', () => {
     const group = new CollapsedToolGroupComponent([card('read'), card('read'), card('read')], palette)
     const first = group.render(80)
@@ -294,7 +288,7 @@ describe('transcript tool grouping', () => {
     await disposeTuiTestHarness(result)
   })
 
-  it('expanded lists the member cards and hidden drops the group', async () => {
+  it('cycles between the collapsed summary and expanded member cards', async () => {
     const result = await setup()
     appendAssistant(result.session, toolCallBlocks(['v1', 'v2', 'v3'], 'grep'))
     for (const id of ['v1', 'v2', 'v3']) appendToolCall(result.session, id, 'grep')
@@ -308,17 +302,15 @@ describe('transcript tool grouping', () => {
     expect(result.terminal.output).toContain('Tool and context cards expanded.')
     expect(result.terminal.output.split(`${TOOL_SETTLED()} grep`).length - 1).toBe(3)
 
-    // Ctrl+O → hidden: after a redraw the frame carries neither the summary
-    // row nor any member card.
+    // Ctrl+O → collapsed: the summary remains and member cards fold away.
     result.terminal.send('\x0f')
     await tick()
-    expect(result.terminal.output).toContain('Tool cards hidden.')
+    expect(result.terminal.output).toContain('Tool and context cards collapsed.')
     result.terminal.send('\x0c')
     await tick()
-    const hiddenFrame = result.terminal.output.slice(result.terminal.output.lastIndexOf('\x1b[2J'))
-    expect(hiddenFrame).not.toContain('Searched 3 patterns')
-    expect(hiddenFrame).not.toContain(TOOL_SETTLED())
-    expect(hiddenFrame).not.toContain('grep')
+    const collapsedFrame = result.terminal.output.slice(result.terminal.output.lastIndexOf('\x1b[2J'))
+    expect(collapsedFrame).toContain(`${TOOL_SETTLED()} Searched 3 patterns`)
+    expect(collapsedFrame).not.toContain(`${TOOL_SETTLED()} grep`)
     await disposeTuiTestHarness(result)
   })
 

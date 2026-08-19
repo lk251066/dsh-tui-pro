@@ -6,6 +6,8 @@
  */
 
 import z from 'schemastery'
+import { homedir } from 'node:os'
+import { join, resolve } from 'node:path'
 import {
   DEFAULT_FILE_SEARCH_EXCLUDED_DIRECTORIES,
   DEFAULT_FILE_SEARCH_MAX_ENTRIES,
@@ -22,9 +24,8 @@ export interface TuiThemeConfig {
   name?: string
   /**
    * Left-aligned template on the row above the editor. The default
-   * `${cwd}${git/worktree}${model}${context}${memory}` ends with the memory
-   * fragment, which renders ` mem on` while session memory is enabled and
-   * nothing otherwise.
+   * `${cwd}${git/worktree}${model}${context}${memory}${plan}${throughput}${queued}`
+   * keeps session state and live delivery feedback on one fixed row.
    */
   leftPrompt?: string
   /** Right-aligned template on the row above the editor. */
@@ -37,14 +38,14 @@ export interface TuiThemeConfig {
 
 /** Interaction and presentation settings for the pi-tui terminal mode. */
 export interface TuiConfig {
+  /** Permanent working directory assigned when the fixed assistant is first created. */
+  assistantCwd?: string
   /** Preferred width of the persistent workspace sidebar in terminal columns. */
   sidebarWidth?: number
   /** Expand settled model reasoning blocks (default folds them to one line). */
   showReasoning?: boolean
   /** Maximum tool-card body lines retained in its collapsed head/tail preview. */
   maxToolOutputLines?: number
-  /** Maximum rendered lines of a settled assistant reply before it folds behind a click-to-expand disclosure. */
-  maxMessageLines?: number
   /** Maximum added and removed lines explored while deriving an exact line diff. */
   maxDiffEditLength?: number
   /** Maximum options visible at once in a user-question panel. */
@@ -80,9 +81,9 @@ export interface TuiConfig {
 }
 
 const showReasoningSchema = z.boolean().default(false)
+const assistantCwdSchema = z.string().default(defaultAssistantCwd())
 const sidebarWidthSchema = z.number().step(1).min(24).default(32)
 const maxToolOutputLinesSchema = z.number().step(1).min(1).default(6)
-const maxMessageLinesSchema = z.number().step(1).min(1).default(30)
 const maxDiffEditLengthSchema = z.number().step(1).min(1).default(1000)
 const maxQuestionOptionsSchema = z.number().step(1).min(1).default(8)
 const maxModelOptionsSchema = z.number().step(1).min(1).default(8)
@@ -102,7 +103,7 @@ const colorSchema = z.boolean().default(true)
 const truecolorSchema = z.boolean()
 // No default: an unset theme name means the adaptive default (`deepseek`).
 const themeNameSchema = z.string()
-const DEFAULT_LEFT_PROMPT = '${cwd}${git/worktree}${model}${context}${memory}${plan}${throughput}'
+const DEFAULT_LEFT_PROMPT = '${cwd}${git/worktree}${model}${context}${memory}${plan}${throughput}${queued}'
 const DEFAULT_RIGHT_PROMPT = ''
 const DEFAULT_INPUT_PROMPT = '${indicator}'
 const DEFAULT_INPUT_PLACEHOLDER = 'Enter steer · Tab queue · Esc cancel'
@@ -118,10 +119,10 @@ const TuiThemeConfigSchema: z<TuiThemeConfig> = z.object({
 const titleSchema = z.string().default('DeepSeek Harness')
 
 const tuiConfigSchemaFields = {
+  assistantCwd: assistantCwdSchema,
   sidebarWidth: sidebarWidthSchema,
   showReasoning: showReasoningSchema,
   maxToolOutputLines: maxToolOutputLinesSchema,
-  maxMessageLines: maxMessageLinesSchema,
   maxDiffEditLength: maxDiffEditLengthSchema,
   maxQuestionOptions: maxQuestionOptionsSchema,
   maxModelOptions: maxModelOptionsSchema,
@@ -163,10 +164,10 @@ export const Config: z<Config> = z.object({
   welcome: z.string(),
   sessionId: z.string().default('main'),
   initialSkill: z.string(),
+  assistantCwd: tuiConfigSchemaFields.assistantCwd,
   sidebarWidth: tuiConfigSchemaFields.sidebarWidth,
   showReasoning: tuiConfigSchemaFields.showReasoning,
   maxToolOutputLines: tuiConfigSchemaFields.maxToolOutputLines,
-  maxMessageLines: tuiConfigSchemaFields.maxMessageLines,
   maxDiffEditLength: tuiConfigSchemaFields.maxDiffEditLength,
   maxQuestionOptions: tuiConfigSchemaFields.maxQuestionOptions,
   maxModelOptions: tuiConfigSchemaFields.maxModelOptions,
@@ -198,10 +199,10 @@ export interface ResolvedTuiThemeConfig {
 
 /** Fully defaulted TUI presentation settings. */
 export interface ResolvedTuiConfig {
+  assistantCwd: string
   sidebarWidth: number
   showReasoning: boolean
   maxToolOutputLines: number
-  maxMessageLines: number
   maxDiffEditLength: number
   maxQuestionOptions: number
   maxModelOptions: number
@@ -228,10 +229,10 @@ export interface ResolvedTuiConfig {
  */
 export function resolveTuiConfig(config: TuiConfig | undefined): ResolvedTuiConfig {
   return {
+    assistantCwd: resolve(config?.assistantCwd ?? defaultAssistantCwd()),
     sidebarWidth: config?.sidebarWidth ?? 32,
     showReasoning: config?.showReasoning ?? false,
     maxToolOutputLines: config?.maxToolOutputLines ?? 6,
-    maxMessageLines: config?.maxMessageLines ?? 30,
     maxDiffEditLength: config?.maxDiffEditLength ?? 1000,
     maxQuestionOptions: config?.maxQuestionOptions ?? 8,
     maxModelOptions: config?.maxModelOptions ?? 8,
@@ -257,4 +258,9 @@ export function resolveTuiConfig(config: TuiConfig | undefined): ResolvedTuiConf
     },
     title: config?.title ?? 'DeepSeek Harness',
   }
+}
+
+/** Default permanent workspace for a newly created fixed assistant. */
+export function defaultAssistantCwd(): string {
+  return join(process.env.DSH_HOME ?? join(homedir(), '.dsh'), 'assistant')
 }

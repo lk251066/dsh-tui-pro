@@ -27,11 +27,12 @@ The package declares its own `dsh.bundle.patch`; a separate bundle package is ne
 ## Runtime behavior
 
 - Only the transcript scrolls; the input, live status, plan, and sidebar remain fixed.
-- A durable Assistant remains outside project workspaces and manages active project sessions.
+- One durable Assistant remains outside project workspaces, uses a permanent working directory, and manages active project sessions.
 - Project sessions are grouped by workspace, retain their ordering, and resume from the launch directory.
 - Enter steers a running turn, Tab queues the next turn, Esc recovers queued input, and double Esc browses checkpoints.
 - Model, reasoning effort, image draft, input draft, and memory state remain independent per live session.
 - Thinking, tools, code, diffs, plans, todo progress, and subagents use structured renderers.
+- Final replies always render in full. Tool bodies have compact and expanded states; tool identity, status, and failures never disappear.
 - Model, effort, skill, theme, setting, permission, question, and approval selectors use the fixed bottom area.
 - Transcript selection copies plain text without ANSI styles; `Alt+V` attaches clipboard images.
 
@@ -41,7 +42,7 @@ Use `/sessions` for complete history and `/switch` for the compact active-sessio
 
 ## Input and media
 
-While the agent runs, Enter sends immediate steering and Tab queues the next turn. Empty Up recalls the latest submission. With an empty editor, Esc restores the latest queued message before a later Esc can cancel the turn.
+While the agent runs, Enter sends immediate steering and keeps a receipt visible until the current turn claims or discards it. Tab queues the next turn. Empty Up recalls the latest submission. With an empty editor, Esc restores the latest queued message before a later Esc can cancel the turn.
 
 Drag across transcript text to copy it. `Alt+V` reads a clipboard image into the current session draft. PNG, JPEG, WebP, and GIF are supported; Windows uses PowerShell, macOS requires `pngpaste`, and Linux uses `wl-paste` or `xclip`.
 
@@ -49,7 +50,7 @@ Drag across transcript text to copy it. `Alt+V` reads a clipboard image into the
 
 The TUI owns `/help`, `/model`, `/effort`, `/clear`, `/details`, `/theme`, `/rename`, `/fork`, `/status`, `/context`, `/agents`, `/jobs`, `/settings`, `/memory`, `/skill`, `/export`, `/sessions`, `/switch`, `/new`, `/assistant`, `/quit`, and `/exit`. The selected dsh composition may register additional commands.
 
-`/skill` opens a searchable bottom selector. `/memory on|off` persists memory state per session; the Assistant defaults on and project sessions default off.
+`/skill` opens a searchable bottom selector. `/memory on|off` persists memory state per session; the Assistant defaults on and project sessions default off. Enabled sessions share durable user facts through plugin-local save, search, correction, and deletion tools. The store has no fixed-count eviction; automatic recall remains bounded to keep model context finite.
 
 ## Configuration
 
@@ -58,12 +59,12 @@ The TUI owns `/help`, `/model`, `/effort`, `/clear`, `/details`, `/theme`, `/ren
   name: '@lk251066/dsh-tui'
   config:
     sidebarWidth: 32
+    assistantCwd: '/absolute/path/to/assistant'
     showReasoning: false
     maxToolOutputLines: 6
-    maxMessageLines: 30
 ```
 
-`sidebarWidth` accepts values of 24 or greater. The sidebar hides below 65 inner columns, and a height of at least 24 rows is recommended. `maxMessageLines` controls when settled assistant replies fold behind an expansion row.
+`assistantCwd` defaults to `$DSH_HOME/assistant`, or `~/.dsh/assistant` when `DSH_HOME` is unset. It is recorded when the fixed Assistant is created; a persisted Assistant resumes with its recorded directory. `sidebarWidth` accepts values of 24 or greater. The sidebar hides below 65 inner columns, and a height of at least 24 rows is recommended.
 
 The package also exports `@lk251066/dsh-tui/prompt`, `@lk251066/dsh-tui/invariant`, `@lk251066/dsh-tui/memory`, and `@lk251066/dsh-tui/workspace-agent-loop` for the bundled composition. Treat `cordis.patch.yml` as the supported entry path.
 

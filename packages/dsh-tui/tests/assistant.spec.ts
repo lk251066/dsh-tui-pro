@@ -8,6 +8,7 @@ import {
   disposeTuiTestHarness,
   type TuiHarness,
 } from './harness.ts'
+import { ASSISTANT_TOOL_PERMISSION_GUIDANCE } from '../src/chat/assistant.ts'
 
 /**
  * The `/assistant` flow through the production TUI: a fake agent factory
@@ -102,6 +103,8 @@ interface AssistantHarnessOptions {
   persistedIds?: string[]
   /** Rejection the fake resume throws; `'not found'` triggers the fallback. */
   resumeError?: string
+  /** Permanent directory configured for the fixed assistant. */
+  assistantCwd?: string
 }
 
 async function assistantHarness(options: AssistantHarnessOptions = {}): Promise<{
@@ -112,7 +115,9 @@ async function assistantHarness(options: AssistantHarnessOptions = {}): Promise<
   const calls: FactoryCall[] = []
   const created: CreatedAgentRecord[] = []
   const terminal = new RecordingTerminal()
+  const assistantCwd = options.assistantCwd ?? 'C:\\permanent-assistant'
   const harness = await createTuiTestHarness(terminal, vi.fn(), {
+    config: { assistantCwd },
     beforeMount(_session, ctx) {
       ctx.provide('sessionPersistence', {
         list: async () => (options.persistedIds ?? []).map(id => ({
@@ -190,12 +195,12 @@ describe('/assistant', () => {
         expect(harness.terminal.output).toContain('Assistant session created.')
       })
       expect(calls).toEqual([expect.objectContaining({ kind: 'create', sessionId: 'assistant' })])
-      expect(calls[0]?.meta).toBeUndefined()
-      // The fake agent deliberately carries an old cwd; fixed-assistant
-      // identity still removes project location from the shared footer.
+      expect(calls[0]?.meta).toEqual({ cwd: 'C:\\permanent-assistant' })
+      // The assistant owns a permanent directory without joining a project
+      // workspace group. The shared footer exposes that directory.
       expect(created[0]?.agent.session.header.cwd).toBe('/workspace')
-      expect(harness.ctx.tuiPrompt.get('cwd')).toBeUndefined()
-      expect(harness.ctx.tuiPrompt.get('git/worktree')).toBeUndefined()
+      expect(harness.ctx.tuiPrompt.get('cwd')).toBe('/workspace')
+      expect(ASSISTANT_TOOL_PERMISSION_GUIDANCE).toContain('omit sandbox_permissions during a normal call')
       // Input now routes to the assistant agent.
       submit(harness, '今天天气怎么样')
       await tick()
@@ -217,6 +222,20 @@ describe('/assistant', () => {
       submit(harness, '继续')
       await tick()
       expect(created[0]?.followups).toEqual(['继续'])
+    } finally {
+      await disposeTuiTestHarness(harness)
+    }
+  })
+
+  it('uses one configured assistant directory regardless of the launch session cwd', async () => {
+    const { harness, calls } = await assistantHarness({ assistantCwd: 'D:\\dsh-home\\assistant' })
+    try {
+      submit(harness, '/assistant')
+      await vi.waitFor(() => {
+        expect(harness.terminal.output).toContain('Assistant session created.')
+      })
+      expect(harness.session.header.cwd).toBe('/workspace')
+      expect(calls[0]?.meta).toEqual({ cwd: 'D:\\dsh-home\\assistant' })
     } finally {
       await disposeTuiTestHarness(harness)
     }

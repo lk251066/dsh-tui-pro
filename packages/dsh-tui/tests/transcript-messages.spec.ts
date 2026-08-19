@@ -63,7 +63,7 @@ describe('UserMessageComponent', () => {
 
 describe('StreamingAssistantComponent', () => {
   it('opens one row below the user message without a repeated role label', () => {
-    const step = new StreamingAssistantComponent({ turn: 1, step: 1 }, false, plain, plainMd, 30)
+    const step = new StreamingAssistantComponent({ turn: 1, step: 1 }, false, plain, plainMd)
     step.markStart(STAMP)
     step.settle([{ type: 'text', text: 'answer' }], STAMP + 2_000)
     const rows = step.render(40)
@@ -72,7 +72,7 @@ describe('StreamingAssistantComponent', () => {
   })
 
   it('renders shown reasoning as a quoted block with the ▎ bar', () => {
-    const step = new StreamingAssistantComponent({ turn: 1, step: 1 }, true, plain, plainMd, 30)
+    const step = new StreamingAssistantComponent({ turn: 1, step: 1 }, true, plain, plainMd)
     step.markStart(STAMP)
     step.settle([
       { type: 'reasoning', text: 'let me think\n\nsecond para' },
@@ -89,7 +89,7 @@ describe('StreamingAssistantComponent', () => {
   })
 
   it('quotes streamed reasoning on the live path too', () => {
-    const step = new StreamingAssistantComponent({ turn: 1, step: 1 }, false, plain, plainMd, 30)
+    const step = new StreamingAssistantComponent({ turn: 1, step: 1 }, false, plain, plainMd)
     step.markStart(STAMP)
     step.update({ type: 'block-start', index: 0, blockType: 'reasoning' })
     step.update({ type: 'reasoning-delta', index: 0, text: 'streamed thought' })
@@ -105,7 +105,6 @@ describe('StreamingAssistantComponent', () => {
       false,
       plain,
       plainMd,
-      30,
       () => now,
     )
     step.markStart(STAMP)
@@ -116,7 +115,7 @@ describe('StreamingAssistantComponent', () => {
   })
 
   it('stops live thinking duration when response text begins', () => {
-    const step = new StreamingAssistantComponent({ turn: 1, step: 1 }, false, plain, plainMd, 30)
+    const step = new StreamingAssistantComponent({ turn: 1, step: 1 }, false, plain, plainMd)
     step.update({ type: 'block-start', index: 0, blockType: 'reasoning' }, STAMP)
     step.update({ type: 'reasoning-delta', index: 0, text: 'thought' }, STAMP)
     step.update({ type: 'block-start', index: 1, blockType: 'text' }, STAMP + 1_250)
@@ -129,7 +128,7 @@ describe('StreamingAssistantComponent', () => {
   })
 
   it('keeps the folded reasoning summary bar-free', () => {
-    const step = new StreamingAssistantComponent({ turn: 1, step: 1 }, false, plain, plainMd, 30)
+    const step = new StreamingAssistantComponent({ turn: 1, step: 1 }, false, plain, plainMd)
     step.markStart(STAMP)
     step.settle([
       { type: 'reasoning', text: 'hidden thought' },
@@ -142,32 +141,29 @@ describe('StreamingAssistantComponent', () => {
   })
 })
 
-describe('StreamingAssistantComponent long-reply fold', () => {
+describe('StreamingAssistantComponent final replies', () => {
   const body = Array.from({ length: 8 }, (_, index) => `line ${index + 1}`).join('\n')
 
-  it('folds a settled reply past maxMessageLines to a head preview and a disclosure row', () => {
-    const step = new StreamingAssistantComponent({ turn: 1, step: 1 }, false, plain, plainMd, 3)
+  it('keeps every line of a long settled reply visible', () => {
+    const step = new StreamingAssistantComponent({ turn: 1, step: 1 }, false, plain, plainMd)
     step.markStart(STAMP)
     step.settle([{ type: 'text', text: body }], STAMP + 2_000)
     const rows = step.render(40).map(row => row.trimEnd())
-    expect(rows).toEqual(['', '✦ line 1', '  line 2', '  line 3', '  … +5 lines (click to expand)'])
+    expect(rows).toEqual(['', '✦ line 1', '  line 2', '  line 3', '  line 4', '  line 5', '  line 6', '  line 7', '  line 8'])
   })
 
-  it('expands the folded reply when its disclosure row is clicked', () => {
-    const step = new StreamingAssistantComponent({ turn: 1, step: 1 }, false, plain, plainMd, 3)
+  it('does not treat any final-reply row as a disclosure control', () => {
+    const step = new StreamingAssistantComponent({ turn: 1, step: 1 }, false, plain, plainMd)
     step.markStart(STAMP)
     step.settle([{ type: 'text', text: body }], STAMP + 2_000)
-    const hintRow = step.render(40).findIndex(row => row.includes('click to expand'))
-    expect(step.clickTranscriptRow(hintRow, 40)).toBe(true)
+    expect(step.clickTranscriptRow(3, 40)).toBe(false)
     const rows = step.render(40).map(row => row.trimEnd())
     expect(rows).toContain('  line 8')
     expect(rows.join('\n')).not.toContain('click to expand')
-    // A click anywhere else is not a disclosure.
-    expect(step.clickTranscriptRow(0, 40)).toBe(false)
   })
 
   it('never folds a streaming reply', () => {
-    const step = new StreamingAssistantComponent({ turn: 1, step: 1 }, false, plain, plainMd, 3)
+    const step = new StreamingAssistantComponent({ turn: 1, step: 1 }, false, plain, plainMd)
     step.update({ type: 'block-start', index: 0, blockType: 'text' })
     step.update({ type: 'text-delta', index: 0, text: body })
     const rows = step.render(40).map(row => row.trimEnd())
@@ -175,8 +171,8 @@ describe('StreamingAssistantComponent long-reply fold', () => {
     expect(rows.join('\n')).not.toContain('click to expand')
   })
 
-  it('keeps a reply within the budget unfolded', () => {
-    const step = new StreamingAssistantComponent({ turn: 1, step: 1 }, false, plain, plainMd, 30)
+  it('keeps a short reply visible without disclosure text', () => {
+    const step = new StreamingAssistantComponent({ turn: 1, step: 1 }, false, plain, plainMd)
     step.settle([{ type: 'text', text: 'short answer' }], STAMP + 2_000)
     expect(step.render(40).join('\n')).not.toContain('click to expand')
   })

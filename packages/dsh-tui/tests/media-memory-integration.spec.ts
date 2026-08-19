@@ -180,6 +180,32 @@ describe('TUI media and memory integration', () => {
     }
   })
 
+  it('does not turn compaction lifecycle events into durable memories', async () => {
+    const add = vi.fn()
+    const terminal = new HeadlessTerminal(140, 32)
+    const harness = await createTuiTestHarness(terminal, vi.fn(), {
+      configureContext: async (ctx) => {
+        await configureBase(ctx)
+        ctx.provide('memory', {
+          add,
+          isEnabled: () => true,
+          installTools: () => () => {},
+        } as never)
+      },
+    })
+    try {
+      await terminal.waitForFrame(0)
+      harness.session.append('compaction/start', { turn: null })
+      harness.session.append('compaction/end', { turn: null })
+      await terminal.waitForFrame(1)
+
+      expect(add).not.toHaveBeenCalled()
+    } finally {
+      await disposeTuiTestHarness(harness)
+      await terminal.dispose()
+    }
+  })
+
   it('deletes a whole image placeholder with one Backspace and submits without the image', async () => {
     vi.mocked(pasteClipboardImage).mockImplementationOnce(async (draft) =>
       draft.addStored(IMAGE_REF as never))

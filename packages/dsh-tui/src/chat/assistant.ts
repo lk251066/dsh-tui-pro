@@ -6,6 +6,7 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
+import { mkdir } from 'node:fs/promises'
 import type { Agent, AgentHandle } from '@deepseek-ai/dsh-agent'
 import { errorChain } from '@deepseek-ai/dsh-llm'
 import { SessionId } from '@deepseek-ai/dsh-session'
@@ -15,6 +16,13 @@ import { installAssistantTools, type AdoptOwnedAgent } from './assistant-tools.t
 import type { WorkspaceSessions } from './workspace-sessions.ts'
 
 const installedAssistantScopes = new WeakMap<Context, WeakSet<object>>()
+
+/** Tool-argument rule installed only in the fixed assistant's model context. */
+export const ASSISTANT_TOOL_PERMISSION_GUIDANCE = [
+  'For shell and filesystem tools, omit sandbox_permissions during a normal call.',
+  'Use it only to retry the exact operation after a sandbox denial, request the narrowest wider mode,',
+  'and include one sentence in justification explaining why that wider access is required.',
+].join(' ')
 
 /** The assistant's fixed session id — stable across processes by design. */
 export const ASSISTANT_SESSION_ID = SessionId('assistant')
@@ -29,13 +37,21 @@ export function setupAssistant(
   registry: ChannelRegistry<TuiSessionSlot>,
   workspaceSessions: WorkspaceSessions,
   adoptOwnedAgent: AdoptOwnedAgent,
+  assistantCwd: string,
 ): void {
   const registries = installedAssistantScopes.get(agentCtx) ?? new WeakSet<object>()
   if (registries.has(registry)) return
   registries.add(registry)
   installedAssistantScopes.set(agentCtx, registries)
+  agentCtx.inject(['systemPrompt'], (promptCtx: Context) => {
+    promptCtx.systemPrompt.section({
+      name: 'ui:assistant-tool-permissions',
+      order: 102,
+      text: ASSISTANT_TOOL_PERMISSION_GUIDANCE,
+    })
+  })
   agentCtx.inject(['tools'], (promptCtx: Context) => {
-    installAssistantTools(promptCtx, registry, workspaceSessions, adoptOwnedAgent)
+    installAssistantTools(promptCtx, registry, workspaceSessions, adoptOwnedAgent, assistantCwd)
   })
 }
 
@@ -48,6 +64,8 @@ export interface AssistantControllerDeps {
   readonly workspaceSessions: WorkspaceSessions
   /** Consume handles created or resumed by assistant workflows. */
   readonly adoptOwnedAgent: AdoptOwnedAgent
+  /** Permanent directory assigned to a newly created fixed assistant. */
+  readonly assistantCwd: string
   /** Durable transcript notice. */
   appendNotice(message: string, kind?: 'info' | 'warning' | 'error'): void
   /** Transient operation receipt. */
@@ -68,17 +86,18 @@ export function createAssistantController(deps: AssistantControllerDeps): { open
   const { ctx, registry } = deps
   let opening: Promise<boolean> | undefined
 
-  /** Whether a persisted assistant artifact exists (header-only listing). */
-  const persisted = async (): Promise<boolean> => {
+  /** Persisted assistant cwd when its artifact exists (header-only listing). */
+  const persisted = async (): Promise<{ cwd: string | undefined } | undefined> => {
     const persistence = ctx.get('sessionPersistence')
-    if (persistence === undefined) return false
+    if (persistence === undefined) return undefined
     try {
       const headers = await persistence.list()
-      return headers.some(header => header.id === ASSISTANT_SESSION_ID)
+      const header = headers.find(candidate => candidate.id === ASSISTANT_SESSION_ID)
+      return header === undefined ? undefined : { cwd: header.cwd }
     } catch {
       // An unreadable store falls back to the create path; a stale artifact
       // name-collision there reports as an error notice.
-      return false
+      return undefined
     }
   }
 
@@ -103,11 +122,13 @@ export function createAssistantController(deps: AssistantControllerDeps): { open
       adopt(live, 'Assistant session re-adopted.')
       return true
     }
-    if (await persisted()) {
+    const stored = await persisted()
+    if (stored !== undefined) {
+      const assistantCwd = stored.cwd ?? deps.assistantCwd
       try {
         const handle = await ctx.agents.resume({
           resumeSessionId: ASSISTANT_SESSION_ID,
-          setup: agentCtx => setupAssistant(agentCtx, registry, deps.workspaceSessions, deps.adoptOwnedAgent),
+          setup: agentCtx => setupAssistant(agentCtx, registry, deps.workspaceSessions, deps.adoptOwnedAgent, assistantCwd),
         })
         await adoptHandle(handle, 'Assistant session resumed.')
         return true
@@ -121,10 +142,12 @@ export function createAssistantController(deps: AssistantControllerDeps): { open
       }
     }
     try {
+      await mkdir(deps.assistantCwd, { recursive: true })
       const handle = await ctx.agents.create({
         sessionId: ASSISTANT_SESSION_ID,
         seed: [],
-        setup: agentCtx => setupAssistant(agentCtx, registry, deps.workspaceSessions, deps.adoptOwnedAgent),
+        meta: { cwd: deps.assistantCwd },
+        setup: agentCtx => setupAssistant(agentCtx, registry, deps.workspaceSessions, deps.adoptOwnedAgent, deps.assistantCwd),
       })
       await adoptHandle(handle, 'Assistant session created.')
       return true

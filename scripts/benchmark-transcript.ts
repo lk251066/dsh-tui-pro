@@ -15,7 +15,7 @@ function populatedTranscript(turns: number): TranscriptContainer {
   const transcript = new TranscriptContainer()
   for (let turn = 1; turn <= turns; turn += 1) {
     transcript.addChild(new UserMessageComponent(`Question ${String(turn)} about the current implementation.`, palette))
-    const answer = new StreamingAssistantComponent({ turn, step: 1 }, false, palette, mdTheme, 30)
+    const answer = new StreamingAssistantComponent({ turn, step: 1 }, false, palette, mdTheme)
     answer.settle([{ type: 'text', text: `Answer ${String(turn)} with **structured** details and one code reference.` }])
     transcript.addChild(answer)
   }
@@ -37,7 +37,7 @@ for (const turns of [100, 500, 1_000]) {
   console.log(`${String(turns).padStart(4)} turns  cold ${result.coldMs.toFixed(3)} ms  hot ${result.hotMs.toFixed(4)} ms/render`)
 }
 
-const streaming = new StreamingAssistantComponent({ turn: 1, step: 1 }, false, palette, mdTheme, 30)
+const streaming = new StreamingAssistantComponent({ turn: 1, step: 1 }, false, palette, mdTheme)
 streaming.update({ type: 'block-start', index: 0, blockType: 'text' })
 const burstStart = performance.now()
 for (let index = 0; index < 2_000; index += 1) {

@@ -14,7 +14,7 @@ The `1.8.0` source separates whole-TUI exit from project-session closing, gives 
 
 Established conversations have no persistent top header, reserved header spacing, or outer workbench frame. The new-session welcome remains visible only while the session is pristine. One horizontal inset column on each edge and one dim main/sidebar divider provide structure; the framed editor supplies the only lower boundary. Transcript scrolling, disclosure clicks, sidebar clicks, and drag selection use the expanded viewport coordinates.
 
-The sidebar gives the fixed assistant its own section above Active sessions. The assistant has no workspace field and does not contribute to the project-session count; project rows alone are grouped by workspace. The repeated current-Workspace section is removed. Creating the assistant omits `meta.cwd`, and assistant identity suppresses cwd, branch, welcome-directory, and status-directory output even when an older persisted assistant header still contains a directory.
+The sidebar gives the fixed assistant its own section above Active sessions. The assistant has no workspace field and does not contribute to the project-session count; project rows alone are grouped by workspace. The repeated current-Workspace section is removed. The fixed assistant has a permanent configured working directory independent of the launch directory. New assistant logs record it in `meta.cwd`; existing logs resume with their recorded directory.
 
 User messages remain full-width background bands with a directional `❯` marker; assistant replies remain bare Markdown with a four-point `✦` marker. Thinking uses the lighter `✻`; tool calls use their state glyph and result bodies start at an indented `⎿`. User, assistant, thinking, and running-tool markers each use a restrained semantic theme role, while settled tools retain success or error colors and body text keeps the terminal foreground. Every continuation hangs under the same body column, so the left gutter stays stable across wrapped messages and narrow terminals without separate `You` and `Assistant` rows.
 
@@ -46,7 +46,7 @@ The full-screen workbench renders a workspace-grouped Active-session list and a 
 
 Enter steers a running turn, Tab queues the next turn, and empty Up recalls the latest submission. With an empty editor, Esc restores the newest queued message before a later Esc can cancel the turn. `/queue` is not registered; the dock remains a read-only queue preview.
 
-`Alt+V` stores one clipboard image in the active session's draft and inserts an `[Image #N]` placeholder. Sending requires a model whose resolved metadata includes image input. Unsupported or unknown model metadata leaves the draft intact. `/memory on|off` persists memory enablement for the current session; the assistant defaults on and project sessions default off. Enabled sessions receive the shared `memory_save` and `memory_search` tools and recalled-memory prompt section.
+`Alt+V` stores one clipboard image in the active session's draft and inserts an `[Image #N]` placeholder. Sending requires a model whose resolved metadata includes image input. Unsupported or unknown model metadata leaves the draft intact. `/memory on|off` persists memory enablement for the current session; the assistant defaults on and project sessions default off. Enabled sessions receive shared save, search, correction, and deletion memory tools plus a bounded recalled-memory prompt section. Stored records have no fixed-count eviction.
 
 ## Version 1.6.3 active-session removal
 

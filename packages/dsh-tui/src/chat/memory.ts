@@ -12,8 +12,6 @@ import { defineTool, type GenericCallView } from '@deepseek-ai/dsh-tools'
 import s from 'schemastery'
 import { z } from 'zod'
 
-/** Maximum number of durable memories retained in the shared store. */
-export const DEFAULT_MAX_MEMORIES = 200
 /** Maximum Unicode code points accepted in one memory. */
 export const DEFAULT_MAX_TEXT_CHARS = 2_000
 /** Maximum Unicode code points included in the automatic recall section. */
@@ -23,8 +21,8 @@ export const DEFAULT_SEARCH_LIMIT = 20
 
 const MEMORY_TOOL_GUIDANCE = [
   'You have long-term memory tools. Before answering questions about the user, call memory_search.',
-  'When the user states a durable fact or preference, call memory_save once. One memory is one short,',
-  'self-contained fact; do not save a fact already present in recalled memories.',
+  'When the user states a durable fact or preference, search before saving it. One memory is one short,',
+  'self-contained fact. Update a stale memory and delete a false one instead of adding contradictions.',
 ].join(' ')
 
 /** Opaque identity of one durable memory. */
@@ -53,7 +51,6 @@ interface SessionSettingRow {
 
 /** Deployment-varying memory limits. */
 export interface MemoryConfig {
-  readonly maxMemories?: number
   readonly maxTextChars?: number
   readonly recallMaxChars?: number
 }
@@ -115,19 +112,27 @@ interface SearchArgs {
   readonly limit?: number
 }
 
+interface UpdateArgs {
+  readonly id: string
+  readonly text?: string
+  readonly tags?: readonly string[]
+}
+
+interface DeleteArgs {
+  readonly id: string
+}
+
 /** Durable shared memory with agent-scoped tool installation. */
 export class TuiMemoryService extends Service {
   static inject = ['storageDomain']
 
   static Config: s<MemoryConfig> = s.object({
-    maxMemories: s.number().step(1).min(1).default(DEFAULT_MAX_MEMORIES),
     maxTextChars: s.number().step(1).min(1).default(DEFAULT_MAX_TEXT_CHARS),
     recallMaxChars: s.number().step(1).min(1).default(DEFAULT_RECALL_MAX_CHARS),
   })
 
   private memories: KvTable<MemoryId, MemoryRow> | undefined
   private sessionSettings: KvTable<SessionId, SessionSettingRow> | undefined
-  private readonly maxMemories: number
   private readonly maxTextChars: number
   private readonly recallMaxChars: number
 
@@ -137,7 +142,6 @@ export class TuiMemoryService extends Service {
    */
   constructor(ctx: Context, config: MemoryConfig = {}) {
     super(ctx, 'memory')
-    this.maxMemories = positiveInteger(config.maxMemories ?? DEFAULT_MAX_MEMORIES, 'maxMemories')
     this.maxTextChars = positiveInteger(config.maxTextChars ?? DEFAULT_MAX_TEXT_CHARS, 'maxTextChars')
     this.recallMaxChars = positiveInteger(config.recallMaxChars ?? DEFAULT_RECALL_MAX_CHARS, 'recallMaxChars')
   }
@@ -158,13 +162,16 @@ export class TuiMemoryService extends Service {
   }
 
   /**
-   * Save one shared durable memory and evict the oldest records above the limit.
+   * Save one shared durable memory, returning the existing record for exact
+   * duplicate text.
    * @param text - One self-contained fact or preference.
    * @param tags - Optional lookup tags.
    * @returns The stored immutable record.
    */
   async add(text: string, tags?: readonly string[]): Promise<MemoryRecord> {
     const normalizedText = this.validateText(text)
+    const duplicate = this.list().find(record => record.text === normalizedText)
+    if (duplicate !== undefined) return duplicate
     const now = Date.now()
     const id = randomUUID() as MemoryId
     const row: MemoryRow = {
@@ -174,8 +181,38 @@ export class TuiMemoryService extends Service {
       updatedAt: now,
     }
     await this.requireMemories().put(id, row)
-    await this.evictToLimit()
     return snapshot(id, row)
+  }
+
+  /**
+   * Replace one memory's text and/or tags.
+   * @param id - Stable memory identity.
+   * @param patch - Material fields to replace.
+   * @returns The updated record, or `undefined` when the id is unknown.
+   */
+  async update(id: MemoryId, patch: { text?: string; tags?: readonly string[] }): Promise<MemoryRecord | undefined> {
+    const table = this.requireMemories()
+    const current = table.get(id)
+    if (current === undefined) return undefined
+    if (patch.text === undefined && patch.tags === undefined) {
+      throw new Error('memory update must provide text or tags')
+    }
+    const text = patch.text === undefined ? current.text : this.validateText(patch.text)
+    const duplicate = this.list().find(record => record.id !== id && record.text === text)
+    if (duplicate !== undefined) throw new Error(`memory text already exists as ${String(duplicate.id)}`)
+    const row: MemoryRow = {
+      ...current,
+      text,
+      tags: patch.tags === undefined ? current.tags : normalizeTags(patch.tags),
+      updatedAt: Math.max(Date.now(), current.updatedAt + 1),
+    }
+    await table.put(id, row)
+    return snapshot(id, row)
+  }
+
+  /** Remove one durable memory by identity. */
+  async remove(id: MemoryId): Promise<boolean> {
+    return this.requireMemories().delete(id)
   }
 
   /**
@@ -330,7 +367,7 @@ export class TuiMemoryService extends Service {
           const input = parseSearchArgs(args)
           const query = input.query.trim()
           if (query === '') throw new Error('memory_search: query must contain a non-whitespace character')
-          const all = this.search(query, this.maxMemories)
+          const all = this.search(query, Number.MAX_SAFE_INTEGER)
           const resultLimit = positiveInteger(input.limit ?? DEFAULT_SEARCH_LIMIT, 'search limit')
           const results = all.slice(0, resultLimit)
           return {
@@ -344,6 +381,70 @@ export class TuiMemoryService extends Service {
           }
         },
       })),
+      agentCtx.tools.register(defineTool({
+        name: 'memory_update',
+        description: 'Correct an existing long-term memory after finding it with memory_search.',
+        parameters: {
+          id: { type: 'string', required: true, description: 'Memory id returned by memory_search.' },
+          text: { type: 'string', description: 'Corrected self-contained fact or preference.' },
+          tags: { type: 'array', items: { type: 'string' }, description: 'Replacement topic tags.' },
+        },
+        output: {
+          schema: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              id: { type: 'string', required: true },
+              text: { type: 'string', required: true },
+              tags: { type: 'array', items: { type: 'string' }, required: true },
+            },
+          },
+          render: (_args, value) => [{ type: 'text', text: `Updated memory: ${value.text}` }],
+        },
+        presentCall: (args): GenericCallView => ({
+          card: 'generic',
+          title: `Update memory: ${parseUpdateArgs(args).id}`,
+        }),
+        isConcurrencySafe: () => false,
+        execute: async (args) => {
+          const input = parseUpdateArgs(args)
+          const record = await this.update(input.id as MemoryId, {
+            ...input.text === undefined ? {} : { text: input.text },
+            ...input.tags === undefined ? {} : { tags: input.tags },
+          })
+          if (record === undefined) throw new Error(`memory_update: unknown memory id "${input.id}"`)
+          return { id: String(record.id), text: record.text, tags: [...record.tags] }
+        },
+      })),
+      agentCtx.tools.register(defineTool({
+        name: 'memory_delete',
+        description: 'Delete one false or obsolete long-term memory after finding it with memory_search.',
+        parameters: {
+          id: { type: 'string', required: true, description: 'Memory id returned by memory_search.' },
+        },
+        output: {
+          schema: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              id: { type: 'string', required: true },
+              removed: { type: 'boolean', required: true },
+            },
+          },
+          render: (_args, value) => [{ type: 'text', text: `Deleted memory ${value.id}.` }],
+        },
+        presentCall: (args): GenericCallView => ({
+          card: 'generic',
+          title: `Delete memory: ${parseDeleteArgs(args).id}`,
+        }),
+        isConcurrencySafe: () => false,
+        execute: async (args) => {
+          const input = parseDeleteArgs(args)
+          const removed = await this.remove(input.id as MemoryId)
+          if (!removed) throw new Error(`memory_delete: unknown memory id "${input.id}"`)
+          return { id: input.id, removed }
+        },
+      })),
     ], 'memory.agentScope')
   }
 
@@ -355,12 +456,6 @@ export class TuiMemoryService extends Service {
       throw new Error(`memory text is ${String(length)} characters; the limit is ${String(this.maxTextChars)}`)
     }
     return trimmed
-  }
-
-  private async evictToLimit(): Promise<void> {
-    const table = this.requireMemories()
-    const excess = Math.max(0, table.size - this.maxMemories)
-    for (const record of this.list().slice(0, excess)) await table.delete(record.id)
   }
 
   private requireMemories(): KvTable<MemoryId, MemoryRow> {
@@ -417,6 +512,19 @@ function parseSearchArgs(args: unknown): SearchArgs {
     query: String(value.query),
     ...value.limit === undefined ? {} : { limit: value.limit },
   }
+}
+
+function parseUpdateArgs(args: unknown): UpdateArgs {
+  const value = args as UpdateArgs
+  return {
+    id: String(value.id),
+    ...value.text === undefined ? {} : { text: String(value.text) },
+    ...value.tags === undefined ? {} : { tags: value.tags },
+  }
+}
+
+function parseDeleteArgs(args: unknown): DeleteArgs {
+  return { id: String((args as DeleteArgs).id) }
 }
 
 export default TuiMemoryService

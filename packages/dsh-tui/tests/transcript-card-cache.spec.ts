@@ -46,16 +46,13 @@ describe('transcript card render caches', () => {
     expect(settled.join('\n')).toContain(TOOL_SETTLED())
     expect(settled.join('\n')).toContain('⎿ output line')
 
-    card.setVisibility('hidden')
-    expect(card.render(80)).toEqual([])
-
-    card.setVisibility('collapsed')
-    const restored = card.render(80)
-    expect(restored).toEqual(settled)
-    expect(restored).not.toBe(settled)
+    card.setVisibility('expanded')
+    const expanded = card.render(80)
+    expect(expanded).toEqual(settled)
+    expect(expanded).not.toBe(settled)
 
     card.invalidate()
-    expect(card.render(80)).not.toBe(restored)
+    expect(card.render(80)).not.toBe(expanded)
   })
 
   it('context card: caches by width and drops on setExpanded and invalidate()', () => {

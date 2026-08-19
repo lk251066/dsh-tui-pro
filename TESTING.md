@@ -4,22 +4,22 @@
 
 ## 1.8.1 source verification
 
-The `1.8.1` checks cover the borderless fixed workbench, expanded transcript viewport, one-column outer whitespace, and dim separator between the transcript and sidebar. The fixed assistant occupies its own sidebar section, has no workspace or cwd, and is excluded from the Active project-session count; only project rows are grouped by workspace. Transcript content uses one symbol gutter for user `❯`, assistant `✦`, thinking `✻`, tool, and nested-result rows with hanging indentation at narrow widths. User, assistant, thinking, and running-tool markers have independent theme roles, while settled tool states keep their success and error colors. Plan and delegate calls use their structured presentation kinds, todo progress has a compact current-step row with `Ctrl+O` expansion, and scrolling, disclosure clicks, drag selection, terminal titles, sidebar titles, main-area diagnostics, the prefix-free editor prompt, compact message spacing, and current-step `token/s` remain covered.
+The `1.8.1` checks cover the borderless fixed workbench, expanded transcript viewport, one-column outer whitespace, and dim separator between the transcript and sidebar. The fixed assistant occupies its own sidebar section, has no project workspace membership, uses one permanent working directory, and is excluded from the Active project-session count; only project rows are grouped by workspace. Transcript content uses one symbol gutter for user `❯`, assistant `✦`, thinking `✻`, tool, and nested-result rows with hanging indentation at narrow widths. Final replies render in full. Tool identity, state, and failures remain visible while `Ctrl+O` switches body previews between compact and expanded. Plan and delegate calls use their structured presentation kinds, and scrolling, drag selection, current-turn steering receipts, terminal titles, sidebar titles, main-area diagnostics, the prefix-free editor prompt, compact message spacing, and current-step `token/s` remain covered.
 
 | Check | Result |
 | --- | --- |
-| Complete source tests | Passed: 48 files, 604 tests |
+| Complete source tests | Passed: 48 files, 610 tests |
 | Focused transcript and workbench layout | Passed: 45 tests, including gutter wrapping, Plan and Delegate cards, compact todo progress, borderless viewport rows, and updated pointer coordinates |
 | Focused semantic gutter and theme roles | Passed: 47 tests covering the `❯`, `✦`, and `✻` markers, hanging indentation, independent role colors, and running/settled tool tones |
 | `pnpm run typecheck` | Passed |
-| `pnpm run lint` | Passed with 34 existing warnings and no errors |
+| `pnpm run lint` | Passed with 33 existing warnings and no errors |
 | `pnpm run build` | Passed |
-| `pnpm run bench:transcript` | Passed: hot cached render 0.0001-0.0004 ms for 100-1,000 turns; 2,000 streamed chunks coalesced in 4.543 ms |
+| `pnpm run bench:transcript` | Passed: cold render 33.189 ms for 100 turns, 33.530 ms for 500 turns, and 44.032 ms for 1,000 turns; hot cached render 0.0002-0.0004 ms; 2,000 streamed chunks coalesced in 4.331 ms |
 | `pnpm run docs:screenshot` | Passed: deterministic 1,448x720 PNG, SHA-256 `6f2e7a15b8d7946fc49010e9c6a7ee367f03237c9610e9885007e7808756a055`; deterministic four-frame GIF, SHA-256 `f4c9818046a3ec8da0a35061bcf75e555b063a839b00ccc946162b21c796cc83` |
-| `pnpm run pack:artifact` | Passed: 333 files, 937.0 kB, SHA-1 `1c2e8964a66a0edd9cb1514b8b59ffd3a98de342`, SHA-256 `177da1eedbdaf52c0e8f2fb8ce7e7852187c15cc75fb33ef986f049560d2ea92` |
+| `pnpm run pack:artifact` | Passed: 333 files, 937.5 kB, SHA-1 `863d8063f1ad083ec0f84ab0e736ece7f2ae6b15`, SHA-256 `932a74c40d88bbfe6b022f1cf6993b2d448fcf985ae839c9764a2d3077818375` |
 | Windows empty-profile public-host installation | Passed against public dsh rc.6; profile installation, `why`, `--dump-config`, and non-TTY module loading resolved the reviewed tarball |
-| Linux real PTY | Passed at 140x32 for the borderless fixed workbench, single sidebar separator, fixed editor, commands, session switching, memory, image-paste failure, export, and shutdown |
-| Local `tui` profile | Reinstalled from the reviewed `1.8.1` tarball; installed JavaScript contains the semantic marker roles and new gutter glyphs alongside the expanded viewport, simplified working row, reduced user fill, footer hierarchy, prefix-free prompt, and live-rate module; `why` and `--dump-config` resolve the package |
+| Linux real PTY | Not completed in this round: the first WSL attempt reused Windows-created links, and the clean public-host npm installation did not finish within five minutes; no plugin behavior failure was observed |
+| Local `tui` profile | Reinstalled from the reviewed `1.8.1` tarball; `why` resolves one installed package and `--dump-config` resolves the permanent Assistant directory, plugin-local memory, workspace agent loop, and TUI plugin |
 
 ## 1.8.0 source verification
 
@@ -270,7 +270,7 @@ Exercise these behaviors through the installed profile:
 
 1. Initial render reaches an editable prompt without an exception.
 2. Assistant appears in its own fixed section; Active sessions counts only project sessions and groups those rows by workspace without a `personal` pseudo-workspace.
-3. A project bottom line shows cwd, branch, model, and context. The fixed assistant omits cwd and branch. Sidebar Status shows agent state, input/output tokens, cache hit rate, permission preset, and plan mode before and after a model turn.
+3. A project bottom line shows cwd, branch, model, and context. The fixed assistant shows its permanent directory but remains outside project workspace grouping. Sidebar Status shows agent state, input/output tokens, cache hit rate, permission preset, and plan mode before and after a model turn.
 4. A second session created with `/new` appears under Active and switches without duplicate UI children; detached title and running-state changes update without first switching to that session.
 5. `/sessions` replaces only the left chat area with complete history; the outer whitespace, separator, and sidebar stay fixed, and search, Up, Down, Enter, Tab, Space, and Escape perform their documented actions without sending text to the model.
 6. The queue dock changes through insert, claim, discard, Esc recovery, and unrelated durable transcript updates without a duplicate Queue row in the sidebar.
@@ -298,7 +298,7 @@ Exercise these behaviors through the installed profile:
 28. User message bands and bare assistant Markdown remain visually distinct without `You` or `Assistant` heading rows; the editor has a fixed preceding rule, and clicking thinking, tool, grouped-tool, diff, or context disclosure headers toggles only that block.
 29. `/context`, `/agents`, `/jobs`, and `/settings` cover the chat main area while the fixed separator and sidebar remain visible.
 30. A new untitled session shows the welcome view; after its first user message or title, the welcome view disappears without leaving a persistent top header or moving the transcript or sidebar.
-31. `/memory` reports the current session setting; `/memory on|off` persists it, installs or disposes memory tools and prompt sections, and keeps stored memories. The assistant defaults on and project sessions default off.
+31. `/memory` reports the current session setting; `/memory on|off` persists it, installs or disposes memory tools and prompt sections, and keeps stored memories. The assistant defaults on and project sessions default off. More than 200 records survive restart without eviction; exact duplicate saves are idempotent; correction preserves creation time; deletion is durable; compaction does not silently add memory records.
 32. `/queue` is absent from command help and autocomplete; Tab, Up, and Esc provide the complete queue interaction.
 33. Fork, rewind, resume, assistant recovery, workspace-attachment failure, and UI-adoption failure leave no unowned agent handle or unintended Active membership. The assistant rejects fork and rewind.
 

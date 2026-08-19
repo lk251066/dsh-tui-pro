@@ -41,7 +41,7 @@ The package owns both the TUI plugin and its `cordis.patch.yml` profile layer. N
 
 ### One terminal, multiple projects
 
-The Assistant is a durable session outside every project workspace. Active project sessions stay grouped by workspace in the fixed sidebar, so long-running work remains available without repeatedly leaving and resuming sessions.
+The Assistant is one durable session outside every project workspace. It keeps a permanent working directory and continues the same conversation across launches; bounded context is renewed through dsh compaction while the durable log and plugin-local long-term memory remain available. Active project sessions stay grouped by workspace in the fixed sidebar.
 
 ### A stable full-screen canvas
 
@@ -64,6 +64,8 @@ Launching from a directory opens its first manually ordered active project sessi
 
 The Assistant can manage active project sessions and read their completed user/assistant dialogue. Hidden reasoning, tool traffic, and unfinished output are not exposed across sessions.
 
+Assistant replies always remain fully rendered; transcript scrolling handles long answers. Thinking and tool bodies can collapse, but a tool's identity, status, and failure remain visible. Memory is enabled for the Assistant by default and persists durable user facts without silently evicting older records; `/memory off` removes memory from that session's model context without deleting it.
+
 ## Interaction
 
 | Action | Control |
@@ -73,7 +75,7 @@ The Assistant can manage active project sessions and read their completed user/a
 | Recover the latest queued message | `Esc` before cancellation |
 | Recall the latest submission | Empty-input `Up` |
 | Browse current-conversation checkpoints | Double `Esc` |
-| Expand tool and context detail | `Ctrl+O` |
+| Toggle tool and context body detail | `Ctrl+O` |
 | Expand settled reasoning | `Ctrl+R` |
 | Select and copy transcript text | Drag with the left mouse button |
 | Attach a clipboard image | `Alt+V` |
@@ -94,9 +96,9 @@ The TUI requires an ANSI-capable terminal. The sidebar hides below 65 inner colu
   name: '@lk251066/dsh-tui'
   config:
     sidebarWidth: 32
+    assistantCwd: '/absolute/path/to/assistant'
     showReasoning: false
     maxToolOutputLines: 6
-    maxMessageLines: 30
 ```
 
 See the [package reference](packages/dsh-tui/README.md) for the supported entry path and exported composition plugins.
