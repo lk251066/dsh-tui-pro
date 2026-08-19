@@ -1,0 +1,61 @@
+name: Bug report
+description: Report a reproducible problem in dsh-tui-pro
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: Remove API keys, private paths, and session content before submitting.
+  - type: input
+    id: tui-version
+    attributes:
+      label: dsh-tui version
+      description: Run `dsh plugin --profile tui why @lk251066/dsh-tui`.
+      placeholder: 1.8.1
+    validations:
+      required: true
+  - type: input
+    id: dsh-version
+    attributes:
+      label: dsh version
+      placeholder: 0.1.0-rc.6
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: Operating system, terminal, Node.js version, and whether tmux or WSL is involved.
+      placeholder: Windows 11, Windows Terminal, Node.js 24
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps
+      description: Provide the smallest sequence that reproduces the problem.
+      placeholder: |
+        1. Start `dsh --profile tui` in ...
+        2. Run ...
+        3. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: Include the exact visible error or an anonymized screenshot when useful.
+    validations:
+      required: true
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional context
+      description: Add relevant configuration or logs after removing secrets and private data.

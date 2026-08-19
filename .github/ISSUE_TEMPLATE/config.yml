@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: DeepSeek Harness support
+    url: https://github.com/deepseek-ai/deepseek-harness/discussions
+    about: Ask about the dsh host, providers, credentials, and non-TUI plugins.

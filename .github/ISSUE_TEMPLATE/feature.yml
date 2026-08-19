@@ -1,0 +1,30 @@
+name: Feature request
+description: Propose an improvement to the terminal workbench
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: Describe the workflow that is difficult today, not only the desired control.
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Desired outcome
+      description: Explain what a successful interaction would let you accomplish.
+    validations:
+      required: true
+  - type: textarea
+    id: current
+    attributes:
+      label: Current workaround
+      description: Describe how you handle this workflow today, if applicable.
+  - type: textarea
+    id: references
+    attributes:
+      label: References
+      description: Add screenshots or examples from other terminal tools when they clarify the interaction.

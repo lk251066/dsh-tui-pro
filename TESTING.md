@@ -15,8 +15,8 @@ The `1.8.1` checks cover the borderless fixed workbench, expanded transcript vie
 | `pnpm run lint` | Passed with 34 existing warnings and no errors |
 | `pnpm run build` | Passed |
 | `pnpm run bench:transcript` | Passed: hot cached render 0.0001-0.0004 ms for 100-1,000 turns; 2,000 streamed chunks coalesced in 4.543 ms |
-| `pnpm run docs:screenshot` | Passed: deterministic 1,448x720 PNG, SHA-256 `6f2e7a15b8d7946fc49010e9c6a7ee367f03237c9610e9885007e7808756a055` |
-| `pnpm run pack:artifact` | Passed: 332 files, 805.8 kB, SHA-1 `fd05e5b7d9a8f8edd40cde0a4e223af08f376c11`, SHA-256 `40c5e630f9fbf0a6e5d6cdb7b557b60fe12c198ccb1631800eb57577f1a7c75b` |
+| `pnpm run docs:screenshot` | Passed: deterministic 1,448x720 PNG, SHA-256 `6f2e7a15b8d7946fc49010e9c6a7ee367f03237c9610e9885007e7808756a055`; deterministic four-frame GIF, SHA-256 `f4c9818046a3ec8da0a35061bcf75e555b063a839b00ccc946162b21c796cc83` |
+| `pnpm run pack:artifact` | Passed: 333 files, 937.0 kB, SHA-1 `1c2e8964a66a0edd9cb1514b8b59ffd3a98de342`, SHA-256 `177da1eedbdaf52c0e8f2fb8ce7e7852187c15cc75fb33ef986f049560d2ea92` |
 | Windows empty-profile public-host installation | Passed against public dsh rc.6; profile installation, `why`, `--dump-config`, and non-TTY module loading resolved the reviewed tarball |
 | Linux real PTY | Passed at 140x32 for the borderless fixed workbench, single sidebar separator, fixed editor, commands, session switching, memory, image-paste failure, export, and shutdown |
 | Local `tui` profile | Reinstalled from the reviewed `1.8.1` tarball; installed JavaScript contains the semantic marker roles and new gutter glyphs alongside the expanded viewport, simplified working row, reduced user fill, footer hierarchy, prefix-free prompt, and live-rate module; `why` and `--dump-config` resolve the package |

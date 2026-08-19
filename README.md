@@ -2,73 +2,92 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-A community-maintained, full-screen terminal interface for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness). It keeps the conversation, input, project sessions, and agent state visible in one keyboard- and mouse-friendly workspace.
+**A multi-session terminal workbench for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness).** Keep a durable Assistant and the project sessions you actively maintain in one full-screen TUI.
 
-![dsh-tui-pro showing a project conversation, tool result, plan progress, and active sessions](packages/dsh-tui/assets/overview.png)
+[![npm version](https://img.shields.io/npm/v/@lk251066/dsh-tui?style=flat-square&color=3b82f6)](https://www.npmjs.com/package/@lk251066/dsh-tui)
+[![CI](https://img.shields.io/github/actions/workflow/status/lk251066/dsh-tui-pro/ci.yml?branch=master&style=flat-square&label=CI)](https://github.com/lk251066/dsh-tui-pro/actions/workflows/ci.yml)
+[![MIT License](https://img.shields.io/badge/license-MIT-22c55e?style=flat-square)](LICENSE)
+
+![dsh-tui-pro switching between persistent project sessions in one terminal workbench](packages/dsh-tui/assets/session-workbench.gif)
+
+[Install](#quick-start) · [Latest release](https://github.com/lk251066/dsh-tui-pro/releases/latest) · [dshfind](https://dshfind.com/zh/plugins/lk251066/dsh-tui-pro) · [Report an issue](https://github.com/lk251066/dsh-tui-pro/issues/new/choose)
 
 ## Quick start
 
-Install the plugin and its profile layer with one command:
+You need Node.js `^22.19.0 || >=24.0.0` and `DEEPSEEK_API_KEY` configured outside this repository.
+
+Already have the [`dsh` CLI](https://github.com/deepseek-ai/deepseek-harness)? Install the plugin and its profile layer once:
 
 ```bash
 dsh plugin --profile tui add @lk251066/dsh-tui
 ```
 
-Then launch it from the project you want to work on:
+Then launch it from any project directory:
 
 ```bash
 dsh --profile tui
 ```
 
-The package owns both the TUI plugin and its `cordis.patch.yml` profile layer. No separate bundle package is required.
+Without a global dsh installation, use the same profile through `npx`:
 
-## Core experience
+```bash
+npx -y @deepseek-ai/dsh@latest plugin --profile tui add @lk251066/dsh-tui
+npx -y @deepseek-ai/dsh@latest --profile tui
+```
 
-| Area | Behavior |
-| --- | --- |
-| Conversation | Only the transcript scrolls; the input and right sidebar remain fixed. User messages, assistant Markdown, thinking, tools, diffs, plans, and subagents have distinct compact treatments. |
-| Sessions | The fixed Assistant is independent of project workspaces. Active project sessions are grouped by workspace and can be opened from the sidebar or `/sessions`. |
-| Input | Enter steers the running turn, Tab queues the next turn, empty Up recalls a submission, and Esc recovers the latest queued message before cancelling. |
-| Models | Model and reasoning effort are stored per live session. The status row shows model, context use, memory, plan mode, and the current step's rolling output rate. |
-| Files and images | `@` completes files. `Alt+V` attaches a clipboard image when the selected model advertises image input. |
-| Review | Tool cards, syntax-highlighted code, word-aware diffs, approvals, and collapsible details keep implementation work readable without filling the screen with chrome. |
+The package owns both the TUI plugin and its `cordis.patch.yml` profile layer. No second bundle package is required.
 
-## Session model
+## Why this TUI
 
-The Assistant is one durable session outside every workspace. It has no project directory and does not contribute to the `Active sessions` count. It can manage active project sessions and read their completed user/assistant dialogue without receiving hidden reasoning or tool traffic.
+### One terminal, multiple projects
 
-Launching from a directory opens its first manually ordered active project session. If the directory has none, dsh creates one and adds it to that workspace. Use `/new` for another session in the current project, `/new <path>` for another project, and `/assistant` to return to the fixed Assistant.
+The Assistant is a durable session outside every project workspace. Active project sessions stay grouped by workspace in the fixed sidebar, so long-running work remains available without repeatedly leaving and resuming sessions.
 
-`/quit` closes the current project session, preserves its history, and returns to the Assistant. `/exit` closes the whole TUI. Complete history remains available through `/sessions`.
+### A stable full-screen canvas
 
-## Everyday controls
+Only the transcript scrolls. The editor, current plan, live status, model, context usage, and active sessions remain in place while user messages, Markdown, thinking, tools, diffs, plans, todos, and subagents use distinct compact treatments.
+
+### Native DeepSeek Harness composition
+
+The package is an out-of-tree dsh plugin bundle, not a fork of the harness. Sessions, tools, skills, models, permissions, compaction, and subagents continue to use the services provided by the selected dsh profile.
+
+## Session workflow
+
+Launching from a directory opens its first manually ordered active project session. If the directory has none, dsh creates one and adds it to that workspace.
+
+- `/new` creates another session in the current project.
+- `/new <path>` creates a session for another project.
+- `/assistant` returns to the fixed Assistant.
+- `/switch`, `Alt+Left`, `Alt+Right`, or a sidebar click changes the active project session.
+- `/quit` closes the current project session, preserves its history, and returns to the Assistant.
+- `/sessions` browses complete history; `/exit` closes the TUI.
+
+The Assistant can manage active project sessions and read their completed user/assistant dialogue. Hidden reasoning, tool traffic, and unfinished output are not exposed across sessions.
+
+## Interaction
 
 | Action | Control |
 | --- | --- |
-| Browse complete history | `/sessions` |
-| Switch active project session | `/switch`, `Alt+Left`, `Alt+Right`, or click a sidebar row |
-| Close the selected project session | `/quit` or empty-input `Delete` |
-| Browse current-conversation checkpoints | Double Escape |
-| Toggle tool and context detail | `Ctrl+O` |
-| Toggle settled reasoning | `Ctrl+R` |
+| Send immediate steering | `Enter` while a turn is running |
+| Queue the next turn | `Tab` |
+| Recover the latest queued message | `Esc` before cancellation |
+| Recall the latest submission | Empty-input `Up` |
+| Browse current-conversation checkpoints | Double `Esc` |
+| Expand tool and context detail | `Ctrl+O` |
+| Expand settled reasoning | `Ctrl+R` |
 | Select and copy transcript text | Drag with the left mouse button |
 | Attach a clipboard image | `Alt+V` |
 | Control session memory | `/memory`, `/memory on`, `/memory off` |
 
-Run `/help` inside the TUI for the complete command list. Selectors for models, effort, skills, themes, permissions, settings, and approvals use the fixed bottom area rather than popup windows.
+Run `/help` for the complete command list. Models, reasoning effort, skills, themes, settings, permissions, questions, and approvals use the fixed bottom area instead of centered popup windows.
 
-## Requirements
+## Images and terminals
 
-- Node.js `^22.19.0 || >=24.0.0`
-- DeepSeek Harness `@deepseek-ai/dsh@0.1.0-rc.6`
-- A terminal with ANSI escape-sequence support
-- `DEEPSEEK_API_KEY` configured outside this repository
+`@` completes workspace files. `Alt+V` attaches a clipboard image when the selected model advertises image input. Windows uses PowerShell to read clipboard images, macOS requires `pngpaste`, and Linux requires `wl-paste` or `xclip`.
 
-Clipboard image capture uses PowerShell on Windows, `pngpaste` on macOS, and `wl-paste` or `xclip` on Linux.
+The TUI requires an ANSI-capable terminal. The sidebar hides below 65 inner columns, and a terminal height of at least 24 rows is recommended.
 
 ## Configuration
-
-The bundled profile starts with these TUI defaults:
 
 ```yaml
 - id: tui
@@ -80,24 +99,22 @@ The bundled profile starts with these TUI defaults:
     maxMessageLines: 30
 ```
 
-The sidebar hides below 65 inner columns. A terminal height of at least 24 rows is recommended.
+See the [package reference](packages/dsh-tui/README.md) for the supported entry path and exported composition plugins.
 
-## Project status
+## Project links
 
-[`1.8.0`](https://www.npmjs.com/package/@lk251066/dsh-tui/v/1.8.0) is the current public release. The current source targets `1.8.1`; its source, packed-artifact, clean-profile, and real-PTY evidence is recorded in [TESTING.md](TESTING.md).
-
-Do not use the old `v1.0.0` GitHub tag. It predates the repaired source and bundle metadata.
-
-## Development
-
-- [Package reference](packages/dsh-tui/README.md)
+- [npm package](https://www.npmjs.com/package/@lk251066/dsh-tui)
+- [GitHub releases](https://github.com/lk251066/dsh-tui-pro/releases)
+- [Community discussions](https://github.com/lk251066/dsh-tui-pro/discussions)
 - [Development setup](DEVELOPMENT.md)
 - [Verification guide](TESTING.md)
-- [Implementation record](REPAIR_PLAN.md)
 - [Change history](CHANGELOG.md)
+- [Contributing](CONTRIBUTING.md)
 
-On Windows, regenerate the anonymous README screenshot from the real TUI renderer with `pnpm run docs:screenshot`. The command uses an isolated in-memory demonstration and does not read a local dsh profile or API key.
+This plugin follows the developer-preview dsh release line. Each release is checked from source, from its packed npm artifact, through a clean public dsh profile, and through a real Linux PTY before publication.
+
+![Complete dsh-tui-pro workbench with structured tool output and plan progress](packages/dsh-tui/assets/overview.png)
 
 ## License
 
-MIT
+[MIT](LICENSE). Based on the original TUI implementation from [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness).

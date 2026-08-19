@@ -1,6 +1,6 @@
 {
   "name": "@lk251066/dsh-tui",
-  "description": "Interactive terminal UI plugin for DeepSeek Harness",
+  "description": "Multi-session terminal workbench plugin for DeepSeek Harness",
   "version": "1.8.1",
   "private": false,
   "type": "module",
@@ -36,6 +36,7 @@
     "lib/**/*.d.ts.map",
     "cordis.patch.yml",
     "assets/overview.png",
+    "assets/session-workbench.gif",
     "README.md",
     "LICENSE"
   ],
@@ -54,11 +55,18 @@
     "directory": "packages/dsh-tui"
   },
   "keywords": [
+    "ai-agent",
+    "cli",
+    "coding-agent",
     "deepseek",
+    "deepseek-harness",
+    "developer-tools",
+    "dsh",
+    "dsh-plugin",
     "harness",
-    "tui",
     "terminal",
-    "dsh-plugin"
+    "tui",
+    "typescript"
   ],
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
