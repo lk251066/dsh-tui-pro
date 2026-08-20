@@ -62,20 +62,20 @@ await rm(testRoot, { recursive: true, force: true })
 await mkdir(hostRoot, { recursive: true })
 await writeFile(join(hostRoot, 'package.json'), JSON.stringify({ name: 'dsh-public-host-smoke', private: true }, null, 2) + '\n')
 
-const npmArgs = [
-  'install',
-  '--no-audit',
-  '--no-fund',
+const installArgs = [
+  'add',
+  '--ignore-workspace',
   '--ignore-scripts',
-  '--loglevel=verbose',
-  '--package-lock=false',
+  '--save-exact',
+  '--config.auto-install-peers=true',
+  '--config.strict-peer-dependencies=false',
   '--registry=https://registry.npmjs.org',
   '@deepseek-ai/dsh@0.1.0-rc.6',
 ]
-const npmCommand = process.platform === 'win32' ? process.env.ComSpec ?? 'cmd.exe' : 'npm'
-const npmCommandArgs = process.platform === 'win32' ? ['/d', '/s', '/c', 'npm', ...npmArgs] : npmArgs
+const installCommand = process.platform === 'win32' ? process.env.ComSpec ?? 'cmd.exe' : 'pnpm'
+const installCommandArgs = process.platform === 'win32' ? ['/d', '/s', '/c', 'pnpm', ...installArgs] : installArgs
 console.log('Installing the public dsh host...')
-await runChecked(npmCommand, npmCommandArgs, { cwd: hostRoot, timeoutMs: 300_000 })
+await runChecked(installCommand, installCommandArgs, { cwd: hostRoot, timeoutMs: 300_000 })
 
 const dshBin = join(hostRoot, 'node_modules/@deepseek-ai/dsh/lib/bin.js')
 const dshEnv = { ...process.env, DSH_HOME: dshHome }

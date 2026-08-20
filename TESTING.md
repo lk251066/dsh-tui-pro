@@ -18,7 +18,7 @@ The `1.8.2` checks cover the permanent Assistant directory, plugin-local memory 
 | `pnpm run docs:screenshot` | Passed: deterministic 1,448x720 PNG, SHA-256 `6f2e7a15b8d7946fc49010e9c6a7ee367f03237c9610e9885007e7808756a055`; deterministic four-frame GIF, SHA-256 `f4c9818046a3ec8da0a35061bcf75e555b063a839b00ccc946162b21c796cc83` |
 | `pnpm run pack:artifact` | Passed: 333 files, 937.5 kB, SHA-1 `7acfe92ca3aebe659b971725156c984616ac6d64`, SHA-256 `99e81b5506123f708369628403a40e49cceb4bc23bfcdbc3b6a5f8fbf7f8304a` |
 | Packed-artifact audit | Passed for exports, bundle metadata, patched editor, runtime dependencies, documentation assets, and excluded source/tests |
-| Windows empty-profile public-host installation | Not completed locally: the isolated dependency installation produced no output for eight minutes and was terminated; the tagged release workflow repeats this check on Ubuntu before publication |
+| Windows empty-profile public-host installation | Passed against public dsh rc.6 using pnpm peer installation; profile installation, `why`, `--dump-config`, and non-TTY module loading resolved the reviewed tarball |
 | Linux real PTY | Not completed in this round: the first WSL attempt reused Windows-created links, and the clean public-host npm installation did not finish within five minutes; no plugin behavior failure was observed |
 | Local `tui` profile | Installed from the reviewed `1.8.2` tarball; `why` resolves exactly one installed package |
 
