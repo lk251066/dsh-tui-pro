@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { resolve } from 'node:path'
 import type { Terminal } from '@earendil-works/pi-tui'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { UserMessage } from '@deepseek-ai/dsh-llm'
@@ -115,7 +116,7 @@ async function assistantHarness(options: AssistantHarnessOptions = {}): Promise<
   const calls: FactoryCall[] = []
   const created: CreatedAgentRecord[] = []
   const terminal = new RecordingTerminal()
-  const assistantCwd = options.assistantCwd ?? 'C:\\permanent-assistant'
+  const assistantCwd = options.assistantCwd ?? resolve('permanent-assistant')
   const harness = await createTuiTestHarness(terminal, vi.fn(), {
     config: { assistantCwd },
     beforeMount(_session, ctx) {
@@ -195,7 +196,7 @@ describe('/assistant', () => {
         expect(harness.terminal.output).toContain('Assistant session created.')
       })
       expect(calls).toEqual([expect.objectContaining({ kind: 'create', sessionId: 'assistant' })])
-      expect(calls[0]?.meta).toEqual({ cwd: 'C:\\permanent-assistant' })
+      expect(calls[0]?.meta).toEqual({ cwd: resolve('permanent-assistant') })
       // The assistant owns a permanent directory without joining a project
       // workspace group. The shared footer exposes that directory.
       expect(created[0]?.agent.session.header.cwd).toBe('/workspace')
@@ -228,14 +229,15 @@ describe('/assistant', () => {
   })
 
   it('uses one configured assistant directory regardless of the launch session cwd', async () => {
-    const { harness, calls } = await assistantHarness({ assistantCwd: 'D:\\dsh-home\\assistant' })
+    const assistantCwd = resolve('dsh-home', 'assistant')
+    const { harness, calls } = await assistantHarness({ assistantCwd })
     try {
       submit(harness, '/assistant')
       await vi.waitFor(() => {
         expect(harness.terminal.output).toContain('Assistant session created.')
       })
       expect(harness.session.header.cwd).toBe('/workspace')
-      expect(calls[0]?.meta).toEqual({ cwd: 'D:\\dsh-home\\assistant' })
+      expect(calls[0]?.meta).toEqual({ cwd: assistantCwd })
     } finally {
       await disposeTuiTestHarness(harness)
     }

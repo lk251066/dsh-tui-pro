@@ -214,6 +214,7 @@ function provideWorkspaceRegistry(ctx: Context): void {
 
 describe('TUI config', () => {
   it('defaults every direct-call TUI option', () => {
+    const assistantCwd = resolve('assistant-home')
     expect(resolveTuiConfig(undefined)).toEqual({
       sidebarWidth: 32,
       assistantCwd: join(homedir(), '.dsh', 'assistant'),
@@ -246,7 +247,7 @@ describe('TUI config', () => {
     })
     expect(resolveTuiConfig({
       sidebarWidth: 36,
-      assistantCwd: 'D:\\assistant-home',
+      assistantCwd,
       showReasoning: false,
       maxToolOutputLines: 2,
       maxDiffEditLength: 12,
@@ -267,7 +268,7 @@ describe('TUI config', () => {
       title: 'DSH',
     })).toEqual({
       sidebarWidth: 36,
-      assistantCwd: 'D:\\assistant-home',
+      assistantCwd,
       showReasoning: false,
       maxToolOutputLines: 2,
       maxDiffEditLength: 12,
