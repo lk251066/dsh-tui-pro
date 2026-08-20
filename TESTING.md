@@ -2,9 +2,9 @@
 
 `@lk251066/dsh-tui` is a Cordis plugin and dsh profile bundle. Verification must cover the source tree, packed npm artifact, dsh profile composition, and interactive terminal behavior.
 
-## 1.8.1 source verification
+## 1.8.2 source verification
 
-The `1.8.1` checks cover the borderless fixed workbench, expanded transcript viewport, one-column outer whitespace, and dim separator between the transcript and sidebar. The fixed assistant occupies its own sidebar section, has no project workspace membership, uses one permanent working directory, and is excluded from the Active project-session count; only project rows are grouped by workspace. Transcript content uses one symbol gutter for user `❯`, assistant `✦`, thinking `✻`, tool, and nested-result rows with hanging indentation at narrow widths. Final replies render in full. Tool identity, state, and failures remain visible while `Ctrl+O` switches body previews between compact and expanded. Plan and delegate calls use their structured presentation kinds, and scrolling, drag selection, current-turn steering receipts, terminal titles, sidebar titles, main-area diagnostics, the prefix-free editor prompt, compact message spacing, and current-step `token/s` remain covered.
+The `1.8.2` checks cover the permanent Assistant directory, plugin-local memory correction and deletion, storage beyond 200 records, idempotent saves, bounded recall, compaction independence, complete final replies, two-state tool detail, visible tool failures, and current-turn steering receipts. The established borderless workbench, semantic transcript gutter, structured Plan and Delegate cards, scrolling, drag selection, fixed editor, sidebar, and current-step `token/s` remain covered.
 
 | Check | Result |
 | --- | --- |
@@ -16,10 +16,30 @@ The `1.8.1` checks cover the borderless fixed workbench, expanded transcript vie
 | `pnpm run build` | Passed |
 | `pnpm run bench:transcript` | Passed: cold render 33.189 ms for 100 turns, 33.530 ms for 500 turns, and 44.032 ms for 1,000 turns; hot cached render 0.0002-0.0004 ms; 2,000 streamed chunks coalesced in 4.331 ms |
 | `pnpm run docs:screenshot` | Passed: deterministic 1,448x720 PNG, SHA-256 `6f2e7a15b8d7946fc49010e9c6a7ee367f03237c9610e9885007e7808756a055`; deterministic four-frame GIF, SHA-256 `f4c9818046a3ec8da0a35061bcf75e555b063a839b00ccc946162b21c796cc83` |
-| `pnpm run pack:artifact` | Passed: 333 files, 937.5 kB, SHA-1 `863d8063f1ad083ec0f84ab0e736ece7f2ae6b15`, SHA-256 `932a74c40d88bbfe6b022f1cf6993b2d448fcf985ae839c9764a2d3077818375` |
-| Windows empty-profile public-host installation | Passed against public dsh rc.6; profile installation, `why`, `--dump-config`, and non-TTY module loading resolved the reviewed tarball |
+| `pnpm run pack:artifact` | Passed: 333 files, 937.5 kB, SHA-1 `7acfe92ca3aebe659b971725156c984616ac6d64`, SHA-256 `99e81b5506123f708369628403a40e49cceb4bc23bfcdbc3b6a5f8fbf7f8304a` |
+| Packed-artifact audit | Passed for exports, bundle metadata, patched editor, runtime dependencies, documentation assets, and excluded source/tests |
+| Windows empty-profile public-host installation | Not completed locally: the isolated dependency installation produced no output for eight minutes and was terminated; the tagged release workflow repeats this check on Ubuntu before publication |
 | Linux real PTY | Not completed in this round: the first WSL attempt reused Windows-created links, and the clean public-host npm installation did not finish within five minutes; no plugin behavior failure was observed |
-| Local `tui` profile | Reinstalled from the reviewed `1.8.1` tarball; `why` resolves one installed package and `--dump-config` resolves the permanent Assistant directory, plugin-local memory, workspace agent loop, and TUI plugin |
+| Local `tui` profile | Installed from the reviewed `1.8.2` tarball; `why` resolves exactly one installed package |
+
+## 1.8.1 source verification
+
+The `1.8.1` checks cover the borderless fixed workbench, expanded transcript viewport, one-column outer whitespace, and dim separator between the transcript and sidebar. The fixed assistant occupies its own sidebar section, has no workspace or cwd, and is excluded from the Active project-session count; only project rows are grouped by workspace. Transcript content uses one symbol gutter for user `❯`, assistant `✦`, thinking `✻`, tool, and nested-result rows with hanging indentation at narrow widths. User, assistant, thinking, and running-tool markers have independent theme roles, while settled tool states keep their success and error colors. Plan and delegate calls use their structured presentation kinds, todo progress has a compact current-step row with `Ctrl+O` expansion, and scrolling, disclosure clicks, drag selection, terminal titles, sidebar titles, main-area diagnostics, the prefix-free editor prompt, compact message spacing, and current-step `token/s` remain covered.
+
+| Check | Result |
+| --- | --- |
+| Complete source tests | Passed: 48 files, 604 tests |
+| Focused transcript and workbench layout | Passed: 45 tests, including gutter wrapping, Plan and Delegate cards, compact todo progress, borderless viewport rows, and updated pointer coordinates |
+| Focused semantic gutter and theme roles | Passed: 47 tests covering the `❯`, `✦`, and `✻` markers, hanging indentation, independent role colors, and running/settled tool tones |
+| `pnpm run typecheck` | Passed |
+| `pnpm run lint` | Passed with 34 existing warnings and no errors |
+| `pnpm run build` | Passed |
+| `pnpm run bench:transcript` | Passed: hot cached render 0.0001-0.0004 ms for 100-1,000 turns; 2,000 streamed chunks coalesced in 4.543 ms |
+| `pnpm run docs:screenshot` | Passed: deterministic 1,448x720 PNG, SHA-256 `6f2e7a15b8d7946fc49010e9c6a7ee367f03237c9610e9885007e7808756a055`; deterministic four-frame GIF, SHA-256 `f4c9818046a3ec8da0a35061bcf75e555b063a839b00ccc946162b21c796cc83` |
+| `pnpm run pack:artifact` | Passed: 333 files, 937.0 kB, SHA-1 `1c2e8964a66a0edd9cb1514b8b59ffd3a98de342`, SHA-256 `177da1eedbdaf52c0e8f2fb8ce7e7852187c15cc75fb33ef986f049560d2ea92` |
+| Windows empty-profile public-host installation | Passed against public dsh rc.6; profile installation, `why`, `--dump-config`, and non-TTY module loading resolved the reviewed tarball |
+| Linux real PTY | Passed at 140x32 for the borderless fixed workbench, single sidebar separator, fixed editor, commands, session switching, memory, image-paste failure, export, and shutdown |
+| Local `tui` profile | Reinstalled from the reviewed `1.8.1` tarball; installed JavaScript contains the semantic marker roles and new gutter glyphs alongside the expanded viewport, simplified working row, reduced user fill, footer hierarchy, prefix-free prompt, and live-rate module; `why` and `--dump-config` resolve the package |
 
 ## 1.8.0 source verification
 

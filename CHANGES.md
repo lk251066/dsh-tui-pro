@@ -1,12 +1,22 @@
 # Terminal Workbench
 
+## 1.8.2 source changes
+
+The fixed Assistant remains outside project workspace membership but now owns one permanent working directory. A new Assistant records `$DSH_HOME/assistant` by default, while an existing Assistant resumes with the directory already recorded in its durable session header. It remains one continuous `assistant` session across launches and context compactions.
+
+Assistant memory remains plugin-local and enabled by default. Exact duplicate saves are idempotent, records are no longer discarded at a fixed count, and stable ids support correction and deletion after search. Automatic recall stays bounded to 4,000 characters, and compaction summaries are not silently written into long-term memory.
+
+Final assistant replies always render in full inside the scrolling transcript. `Ctrl+O` now switches tool and context bodies only between compact and expanded states; tool identity, status, and failures never disappear. An orphaned result names its unknown call id instead of appearing as a generic tool.
+
+Enter steering shows a persistent `sent to current turn` receipt until the running turn claims or discards the message. Assistant-only tool guidance keeps normal filesystem and shell calls free of unnecessary sandbox overrides and requires a reason when retrying after an actual sandbox denial.
+
 ## 1.8.1 source changes
 
 Established conversations no longer reserve a persistent top header or its surrounding blank rows. The transcript begins at the top of the main column and uses every row above the fixed input area. The new-session welcome remains visible only before conversation activity begins.
 
 The editor frame is the only boundary below the transcript; a second full-width rule no longer repeats that edge. The reclaimed row belongs to the transcript, and scrolling, disclosure clicks, and drag selection use the expanded viewport coordinates.
 
-User message bands and assistant Markdown now provide the speaker distinction directly. The repeated `You` and `Assistant` heading rows and their heading timestamps are removed. The user fill is deliberately subtle on dark terminals, and final replies remain fully visible inside the scrolling transcript.
+User message bands and assistant Markdown now provide the speaker distinction directly. The repeated `You` and `Assistant` heading rows and their heading timestamps are removed. The user fill is deliberately subtle on dark terminals, while message wrapping, reasoning, tool cards, and reply folding remain unchanged.
 
 Assistant replies now open one row below the preceding user message or tool output. The editor prompt no longer repeats `dsh`; it contains only the idle caret or the current running-state glyph.
 
@@ -34,7 +44,7 @@ Double Escape remains the current-conversation checkpoint navigator. Confirming 
 
 `Alt+V` reads PNG, JPEG, WebP, or GIF data from the system clipboard and adds an `[Image #N]` placeholder to that session's draft. Sending requires a selected model that explicitly advertises image input. A text-only or unknown model retains the draft.
 
-`/memory`, `/memory on`, and `/memory off` control long-term memory for the current session. The assistant defaults on and project sessions default off. Enabled sessions can save, search, correct, and delete records in the shared durable memory store. The store does not silently evict old records; disabling a session removes its memory tools and prompt sections without deleting stored memories.
+`/memory`, `/memory on`, and `/memory off` control long-term memory for the current session. The assistant defaults on and project sessions default off. Enabled sessions can save and search the shared durable memory store; disabling a session removes its memory tools and prompt sections without deleting stored memories.
 
 ## 1.6.3 changes
 

@@ -6,15 +6,23 @@ This document is the source of truth for making `@lk251066/dsh-tui` independentl
 
 Ship one package: `@lk251066/dsh-tui`. Its package manifest already defines `dsh.bundle.patch`, so the repository will not create or publish a separate `@lk251066/dsh-tui-bundle` compatibility package.
 
-Version `1.8.0` is the current release against public `@deepseek-ai/dsh@0.1.0-rc.6`. The current source targets `1.8.1`; it is not a public release until the source, artifact, profile, PTY, npm, tag, and GitHub Release records identify one commit.
+Version `1.8.1` is the current release against public `@deepseek-ai/dsh@0.1.0-rc.6`. The current source targets `1.8.2`; it is not a public release until the source, artifact, profile, PTY, npm, tag, and GitHub Release records identify one commit.
 
-The `1.8.0` source separates whole-TUI exit from project-session closing, gives the fixed assistant read-only access to visible dialogue in other Active project sessions, and completes the diagnostic, skill, throughput, plan, thinking, tool-card, and in-process subagent model-inheritance work described below.
+The `1.8.2` source gives the unique fixed Assistant a permanent working directory, expands plugin-local memory maintenance, keeps final replies complete, preserves tool identity in every detail mode, and acknowledges current-turn steering as described below.
+
+## Version 1.8.2 durable Assistant
+
+The fixed Assistant remains outside project workspace membership and uses one permanent configured directory independent of the launch directory. A new Assistant creates and records that directory in `meta.cwd`; an existing Assistant resumes with the immutable directory already stored in its session header. The same `assistant` session continues through repeated dsh compaction rather than rotating to replacement sessions.
+
+Assistant memory remains in this plugin. Enabled sessions receive save, search, correction, and deletion tools over stable record ids. Exact duplicate text is idempotent, records have no fixed-count eviction, automatic recall remains bounded, and compaction does not write summaries into long-term memory. The Assistant defaults to enabled and project sessions default to disabled.
+
+Settled Assistant replies always render completely inside the scrolling transcript. Tool and context bodies have compact and expanded states only; identity, status, and failure remain visible in both. Enter steering reports delivery until the running turn claims or discards the pending message.
 
 ## Version 1.8.1 transcript viewport
 
 Established conversations have no persistent top header, reserved header spacing, or outer workbench frame. The new-session welcome remains visible only while the session is pristine. One horizontal inset column on each edge and one dim main/sidebar divider provide structure; the framed editor supplies the only lower boundary. Transcript scrolling, disclosure clicks, sidebar clicks, and drag selection use the expanded viewport coordinates.
 
-The sidebar gives the fixed assistant its own section above Active sessions. The assistant has no workspace field and does not contribute to the project-session count; project rows alone are grouped by workspace. The repeated current-Workspace section is removed. The fixed assistant has a permanent configured working directory independent of the launch directory. New assistant logs record it in `meta.cwd`; existing logs resume with their recorded directory.
+The sidebar gives the fixed assistant its own section above Active sessions. The assistant has no workspace field and does not contribute to the project-session count; project rows alone are grouped by workspace. The repeated current-Workspace section is removed. Creating the assistant omits `meta.cwd`, and assistant identity suppresses cwd, branch, welcome-directory, and status-directory output even when an older persisted assistant header still contains a directory.
 
 User messages remain full-width background bands with a directional `❯` marker; assistant replies remain bare Markdown with a four-point `✦` marker. Thinking uses the lighter `✻`; tool calls use their state glyph and result bodies start at an indented `⎿`. User, assistant, thinking, and running-tool markers each use a restrained semantic theme role, while settled tools retain success or error colors and body text keeps the terminal foreground. Every continuation hangs under the same body column, so the left gutter stays stable across wrapped messages and narrow terminals without separate `You` and `Assistant` rows.
 
@@ -46,7 +54,7 @@ The full-screen workbench renders a workspace-grouped Active-session list and a 
 
 Enter steers a running turn, Tab queues the next turn, and empty Up recalls the latest submission. With an empty editor, Esc restores the newest queued message before a later Esc can cancel the turn. `/queue` is not registered; the dock remains a read-only queue preview.
 
-`Alt+V` stores one clipboard image in the active session's draft and inserts an `[Image #N]` placeholder. Sending requires a model whose resolved metadata includes image input. Unsupported or unknown model metadata leaves the draft intact. `/memory on|off` persists memory enablement for the current session; the assistant defaults on and project sessions default off. Enabled sessions receive shared save, search, correction, and deletion memory tools plus a bounded recalled-memory prompt section. Stored records have no fixed-count eviction.
+`Alt+V` stores one clipboard image in the active session's draft and inserts an `[Image #N]` placeholder. Sending requires a model whose resolved metadata includes image input. Unsupported or unknown model metadata leaves the draft intact. `/memory on|off` persists memory enablement for the current session; the assistant defaults on and project sessions default off. Enabled sessions receive the shared `memory_save` and `memory_search` tools and recalled-memory prompt section.
 
 ## Version 1.6.3 active-session removal
 
