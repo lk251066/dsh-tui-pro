@@ -66,6 +66,8 @@ const npmArgs = [
   'install',
   '--no-audit',
   '--no-fund',
+  '--ignore-scripts',
+  '--loglevel=verbose',
   '--package-lock=false',
   '--registry=https://registry.npmjs.org',
   '@deepseek-ai/dsh@0.1.0-rc.6',
