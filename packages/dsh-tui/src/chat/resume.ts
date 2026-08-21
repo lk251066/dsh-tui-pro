@@ -300,9 +300,11 @@ export function createResumeController(deps: ResumeControllerDeps): ResumeContro
     } catch (error: unknown) {
       if (!deps.isDisposed()) {
         if (terminalReleased) {
+          // Populate the restored transcript before restarting the terminal so
+          // the first frame cannot race a coalesced repaint from the stopped UI.
+          deps.appendNotice(`Resume handoff failed: ${errorChain(error)}`, 'error')
           ui.start()
           ui.setFocus(editor)
-          deps.appendNotice(`Resume handoff failed: ${errorChain(error)}`, 'error')
         } else {
           await overlay?.close()
           resumeOverlay = undefined

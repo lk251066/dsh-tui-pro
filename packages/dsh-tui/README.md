@@ -27,6 +27,7 @@ The package declares its own `dsh.bundle.patch`; a separate bundle package is ne
 ## Runtime behavior
 
 - Only the transcript scrolls; the input, live status, plan, and sidebar remain fixed.
+- The terminal title shows the mounted session and animates the process-wide running-session count; supported terminals also expose taskbar progress.
 - One durable Assistant remains outside project workspaces, uses a permanent working directory, and manages active project sessions.
 - Project sessions are grouped by workspace, retain their ordering, and resume from the launch directory.
 - Enter steers a running turn, Tab queues the next turn, Esc recovers queued input, and double Esc browses checkpoints.

@@ -2,6 +2,22 @@
 
 `@lk251066/dsh-tui` is a Cordis plugin and dsh profile bundle. Verification must cover the source tree, packed npm artifact, dsh profile composition, and interactive terminal behavior.
 
+## 1.8.3 source verification
+
+The `1.8.3` checks cover dsh rc.8 command execution, process-wide terminal title animation and taskbar progress, foreground and background running-session counts, compaction activity, session-title changes, and cleanup on shutdown. A failed cross-workspace handoff restores its notice in the first restarted frame.
+
+| Check | Result |
+| --- | --- |
+| Focused terminal-title and multi-session tests | Passed: idle, one/multiple running sessions, title changes, control escaping, compaction timer isolation, disposal, and failed handoff restoration |
+| Complete source tests | Passed: 49 files, 614 tests |
+| `pnpm run typecheck` | Passed |
+| `pnpm run lint` | Passed with 33 existing warnings and no errors |
+| `pnpm run build` | Passed |
+| `pnpm run pack:artifact` | Passed: 336 files, 939.7 kB, SHA-1 `966505e7e47f7422cd917cd63c0a617ad3149167`, SHA-256 `412be83f0b3946bf6f3e7828b77ccc3e698f88c59b7d43461da3e47144d4815e` |
+| Packed-artifact audit | Passed for exports, bundle metadata, patched editor, runtime dependencies, documentation assets, and excluded source/tests |
+| Windows empty-profile public-host installation | Passed against public dsh rc.8; profile installation, `why`, `--dump-config`, and non-TTY module loading resolved the reviewed tarball |
+| Windows Git Bash PTY | Not applicable: the MSYS `pty.fork()` launch produced a zero-byte capture before the TUI process rendered; the release workflow runs the same check in a native Linux PTY |
+
 ## 1.8.2 source verification
 
 The `1.8.2` checks cover the permanent Assistant directory, plugin-local memory correction and deletion, storage beyond 200 records, idempotent saves, bounded recall, compaction independence, complete final replies, two-state tool detail, visible tool failures, and current-turn steering receipts. The established borderless workbench, semantic transcript gutter, structured Plan and Delegate cards, scrolling, drag selection, fixed editor, sidebar, and current-step `token/s` remain covered.
@@ -282,7 +298,7 @@ Verify that installation adds the package to the profile dependencies and `dsh.p
 
 The TUI's Service Definition packages remain peers supplied by the dsh host. Plugins named directly by `cordis.patch.yml` are package dependencies so profile installation does not rely on the host's incidental transitive dependency tree. Treat a real launcher load as the final resolution check.
 
-`pnpm run verify:public-host` automates this flow with public `@deepseek-ai/dsh@0.1.0-rc.6`. It requires the current tarball in `packages/`, creates an isolated host and `DSH_HOME`, verifies `add`, `why`, and `--dump-config`, and requires the non-interactive launch to stop only at the TTY check without a module-resolution error.
+`pnpm run verify:public-host` automates this flow with public `@deepseek-ai/dsh@0.1.0-rc.8`. It requires the current tarball in `packages/`, creates an isolated host and `DSH_HOME`, verifies `add`, `why`, and `--dump-config`, and requires the non-interactive launch to stop only at the TTY check without a module-resolution error.
 
 ## Interactive behavior
 

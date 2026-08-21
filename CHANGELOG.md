@@ -6,13 +6,30 @@ The `v1.0.0` tag is not an installable public release: no npm package was publis
 
 ## [Unreleased]
 
+## [1.8.3] - 2026-08-21
+
+### Added
+
+- Show a low-frequency activity spinner and the process-wide running-session count in the terminal title while keeping the mounted session name visible.
+- Expose the same process-wide busy state through terminal taskbar progress when supported.
+
+### Fixed
+
+- Call the four-argument command execution API required by DeepSeek Harness rc.8, so slash commands receive their cancellation signal correctly.
+- Preserve background-session activity in the taskbar when the mounted session is idle, and clear title animation and progress during shutdown.
+- Render a failed cross-workspace handoff notice in the first restored TUI frame instead of racing a repaint scheduled while the terminal was stopped.
+
+## [1.8.2] - 2026-08-20
+
 ### Added
 
 - Let the fixed assistant read paged user/assistant dialogue from another Active project session without exposing reasoning, tool traffic, diffs, injected context, or unfinished output.
+- Give the fixed assistant one permanent working directory and expand plugin-local memory with correction and deletion by stable record id.
 
 ### Changed
 
 - Reserve `/exit` for closing the whole TUI. `/quit` and empty-input `Delete` now cancel and close the current project session, preserve its history, and return to the assistant.
+- Keep final assistant replies complete while tool and context bodies retain compact and expanded states.
 
 ## [1.7.1] - 2026-08-18
 

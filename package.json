@@ -1,6 +1,6 @@
 {
   "name": "@lk251066/dsh-tui",
-  "version": "1.8.2",
+  "version": "1.8.3",
   "private": true,
   "type": "module",
   "dsh": {

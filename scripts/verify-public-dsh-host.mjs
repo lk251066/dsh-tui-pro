@@ -70,7 +70,7 @@ const installArgs = [
   '--config.auto-install-peers=true',
   '--config.strict-peer-dependencies=false',
   '--registry=https://registry.npmjs.org',
-  '@deepseek-ai/dsh@0.1.0-rc.6',
+  '@deepseek-ai/dsh@0.1.0-rc.8',
 ]
 const installCommand = process.platform === 'win32' ? process.env.ComSpec ?? 'cmd.exe' : 'pnpm'
 const installCommandArgs = process.platform === 'win32' ? ['/d', '/s', '/c', 'pnpm', ...installArgs] : installArgs
@@ -122,4 +122,4 @@ for (const moduleError of ['Cannot find package', 'ERR_MODULE_NOT_FOUND']) {
   if (launch.output.includes(moduleError)) throw new Error(`public-host launch failed module resolution:\n${launch.output}`)
 }
 
-console.log(`Verified @lk251066/dsh-tui@${packageManifest.version} with @deepseek-ai/dsh@0.1.0-rc.6.`)
+console.log(`Verified @lk251066/dsh-tui@${packageManifest.version} with @deepseek-ai/dsh@0.1.0-rc.8.`)

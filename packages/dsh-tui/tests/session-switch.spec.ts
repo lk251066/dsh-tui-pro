@@ -924,6 +924,24 @@ describe('multi-session switching (/new, /sessions)', () => {
       agentEvents(harness.ctx, background!).emit('agent/status', { status: 'running' })
       await tick()
       expect(harness.terminal.output).toContain('● Background work')
+      expect(harness.terminal.title).toContain('1 running · DeepSeek Harness')
+      expect(harness.terminal.progress.at(-1)).toBe(true)
+
+      harness.agent.status = 'running'
+      agentEvents(harness.ctx, harness.agent).emit('agent/status', { status: 'running' })
+      await tick()
+      expect(harness.terminal.title).toContain('2 running · DeepSeek Harness')
+
+      background!.status = 'idle'
+      agentEvents(harness.ctx, background!).emit('agent/status', { status: 'idle' })
+      await tick()
+      expect(harness.terminal.title).toContain('1 running · DeepSeek Harness')
+
+      harness.agent.status = 'idle'
+      agentEvents(harness.ctx, harness.agent).emit('agent/status', { status: 'idle' })
+      await tick()
+      expect(harness.terminal.title).toBe('DeepSeek Harness')
+      expect(harness.terminal.progress.at(-1)).toBe(false)
     } finally {
       await disposeTuiTestHarness(harness)
     }

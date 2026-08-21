@@ -137,6 +137,10 @@ import {
 } from './chat/helpers.ts'
 import { createSessionChannel, type SessionChannel } from './chat/session-channel.ts'
 import {
+  createTerminalTitleController,
+  type TerminalTitleController,
+} from './chat/terminal-title.ts'
+import {
   ASSISTANT_SESSION_ID,
   createAssistantController,
   setupAssistant,
@@ -509,6 +513,7 @@ function createTuiChatInternal(
     disposed || construction.failed || ctx.fiber.state >= FIBER_FAILED
 
   let sessionTitle = foldSessionTitle(agent.session.events)?.title
+  let terminalTitleController: TerminalTitleController | undefined
   const firstSessionCwd = activeSessionCwd()
   let formattedCwd = displayText(runtime.formatCwd?.(firstSessionCwd) ?? formatCwd(firstSessionCwd))
   /**
@@ -724,11 +729,14 @@ function createTuiChatInternal(
   inputArea.addChild(promptContext)
   ui.setFocus(editor)
   const updateTerminalTitle = (): void => {
-    runtime.terminal.setTitle(displayText(
-      sessionTitle === undefined ? resolved.title : `${sessionTitle} — ${resolved.title}`,
-    ))
+    terminalTitleController?.sync()
   }
-  updateTerminalTitle()
+  // Session channels report progress edges through the process-wide title
+  // controller. Its registry-derived count prevents an idle foreground session
+  // from clearing taskbar progress while background work is still running.
+  const terminalProgress = {
+    setProgress(_active: boolean): void { updateTerminalTitle() },
+  }
 
   /**
    * Request a frame. The default path also refreshes every prompt value and
@@ -1001,7 +1009,7 @@ function createTuiChatInternal(
       palette,
       mdTheme,
       now,
-      terminal: runtime.terminal,
+      terminal: terminalProgress,
       requestRender,
       requestStatusRender,
       appendNotice,
@@ -1187,6 +1195,16 @@ function createTuiChatInternal(
       appendNotice(`Live-session ceiling reached (${liveCount}); every background session is busy, keeping them all.`, 'warning')
     },
   }, agent)
+
+  terminalTitleController = createTerminalTitleController({
+    terminal: runtime.terminal,
+    productTitle: resolved.title,
+    activeTitle: () => sessionTitle
+      ?? (agent.session.id === ASSISTANT_SESSION_ID ? 'Assistant' : undefined),
+    runningCount: () => registry.slots().filter(slot =>
+      slot.agent.status === 'running' || slot.channel.isCompacting()).length,
+  })
+  updateTerminalTitle()
 
   // A queued session reference must not inject its context into the currently
   // running turn. Hold it by prompt identity and inject it synchronously after
@@ -1414,6 +1432,7 @@ function createTuiChatInternal(
   const disposeBackgroundSessionEvents = ctx.on('session/event', (sourceSession, event) => {
     const slot = registry.slots().find(candidate => candidate.agent.session === sourceSession)
     if (slot !== undefined && !registry.isActive(slot)) slot.channel.observeBackgroundEvent(event)
+    if (event.type === 'compaction/start' || event.type === 'compaction/end') updateTerminalTitle()
     if (event.type !== 'session/title') return
     rereadPendingTitle(sourceSession.id)
     if (slot !== undefined && !registry.isActive(slot)) requestRender()
@@ -1438,6 +1457,7 @@ function createTuiChatInternal(
   })
   const disposeBackgroundStatusChanges = ctx.on('agent/status', ({ agent: source }) => {
     const slot = registry.slots().find(candidate => candidate.agent === source)
+    if (slot !== undefined) updateTerminalTitle()
     if (slot !== undefined && !registry.isActive(slot)) requestRender()
   })
   const disposeOwnedAgentChanges = ctx.on('agent/disposed', ({ agent: source }) => {
@@ -3069,6 +3089,8 @@ function createTuiChatInternal(
     disposeOwnedAgentChanges()
     disposeWorkspaceChanges()
     for (const value of promptValues) value.dispose()
+    terminalTitleController?.dispose()
+    terminalTitleController = undefined
     // Every live slot tears down together: session listeners, per-slot
     // approvals/docks, agent-scoped model routing and prompt sections.
     registry.disposeAll()

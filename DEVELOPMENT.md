@@ -20,7 +20,7 @@ cd dsh-tui-pro
 pnpm install
 ```
 
-Development dependencies under `@deepseek-ai/dsh-*` resolve from the public npm rc.6 package line recorded in `pnpm-lock.yaml`. Local tarball directories are not part of the build or release process.
+Development dependencies under `@deepseek-ai/dsh-*` resolve from the public npm rc.8 package line recorded in `pnpm-lock.yaml`. Local tarball directories are not part of the build or release process.
 
 ## Local development
 
@@ -90,7 +90,7 @@ Publish only after every acceptance item in [REPAIR_PLAN.md](REPAIR_PLAN.md) is 
 6. Create the GitHub tag and Release from the exact published commit. Attach the generated tarball and checksum when GitHub assets are used.
 7. Submit the plugin registry entry only after the public installation command succeeds.
 
-The repository provides `.github/workflows/ci.yml` for Linux and Windows pull-request checks. Both platforms run the public-host smoke against `@deepseek-ai/dsh@0.1.0-rc.6`; Linux also runs the real PTY flow. `.github/workflows/release.yml` repeats both checks, publishes with npm provenance, verifies the registry version, and attaches the package tarball and SHA-256 file to the GitHub Release.
+The repository provides `.github/workflows/ci.yml` for Linux and Windows pull-request checks. Both platforms run the public-host smoke against `@deepseek-ai/dsh@0.1.0-rc.8`; Linux also runs the real PTY flow. `.github/workflows/release.yml` repeats both checks, publishes with npm provenance, verifies the registry version, and attaches the package tarball and SHA-256 file to the GitHub Release.
 
 Never move or reuse the existing `v1.0.0` tag for a different commit. Choose a new version for the first verified release.
 

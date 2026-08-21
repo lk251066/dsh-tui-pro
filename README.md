@@ -47,6 +47,8 @@ The Assistant is one durable session outside every project workspace. It keeps a
 
 Only the transcript scrolls. The editor, current plan, live status, model, context usage, and active sessions remain in place while user messages, Markdown, thinking, tools, diffs, plans, todos, and subagents use distinct compact treatments.
 
+The terminal title keeps the mounted session name visible. While work is active, a low-frequency spinner and the total number of running sessions appear in the title, and supported terminals also expose a taskbar progress state.
+
 ### Native DeepSeek Harness composition
 
 The package is an out-of-tree dsh plugin bundle, not a fork of the harness. Sessions, tools, skills, models, permissions, compaction, and subagents continue to use the services provided by the selected dsh profile.

@@ -6,9 +6,13 @@ This document is the source of truth for making `@lk251066/dsh-tui` independentl
 
 Ship one package: `@lk251066/dsh-tui`. Its package manifest already defines `dsh.bundle.patch`, so the repository will not create or publish a separate `@lk251066/dsh-tui-bundle` compatibility package.
 
-Version `1.8.1` is the current release against public `@deepseek-ai/dsh@0.1.0-rc.6`. The current source targets `1.8.2`; it is not a public release until the source, artifact, profile, PTY, npm, tag, and GitHub Release records identify one commit.
+Version `1.8.3` targets public `@deepseek-ai/dsh@0.1.0-rc.8`. The release is complete only when the source, artifact, profile, PTY, npm, tag, and GitHub Release records identify one commit.
 
-The `1.8.2` source gives the unique fixed Assistant a permanent working directory, expands plugin-local memory maintenance, keeps final replies complete, preserves tool identity in every detail mode, and acknowledges current-turn steering as described below.
+The `1.8.3` source updates command execution and public-host verification for dsh rc.8, restores failed handoff notices before the first restarted frame, and adds the process-wide terminal activity title described below.
+
+## Version 1.8.3 terminal activity
+
+The terminal title keeps the mounted session name visible and prefixes it with a low-frequency spinner plus the process-wide running-session count while work is active. One global controller owns both title animation and terminal progress, so an idle foreground session cannot hide background activity. Shutdown clears progress and leaves the stable session title behind.
 
 ## Version 1.8.2 durable Assistant
 
