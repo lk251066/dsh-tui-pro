@@ -2537,7 +2537,7 @@ function createTuiChatInternal(
   const runCommand = (text: string): void => {
     const controller = new AbortController()
     commandControllers.add(controller)
-    void ctx.commands.execute(agent, text, controller.signal).then(
+    void ctx.commands.execute(agent, text, [], controller.signal).then(
       (execution) => {
         if (disposed) return
         if (execution === undefined) {

@@ -3350,7 +3350,7 @@ describe('pi-tui chat lifecycle and transcript', () => {
 
     // A second /details while the selector is open replaces the overlay
     // instead of stacking a second one behind it.
-    await result.ctx.commands.execute(result.agent, '/details', new AbortController().signal)
+    await result.ctx.commands.execute(result.agent, '/details', [], new AbortController().signal)
     await tick()
 
     // Each Tab applies one step immediately while the dialog stays open:
