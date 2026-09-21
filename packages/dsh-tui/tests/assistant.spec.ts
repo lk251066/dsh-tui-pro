@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { resolve } from 'node:path'
 import type { Terminal } from '@earendil-works/pi-tui'
-import type { Agent } from '@deepseek-ai/dsh-agent'
+import type { Agent, AgentOptions } from '@deepseek-ai/dsh-agent'
 import type { UserMessage } from '@deepseek-ai/dsh-llm'
 import { createScope } from '@deepseek-ai/dsh-scope'
 import {
@@ -86,6 +86,7 @@ interface FactoryCall {
   kind: 'create' | 'resume'
   sessionId: string
   meta?: object
+  agentOptions?: AgentOptions
   setup?: (agentCtx: never) => void
 }
 
@@ -134,6 +135,7 @@ async function assistantHarness(options: AssistantHarnessOptions = {}): Promise<
             kind: 'create',
             sessionId: String(createOptions.sessionId),
             meta: createOptions.meta,
+            agentOptions: createOptions.agentOptions,
             setup: createOptions.setup as (agentCtx: never) => void,
           })
           // The real factory mints a SCOPED agent context and awaits setup on
@@ -141,27 +143,28 @@ async function assistantHarness(options: AssistantHarnessOptions = {}): Promise<
           // collide the persona section with the global layer).
           const scope = createScope(ctx, {})
           createOptions.setup?.(scope.ctx as never)
-          const { agent } = await mintAgent(createOptions.sessionId)
+          const { agent } = await mintAgent(createOptions.sessionId, createOptions.agentOptions)
           return { agent, dispose: async () => {} }
         },
         async resume(_ownerCtx, resumeOptions) {
           calls.push({
             kind: 'resume',
             sessionId: String(resumeOptions.resumeSessionId),
+            agentOptions: resumeOptions.agentOptions,
             setup: resumeOptions.setup as (agentCtx: never) => void,
           })
           if (options.resumeError !== undefined) throw new Error(options.resumeError)
           const scope = createScope(ctx, {})
           resumeOptions.setup?.(scope.ctx as never)
-          const { agent } = await mintAgent(resumeOptions.resumeSessionId, ['assistant history'])
+          const { agent } = await mintAgent(resumeOptions.resumeSessionId, resumeOptions.agentOptions)
           return { agent, dispose: async () => {} }
         },
       })
-      function mintAgent(id, _seed: string[] = []) {
+      function mintAgent(id, agentOptions: AgentOptions = {}) {
         const followups: string[] = []
         const session = ctx.sessions.create(id, { meta: { cwd: '/workspace' } })
         const agent = {
-          id, options: {}, session, status: 'idle', ctx,
+          id, options: agentOptions, session, status: 'idle', ctx,
           followup(message: UserMessage) {
             followups.push(message.content.filter(block => block.type === 'text').map(block => block.text).join(''))
           },
@@ -197,6 +200,8 @@ describe('/assistant', () => {
       })
       expect(calls).toEqual([expect.objectContaining({ kind: 'create', sessionId: 'assistant' })])
       expect(calls[0]?.meta).toEqual({ cwd: resolve('permanent-assistant') })
+      expect(calls[0]?.agentOptions).toEqual({ provider: 'deepseek-official', model: 'deepseek-v4-flash' })
+      expect(created[0]?.agent.options).toEqual({ provider: 'deepseek-official', model: 'deepseek-v4-flash' })
       // The assistant owns a permanent directory without joining a project
       // workspace group. The shared footer exposes that directory.
       expect(created[0]?.agent.session.header.cwd).toBe('/workspace')
@@ -220,6 +225,8 @@ describe('/assistant', () => {
         expect(harness.terminal.output).toContain('Assistant session resumed.')
       })
       expect(calls).toEqual([expect.objectContaining({ kind: 'resume', sessionId: 'assistant' })])
+      expect(calls[0]?.agentOptions).toEqual({ provider: 'deepseek-official', model: 'deepseek-v4-flash' })
+      expect(created[0]?.agent.options).toEqual({ provider: 'deepseek-official', model: 'deepseek-v4-flash' })
       submit(harness, '继续')
       await tick()
       expect(created[0]?.followups).toEqual(['继续'])
