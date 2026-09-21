@@ -7,7 +7,7 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import { mkdir } from 'node:fs/promises'
-import type { Agent, AgentHandle } from '@deepseek-ai/dsh-agent'
+import type { Agent, AgentHandle, AgentOptions } from '@deepseek-ai/dsh-agent'
 import { errorChain } from '@deepseek-ai/dsh-llm'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import type { TuiSessionSlot } from '../index.ts'
@@ -66,6 +66,8 @@ export interface AssistantControllerDeps {
   readonly adoptOwnedAgent: AdoptOwnedAgent
   /** Permanent directory assigned to a newly created fixed assistant. */
   readonly assistantCwd: string
+  /** Agent-loop route inherited by the fixed assistant. */
+  readonly agentOptions: AgentOptions
   /** Durable transcript notice. */
   appendNotice(message: string, kind?: 'info' | 'warning' | 'error'): void
   /** Transient operation receipt. */
@@ -128,6 +130,7 @@ export function createAssistantController(deps: AssistantControllerDeps): { open
       try {
         const handle = await ctx.agents.resume({
           resumeSessionId: ASSISTANT_SESSION_ID,
+          agentOptions: { ...deps.agentOptions },
           setup: agentCtx => setupAssistant(agentCtx, registry, deps.workspaceSessions, deps.adoptOwnedAgent, assistantCwd),
         })
         await adoptHandle(handle, 'Assistant session resumed.')
@@ -147,6 +150,7 @@ export function createAssistantController(deps: AssistantControllerDeps): { open
         sessionId: ASSISTANT_SESSION_ID,
         seed: [],
         meta: { cwd: deps.assistantCwd },
+        agentOptions: { ...deps.agentOptions },
         setup: agentCtx => setupAssistant(agentCtx, registry, deps.workspaceSessions, deps.adoptOwnedAgent, deps.assistantCwd),
       })
       await adoptHandle(handle, 'Assistant session created.')

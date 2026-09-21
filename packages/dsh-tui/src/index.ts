@@ -1317,6 +1317,7 @@ function createTuiChatInternal(
     isDisposed,
     adoptOwnedAgent,
     assistantCwd: resolved.assistantCwd,
+    agentOptions: initialAgent.options,
   })
 
   // Every live session shares one workbench and swaps only its transcript.

@@ -6,6 +6,10 @@ The `v1.0.0` tag is not an installable public release: no npm package was publis
 
 ## [Unreleased]
 
+### Fixed
+
+- Pass the configured provider, model, and token limit when creating or resuming the fixed Assistant, so bundled prompt variables such as `{{model}}` resolve before its first request.
+
 ## [1.8.3] - 2026-08-21
 
 ### Added
